@@ -1,0 +1,200 @@
+{
+  "entities": {
+    "CoupleSpace": {
+      "title": "CoupleSpace",
+      "description": "Shared private space for cycle and hormonal tracking between partners",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "description": "UID of the primary user (Ella)" },
+        "partnerId": { "type": "string", "description": "UID of the partner user (El)" },
+        "status": { "type": "string", "enum": ["UNPAIRED", "PENDING", "PAIRED", "REVOKED"] },
+        "averageCycleLength": { "type": "integer", "description": "Average menstrual cycle duration in days" },
+        "averagePeriodLength": { "type": "integer", "description": "Average bleeding period duration in days" },
+        "sharingPermissions": {
+          "type": "object",
+          "properties": {
+            "shareSymptoms": { "type": "boolean" },
+            "shareMood": { "type": "boolean" },
+            "shareIntimacy": { "type": "boolean" },
+            "sharePartnerNotes": { "type": "boolean" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "status", "averageCycleLength", "averagePeriodLength"]
+    },
+    "PairingInvite": {
+      "title": "PairingInvite",
+      "description": "Temporary 8-character pairing invite code to link devices",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string", "description": "Reference to couple_spaces document" },
+        "createdBy": { "type": "string", "description": "UID of creator (owner)" },
+        "status": { "type": "string", "enum": ["ACTIVE", "CONSUMED", "REVOKED", "EXPIRED"] },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "createdBy", "status"]
+    },
+    "CycleEntry": {
+      "title": "CycleEntry",
+      "description": "Historical or ongoing cycle record",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string" },
+        "startDate": { "type": "string", "description": "Start date in YYYY-MM-DD" },
+        "endDate": { "type": "string", "description": "End date in YYYY-MM-DD" },
+        "cycleLength": { "type": "integer" },
+        "periodDuration": { "type": "integer" },
+        "isCalculated": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "startDate", "periodDuration"]
+    },
+    "PhysicalSymptomsRecord": {
+      "title": "PhysicalSymptomsRecord",
+      "description": "Physical symptoms like cramps, pain and flow - readable by partner only if shareSymptoms is true",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string" },
+        "date": { "type": "string", "description": "Date YYYY-MM-DD" },
+        "flowLevel": { "type": "string", "enum": ["NONE", "SPOTTING", "LIGHT", "MEDIUM", "HEAVY"] },
+        "painLevel": { "type": "integer" },
+        "cramps": { "type": "boolean" },
+        "headache": { "type": "boolean" },
+        "backPain": { "type": "boolean" },
+        "bloating": { "type": "boolean" },
+        "cervicalMucus": { "type": "string" },
+        "tenderBreasts": { "type": "boolean" },
+        "cravings": { "type": "boolean" },
+        "acne": { "type": "boolean" },
+        "publicNote": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "loggedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "date", "flowLevel", "painLevel", "isPrivate", "loggedBy"]
+    },
+    "MoodRecord": {
+      "title": "MoodRecord",
+      "description": "Emotional mood and energy level - readable by partner only if shareMood is true",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string" },
+        "date": { "type": "string", "description": "Date YYYY-MM-DD" },
+        "mood": { "type": "string", "enum": ["HAPPY", "CALM", "SENSITIVE", "ENERGETIC", "CRAVINGS", "IRRITABLE", "ANXIOUS", "SAD"] },
+        "energyLevel": { "type": "integer" },
+        "isPrivate": { "type": "boolean" },
+        "loggedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "date", "mood", "energyLevel", "isPrivate", "loggedBy"]
+    },
+    "PrivateDailyNote": {
+      "title": "PrivateDailyNote",
+      "description": "Private personal notes exclusively accessible by the owner",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string" },
+        "date": { "type": "string", "description": "Date YYYY-MM-DD" },
+        "privateNote": { "type": "string" },
+        "loggedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "date", "loggedBy"]
+    },
+    "IntimacyLog": {
+      "title": "IntimacyLog",
+      "description": "Intimate encounters log with privacy lock",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string" },
+        "date": { "type": "string", "description": "Date YYYY-MM-DD" },
+        "encounterType": { "type": "string", "enum": ["PROTECTED", "UNPROTECTED", "OUTERCOURSE"] },
+        "usedLubricant": { "type": "boolean" },
+        "hadOrgasm": { "type": "boolean" },
+        "postContactEffect": { "type": "string" },
+        "notes": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "loggedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "date", "encounterType", "isPrivate", "loggedBy"]
+    },
+    "PartnerObservation": {
+      "title": "PartnerObservation",
+      "description": "Observations logged by the partner regarding perceived state and care actions",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string" },
+        "date": { "type": "string", "description": "Date YYYY-MM-DD" },
+        "perceivedMood": { "type": "string", "enum": ["CALM", "TIRED", "SAD", "IRRITABLE", "LOVING"] },
+        "apparentPainLevel": { "type": "integer" },
+        "unloggedSpottingReported": { "type": "boolean" },
+        "spottingSuggestionStatus": { "type": "string", "enum": ["PENDING", "ACCEPTED", "DISMISSED"] },
+        "careActionTaken": { "type": "string" },
+        "sweetMessage": { "type": "string" },
+        "loggedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "date", "perceivedMood", "apparentPainLevel", "unloggedSpottingReported", "loggedBy"]
+    },
+    "CheckIn": {
+      "title": "CheckIn",
+      "description": "Bidirectional empathetic check-in between partners",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "promptType": { "type": "string", "enum": ["HOW_ARE_YOU_FEELING", "NEED_SPACE_OR_CUDDLES", "ARE_YOU_UPSET_WITH_ME", "CAN_I_BRING_YOU_SOMETHING"] },
+        "customNote": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "ANSWERED"] },
+        "responseOption": { "type": "string", "enum": ["ALL_GOOD_JUST_CRAMPS", "NEED_SILENCE", "LET_US_TALK", "CUDDLES_PLEASE"] },
+        "responseNote": { "type": "string" },
+        "answeredAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["spaceId", "senderUid", "promptType", "status"]
+    }
+  },
+  "firestore": {
+    "/couple_spaces/{spaceId}": {
+      "schema": { "$ref": "#/entities/CoupleSpace" },
+      "description": "Shared couple space metadata and configuration"
+    },
+    "/pairing_invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/PairingInvite" },
+      "description": "Lookup table for 8-char pairing invites"
+    },
+    "/couple_spaces/{spaceId}/cycles/{cycleId}": {
+      "schema": { "$ref": "#/entities/CycleEntry" },
+      "description": "Cycle records in a couple space"
+    },
+    "/couple_spaces/{spaceId}/physical_symptoms/{dateId}": {
+      "schema": { "$ref": "#/entities/PhysicalSymptomsRecord" },
+      "description": "Physical symptoms recorded per day"
+    },
+    "/couple_spaces/{spaceId}/mood_records/{dateId}": {
+      "schema": { "$ref": "#/entities/MoodRecord" },
+      "description": "Mood and energy recorded per day"
+    },
+    "/couple_spaces/{spaceId}/private_notes/{dateId}": {
+      "schema": { "$ref": "#/entities/PrivateDailyNote" },
+      "description": "Owner-only private notes per day"
+    },
+    "/couple_spaces/{spaceId}/intimacy_logs/{intimacyId}": {
+      "schema": { "$ref": "#/entities/IntimacyLog" },
+      "description": "Intimacy records in a space"
+    },
+    "/couple_spaces/{spaceId}/observations/{observationId}": {
+      "schema": { "$ref": "#/entities/PartnerObservation" },
+      "description": "Partner observations logged in a space"
+    },
+    "/couple_spaces/{spaceId}/check_ins/{checkInId}": {
+      "schema": { "$ref": "#/entities/CheckIn" },
+      "description": "Bidirectional check-ins in a space"
+    }
+  }
+}

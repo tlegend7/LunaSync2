@@ -1,0 +1,347 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function getSpace(spaceId) {
+      return get(/databases/$(database)/documents/couple_spaces/$(spaceId));
+    }
+
+    function isSpaceOwner(spaceId) {
+      return isAuthenticated() && request.auth.uid == getSpace(spaceId).data.ownerId;
+    }
+
+    function isCurrentPartner(spaceId) {
+      let space = getSpace(spaceId).data;
+      return isAuthenticated() && space.partnerId != null && request.auth.uid == space.partnerId && space.status == 'PAIRED';
+    }
+
+    function isSpaceMember(spaceId) {
+      return isSpaceOwner(spaceId) || isCurrentPartner(spaceId);
+    }
+
+    function isValidCoupleSpace(data) {
+      return data.keys().hasOnly(['ownerId', 'partnerId', 'status', 'averageCycleLength', 'averagePeriodLength', 'sharingPermissions', 'activeInviteVersion', 'claimedInviteCode', 'createdAt', 'updatedAt']) &&
+             data.ownerId is string &&
+             (data.partnerId == null || data.partnerId is string) &&
+             data.status in ['UNPAIRED', 'PENDING', 'PAIRED', 'REVOKED'] &&
+             data.averageCycleLength is int && data.averageCycleLength >= 20 && data.averageCycleLength <= 45 &&
+             data.averagePeriodLength is int && data.averagePeriodLength >= 1 && data.averagePeriodLength <= 10 &&
+             data.sharingPermissions is map &&
+             data.sharingPermissions.keys().hasOnly(['shareSymptoms', 'shareMood', 'shareIntimacy', 'sharePartnerNotes']) &&
+             data.sharingPermissions.shareSymptoms is bool &&
+             data.sharingPermissions.shareMood is bool &&
+             data.sharingPermissions.shareIntimacy is bool &&
+             data.sharingPermissions.sharePartnerNotes is bool;
+    }
+
+    function isValidCycleEntry(data) {
+      return data.keys().hasOnly(['spaceId', 'startDate', 'endDate', 'cycleLength', 'periodDuration', 'isCalculated', 'createdAt', 'updatedAt']) &&
+             data.spaceId is string &&
+             data.startDate is string &&
+             data.periodDuration is int && data.periodDuration >= 1 && data.periodDuration <= 15 &&
+             !('privateNote' in data.keys());
+    }
+
+    function isValidPhysicalSymptoms(data) {
+      return data.keys().hasOnly(['spaceId', 'date', 'flowLevel', 'painLevel', 'cramps', 'headache', 'backPain', 'bloating', 'cervicalMucus', 'tenderBreasts', 'cravings', 'acne', 'publicNote', 'isPrivate', 'loggedBy', 'updatedAt']) &&
+             data.spaceId is string &&
+             data.date is string &&
+             data.flowLevel in ['NONE', 'SPOTTING', 'LIGHT', 'MEDIUM', 'HEAVY'] &&
+             data.painLevel is int && data.painLevel >= 0 && data.painLevel <= 5 &&
+             data.isPrivate is bool &&
+             data.loggedBy is string &&
+             !('privateNote' in data.keys());
+    }
+
+    function isValidMoodRecord(data) {
+      return data.keys().hasOnly(['spaceId', 'date', 'mood', 'energyLevel', 'isPrivate', 'loggedBy', 'updatedAt']) &&
+             data.spaceId is string &&
+             data.date is string &&
+             data.mood in ['HAPPY', 'CALM', 'SENSITIVE', 'ENERGETIC', 'CRAVINGS', 'IRRITABLE', 'ANXIOUS', 'SAD'] &&
+             data.energyLevel is int && data.energyLevel >= 1 && data.energyLevel <= 5 &&
+             data.isPrivate is bool &&
+             data.loggedBy is string &&
+             !('privateNote' in data.keys());
+    }
+
+    function isValidPrivateNote(data) {
+      return data.keys().hasOnly(['spaceId', 'date', 'privateNote', 'loggedBy', 'updatedAt']) &&
+             data.spaceId is string &&
+             data.date is string &&
+             data.privateNote is string &&
+             data.loggedBy is string;
+    }
+
+    function isValidIntimacyLog(data) {
+      return data.keys().hasOnly(['spaceId', 'date', 'encounterType', 'usedLubricant', 'hadOrgasm', 'postContactEffect', 'notes', 'isPrivate', 'loggedBy', 'createdAt']) &&
+             data.spaceId is string &&
+             data.date is string &&
+             data.encounterType in ['PROTECTED', 'UNPROTECTED', 'OUTERCOURSE'] &&
+             data.isPrivate is bool &&
+             data.loggedBy is string &&
+             !('privateNote' in data.keys());
+    }
+
+    function isValidPartnerObservation(data) {
+      return data.keys().hasOnly(['spaceId', 'date', 'perceivedMood', 'apparentPainLevel', 'unloggedSpottingReported', 'spottingSuggestionStatus', 'careActionTaken', 'sweetMessage', 'loggedBy', 'createdAt']) &&
+             data.spaceId is string &&
+             data.date is string &&
+             data.perceivedMood in ['CALM', 'TIRED', 'SAD', 'IRRITABLE', 'LOVING'] &&
+             data.apparentPainLevel is int && data.apparentPainLevel >= 0 && data.apparentPainLevel <= 5 &&
+             data.unloggedSpottingReported is bool &&
+             data.spottingSuggestionStatus in ['PENDING', 'ACCEPTED', 'DISMISSED'] &&
+             data.loggedBy is string &&
+             !('privateNote' in data.keys());
+    }
+
+    function isValidCheckIn(data) {
+      return data.keys().hasOnly(['spaceId', 'senderUid', 'promptType', 'customNote', 'status', 'responseOption', 'responseNote', 'answeredAt', 'createdAt']) &&
+             data.spaceId is string &&
+             data.senderUid is string &&
+             data.promptType in ['HOW_ARE_YOU_FEELING', 'NEED_SPACE_OR_CUDDLES', 'ARE_YOU_UPSET_WITH_ME', 'CAN_I_BRING_YOU_SOMETHING'] &&
+             data.status in ['PENDING', 'ANSWERED'] &&
+             !('privateNote' in data.keys());
+    }
+
+    // Couple Spaces Root
+    match /couple_spaces/{spaceId} {
+      // Lectura: solo dueña o pareja vinculada activa
+      allow read: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.partnerId != null && resource.data.partnerId == request.auth.uid && resource.data.status == 'PAIRED')
+      );
+
+      // Creación: solo la dueña autenticada para sí misma (sin pareja inicial arbitraria)
+      allow create: if isAuthenticated() &&
+                    request.resource.data.ownerId == request.auth.uid &&
+                    request.resource.data.partnerId == null &&
+                    request.resource.data.status in ['UNPAIRED', 'PENDING'] &&
+                    isValidCoupleSpace(request.resource.data);
+
+      // Actualización:
+      // Caso 1: La dueña puede actualizar permisos, parámetros de ciclo o revocar/desvincular a su pareja
+      // Caso 2: Canje atómico verificado mediante pairing_invites válido, vigente, no consumido y correspondiente a este espacio
+      allow update: if isAuthenticated() && isValidCoupleSpace(request.resource.data) && (
+        // Dueña legítima
+        (resource.data.ownerId == request.auth.uid &&
+         request.resource.data.ownerId == resource.data.ownerId) ||
+        // Canje verificado de invitación por parte de la pareja
+        (
+          // No debe ser ya pareja ni ser la propia dueña
+          request.auth.uid != resource.data.ownerId &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          // Espacio debe estar desvinculado actualmente (no sustitución silenciosa)
+          resource.data.partnerId == null &&
+          resource.data.status != 'PAIRED' &&
+          request.resource.data.partnerId == request.auth.uid &&
+          request.resource.data.status == 'PAIRED' &&
+          // Preservar inmutabilidad de configuración personal, permisos y parámetros de ciclo
+          request.resource.data.sharingPermissions == resource.data.sharingPermissions &&
+          request.resource.data.averageCycleLength == resource.data.averageCycleLength &&
+          request.resource.data.averagePeriodLength == resource.data.averagePeriodLength &&
+          // Verificación de invitación válida y vigente correspondiente a este espacio
+          request.resource.data.claimedInviteCode is string &&
+          exists(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)) &&
+          get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.spaceId == spaceId &&
+          get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.status == 'ACTIVE' &&
+          get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.expiresAt > request.time &&
+          // Invalidador de versión: si el espacio tiene activeInviteVersion, la invitación debe coincidir
+          (!('activeInviteVersion' in resource.data) || get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.version == resource.data.activeInviteVersion)
+        )
+      );
+
+      // Borrado: solo la dueña
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+
+      // Subcolección: Ciclos
+      match /cycles/{cycleId} {
+        allow read: if isSpaceMember(spaceId);
+        allow create, update: if isSpaceOwner(spaceId) && isValidCycleEntry(request.resource.data) && request.resource.data.spaceId == spaceId;
+        allow delete: if isSpaceOwner(spaceId);
+      }
+
+      // Subcolección: Síntomas Físicos
+      match /physical_symptoms/{dateId} {
+        allow read: if isSpaceOwner(spaceId) || (
+          isCurrentPartner(spaceId) &&
+          resource.data.isPrivate == false &&
+          getSpace(spaceId).data.sharingPermissions.shareSymptoms == true
+        );
+        allow create, update: if isSpaceOwner(spaceId) &&
+                                 isValidPhysicalSymptoms(request.resource.data) &&
+                                 request.resource.data.spaceId == spaceId &&
+                                 request.resource.data.date == dateId &&
+                                 request.resource.data.loggedBy == request.auth.uid;
+        allow delete: if isSpaceOwner(spaceId);
+      }
+
+      // Subcolección: Estado de Ánimo y Energía
+      match /mood_records/{dateId} {
+        allow read: if isSpaceOwner(spaceId) || (
+          isCurrentPartner(spaceId) &&
+          resource.data.isPrivate == false &&
+          getSpace(spaceId).data.sharingPermissions.shareMood == true
+        );
+        allow create, update: if isSpaceOwner(spaceId) &&
+                                 isValidMoodRecord(request.resource.data) &&
+                                 request.resource.data.spaceId == spaceId &&
+                                 request.resource.data.date == dateId &&
+                                 request.resource.data.loggedBy == request.auth.uid;
+        allow delete: if isSpaceOwner(spaceId);
+      }
+
+      // Subcolección: Notas Privadas de la Propietaria (ACCESO EXCLUSIVO A LA PROPIETARIA)
+      match /private_notes/{dateId} {
+        allow read: if isSpaceOwner(spaceId);
+        allow create, update: if isSpaceOwner(spaceId) &&
+                                 isValidPrivateNote(request.resource.data) &&
+                                 request.resource.data.spaceId == spaceId &&
+                                 request.resource.data.date == dateId &&
+                                 request.resource.data.loggedBy == request.auth.uid;
+        allow delete: if isSpaceOwner(spaceId);
+      }
+
+      // Subcolección legacy: protegiendo registros antiguos para la dueña exclusivamente
+      match /symptoms/{symptomId} {
+        allow read: if isSpaceOwner(spaceId);
+        allow write: if isSpaceOwner(spaceId);
+      }
+
+      // Subcolección: Registros de Intimidad
+      match /intimacy_logs/{intimacyId} {
+        allow read: if isSpaceOwner(spaceId) || (
+          isCurrentPartner(spaceId) &&
+          resource.data.isPrivate == false &&
+          getSpace(spaceId).data.sharingPermissions.shareIntimacy == true
+        );
+        allow create, update: if isSpaceOwner(spaceId) &&
+                                 isValidIntimacyLog(request.resource.data) &&
+                                 request.resource.data.spaceId == spaceId &&
+                                 request.resource.data.loggedBy == request.auth.uid;
+        allow delete: if isSpaceOwner(spaceId);
+      }
+
+      // Subcolección: Observaciones de la Pareja
+      match /observations/{observationId} {
+        allow read: if isSpaceMember(spaceId);
+
+        // Pareja crea observación: estrictamente PENDING, autor verificado, sin privateNote
+        allow create: if isCurrentPartner(spaceId) &&
+                         request.resource.data.spaceId == spaceId &&
+                         request.resource.data.loggedBy == request.auth.uid &&
+                         request.resource.data.spottingSuggestionStatus == 'PENDING' &&
+                         isValidPartnerObservation(request.resource.data);
+
+        // Actualización estricta por rol:
+        // Pareja: Solo puede editar careActionTaken y sweetMessage sin cambiar status, datos de manchado ni autor
+        // Propietaria: Solo puede actualizar spottingSuggestionStatus a ACCEPTED o DISMISSED sin alterar autor ni contenido
+        allow update: if isValidPartnerObservation(request.resource.data) && (
+          (
+            isCurrentPartner(spaceId) &&
+            resource.data.loggedBy == request.auth.uid &&
+            request.resource.data.loggedBy == resource.data.loggedBy &&
+            request.resource.data.spaceId == resource.data.spaceId &&
+            request.resource.data.date == resource.data.date &&
+            request.resource.data.perceivedMood == resource.data.perceivedMood &&
+            request.resource.data.apparentPainLevel == resource.data.apparentPainLevel &&
+            request.resource.data.unloggedSpottingReported == resource.data.unloggedSpottingReported &&
+            request.resource.data.spottingSuggestionStatus == resource.data.spottingSuggestionStatus &&
+            request.resource.data.createdAt == resource.data.createdAt
+          ) ||
+          (
+            isSpaceOwner(spaceId) &&
+            request.resource.data.loggedBy == resource.data.loggedBy &&
+            request.resource.data.spaceId == resource.data.spaceId &&
+            request.resource.data.date == resource.data.date &&
+            request.resource.data.perceivedMood == resource.data.perceivedMood &&
+            request.resource.data.apparentPainLevel == resource.data.apparentPainLevel &&
+            request.resource.data.unloggedSpottingReported == resource.data.unloggedSpottingReported &&
+            request.resource.data.careActionTaken == resource.data.careActionTaken &&
+            request.resource.data.sweetMessage == resource.data.sweetMessage &&
+            request.resource.data.createdAt == resource.data.createdAt &&
+            resource.data.spottingSuggestionStatus == 'PENDING' &&
+            request.resource.data.spottingSuggestionStatus in ['ACCEPTED', 'DISMISSED']
+          )
+        );
+
+        allow delete: if isSpaceOwner(spaceId) || (isCurrentPartner(spaceId) && resource.data.loggedBy == request.auth.uid);
+      }
+
+      // Subcolección: Check-ins Afectivos
+      match /check_ins/{checkInId} {
+        allow read: if isSpaceMember(spaceId);
+
+        // Pareja crea check-in: estrictamente PENDING, sin respuestas iniciales inventadas
+        allow create: if isCurrentPartner(spaceId) &&
+                         request.resource.data.spaceId == spaceId &&
+                         request.resource.data.senderUid == request.auth.uid &&
+                         request.resource.data.status == 'PENDING' &&
+                         request.resource.data.responseOption == null &&
+                         request.resource.data.responseNote == null &&
+                         request.resource.data.answeredAt == null &&
+                         isValidCheckIn(request.resource.data);
+
+        // Actualización estricta: Solo la dueña puede responder (PENDING -> ANSWERED)
+        // senderUid, promptType, customNote, spaceId y createdAt son inmutables
+        allow update: if isSpaceOwner(spaceId) &&
+                         resource.data.senderUid != request.auth.uid &&
+                         request.resource.data.spaceId == resource.data.spaceId &&
+                         request.resource.data.senderUid == resource.data.senderUid &&
+                         request.resource.data.promptType == resource.data.promptType &&
+                         request.resource.data.customNote == resource.data.customNote &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         resource.data.status == 'PENDING' &&
+                         request.resource.data.status == 'ANSWERED' &&
+                         request.resource.data.responseOption in ['ALL_GOOD_JUST_CRAMPS', 'NEED_SILENCE', 'LET_US_TALK', 'CUDDLES_PLEASE'] &&
+                         isValidCheckIn(request.resource.data);
+
+        allow delete: if isSpaceOwner(spaceId) || (isCurrentPartner(spaceId) && resource.data.senderUid == request.auth.uid);
+      }
+    }
+
+    // Pairing Invites Lookup
+    // Las invitaciones individuales pueden consultarse por ID exacto si se conoce el código, pero NO listarse arbitrariamente por terceros
+    match /pairing_invites/{inviteCode} {
+      // Lectura: La creadora puede listar o leer sus invitaciones; cualquier usuario autenticado puede leer una invitación concreta si conoce el código
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
+
+      // Creación: Solo la dueña legítima de dicho espacio
+      allow create: if isAuthenticated() &&
+                       request.resource.data.keys().hasOnly(['spaceId', 'createdBy', 'status', 'expiresAt', 'version', 'createdAt']) &&
+                       request.resource.data.createdBy == request.auth.uid &&
+                       isSpaceOwner(request.resource.data.spaceId) &&
+                       request.resource.data.status == 'ACTIVE' &&
+                       request.resource.data.expiresAt is timestamp &&
+                       request.resource.data.expiresAt > request.time;
+
+      // Actualización:
+      // Dueña: puede marcar REVOKED o renovar
+      // Canjeador: puede marcar CONSUMED si estaba ACTIVE y no expirado, sin alterar spaceId, createdBy ni expiresAt
+      allow update: if isAuthenticated() && (
+        (resource.data.createdBy == request.auth.uid) ||
+        (
+          resource.data.status == 'ACTIVE' &&
+          resource.data.expiresAt > request.time &&
+          request.resource.data.status == 'CONSUMED' &&
+          request.resource.data.spaceId == resource.data.spaceId &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          request.resource.data.expiresAt == resource.data.expiresAt &&
+          request.resource.data.keys().hasOnly(['spaceId', 'createdBy', 'status', 'expiresAt', 'version', 'createdAt', 'consumedBy', 'consumedAt']) &&
+          request.resource.data.consumedBy == request.auth.uid
+        )
+      );
+
+      // Eliminación: Solo la creadora
+      allow delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
+    }
+  }
+}
