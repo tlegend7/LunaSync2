@@ -287,6 +287,76 @@ test("1.E El canje no modifica ownerId, permisos ni parámetros del ciclo: DENEG
   await assertFails(batch.commit());
 });
 
+test("1.F Auto-vinculación: dueña intenta canjear su propio código como pareja: DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_space_self";
+  const CODE = "LUNA-SELF";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 1,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 1,
+      expiresAt: new Date(Date.now() + 24 * 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const ellaDb = testEnv.authenticatedContext(ELLA_UID).firestore();
+  const batch = ellaDb.batch();
+  batch.update(ellaDb.collection("pairing_invites").doc(CODE), {
+    status: "CONSUMED",
+    consumedBy: ELLA_UID
+  });
+  batch.update(ellaDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: ELLA_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE
+  });
+
+  await assertFails(batch.commit());
+});
+
+test("1.G Sustitución de pareja: canjear sobre espacio que ya tiene partnerId: DENEGADO", async () => {
+  const CODE = "LUNA-REPAIR";
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    // SPACE_ID ya tiene partnerId = PARTNER_UID y status = PAIRED
+    await db.collection("pairing_invites").doc(CODE).set({
+      spaceId: SPACE_ID,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 1,
+      expiresAt: new Date(Date.now() + 24 * 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  const batch = strangerDb.batch();
+  batch.update(strangerDb.collection("pairing_invites").doc(CODE), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  batch.update(strangerDb.collection("couple_spaces").doc(SPACE_ID), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE
+  });
+
+  await assertFails(batch.commit());
+});
+
 // 2. REQUISITO 2: CANJE LEGÍTIMO Y PRIVACIDAD PRE-CANJE
 test("2.A Antes del canje, cuenta externa no puede leer el espacio ni sus datos personales: DENEGADO", async () => {
   const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
@@ -295,52 +365,220 @@ test("2.A Antes del canje, cuenta externa no puede leer el espacio ni sus datos 
   await assertFails(strangerDb.collection("couple_spaces").doc(SPACE_ID).collection("private_notes").doc("2026-11-05").get());
 });
 
-// 3. REQUISITO 3: ENUMERACIÓN Y CONSUMO DE INVITACIONES
-test("3.A Enumeración por cuenta externa (collection get / list): DENEGADA", async () => {
-  const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
-  await assertFails(strangerDb.collection("pairing_invites").get());
-});
-
-test("3.B Consumo aislado de invitación sin vinculación legítima: DENEGADO", async () => {
-  const CODE = "LUNA-ISOLATED";
+test("2.B Cuenta externa autenticada puede leer el documento de la invitación por código: PERMITIDO", async () => {
+  const CODE = "LUNA-GET-OK";
   await testEnv.withSecurityRulesDisabled(async (context) => {
     await context.firestore().collection("pairing_invites").doc(CODE).set({
       spaceId: SPACE_ID,
       createdBy: ELLA_UID,
       status: "ACTIVE",
+      version: 1,
+      expiresAt: new Date(Date.now() + 24 * 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  const docSnap = await assertSucceeds(strangerDb.collection("pairing_invites").doc(CODE).get());
+  assert.strictEqual(docSnap.data().spaceId, SPACE_ID);
+});
+
+// 3. REQUISITO 3: ATOMICIDAD BIDIRECCIONAL Y RESISTENCIA A CANJE AISLADO
+test("3.A Enumeración por cuenta externa (collection get / list): DENEGADA", async () => {
+  const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  await assertFails(strangerDb.collection("pairing_invites").get());
+});
+
+test("3.B.1 Consumo aislado de invitación CON consumedBy correcto pero sin vincular el espacio: DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_space_iso_inv";
+  const CODE = "LUNA-ISO-INV";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 1,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 1,
       expiresAt: new Date(Date.now() + 3600 * 1000),
       createdAt: new Date()
     });
   });
 
   const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
-  // Intentar marcar CONSUMED sin vincular
+  // Intentar actualizar SOLAMENTE la invitación a CONSUMED con consumedBy válido
   await assertFails(
     strangerDb.collection("pairing_invites").doc(CODE).update({
-      status: "CONSUMED"
+      status: "CONSUMED",
+      consumedBy: STRANGER_UID
     })
   );
 });
 
-test("3.C Código expirado o sin expiresAt válido es rechazado", async () => {
-  const CODE_EXP = "LUNA-EXPD";
+test("3.B.2 Vinculación aislada del espacio CON claimedInviteCode válido pero sin consumir invitación: DENEGADA", async () => {
+  const UNPAIRED_SPACE = "unpaired_space_iso_spc";
+  const CODE = "LUNA-ISO-SPC";
+
   await testEnv.withSecurityRulesDisabled(async (context) => {
-    await context.firestore().collection("pairing_invites").doc(CODE_EXP).set({
-      spaceId: SPACE_ID,
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 1,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE).set({
+      spaceId: UNPAIRED_SPACE,
       createdBy: ELLA_UID,
       status: "ACTIVE",
+      version: 1,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  // Intentar actualizar SOLAMENTE el espacio a PAIRED
+  await assertFails(
+    strangerDb.collection("couple_spaces").doc(UNPAIRED_SPACE).update({
+      partnerId: STRANGER_UID,
+      status: "PAIRED",
+      claimedInviteCode: CODE
+    })
+  );
+});
+
+test("3.C Código expirado es rechazado: DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_space_exp";
+  const CODE_EXP = "LUNA-EXPD";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 1,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE_EXP).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 1,
       expiresAt: new Date(Date.now() - 3600 * 1000), // Expirado en el pasado
       createdAt: new Date()
     });
   });
 
   const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
-  await assertFails(
-    strangerDb.collection("pairing_invites").doc(CODE_EXP).update({
-      status: "CONSUMED",
-      consumedBy: STRANGER_UID
-    })
-  );
+  const batch = strangerDb.batch();
+  batch.update(strangerDb.collection("pairing_invites").doc(CODE_EXP), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  batch.update(strangerDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE_EXP
+  });
+
+  await assertFails(batch.commit());
+});
+
+test("3.D Código de versión revocada (espacio renovado a v2, código en v1): DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_space_rev";
+  const CODE_REV = "LUNA-REVOKED";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 2, // Espacio ahora está en versión 2
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE_REV).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 1, // Invitación vieja en versión 1
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  const batch = strangerDb.batch();
+  batch.update(strangerDb.collection("pairing_invites").doc(CODE_REV), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  batch.update(strangerDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE_REV
+  });
+
+  await assertFails(batch.commit());
+});
+
+test("3.E Código ya CONSUMED no puede canjearse nuevamente: DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_space_cons";
+  const CODE_CONS = "LUNA-ALREADY-USED";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 1,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE_CONS).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "CONSUMED", // Ya consumido
+      version: 1,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      consumedBy: "previous_user",
+      createdAt: new Date()
+    });
+  });
+
+  const strangerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  const batch = strangerDb.batch();
+  batch.update(strangerDb.collection("pairing_invites").doc(CODE_CONS), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  batch.update(strangerDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE_CONS
+  });
+
+  await assertFails(batch.commit());
 });
 
 // 4. REQUISITO 7: CHECK-INS Y OBSERVACIONES CON TRANSICIONES ESTRICTAS

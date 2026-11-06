@@ -4,27 +4,34 @@ import com.example.data.model.FlowLevel
 import com.example.data.model.Mood
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
 
 data class MigrationResult(
   val totalLegacyRead: Int,
   val physicalMigrated: Int,
+  val physicalSkipped: Int,
   val moodMigrated: Int,
+  val moodSkipped: Int,
   val notesMigrated: Int,
-  val conflictsSkipped: Int,
-  val errorsCount: Int
+  val notesSkipped: Int,
+  val errorsCount: Int,
+  val errorDetails: List<String> = emptyList()
 )
 
 /**
- * Safe, idempotent migration from legacy `/couple_spaces/{spaceId}/symptoms`
- * to `/physical_symptoms/{date}`, `/mood_records/{date}`, and `/private_notes/{date}`.
+ * Safe, idempotent, category-independent migration from legacy
+ * `/couple_spaces/{spaceId}/symptoms` to:
+ * - `/physical_symptoms/{date}`
+ * - `/mood_records/{date}`
+ * - `/private_notes/{date}`
  *
  * Guarantees:
- * 1. Dry-run simulation mode supported (`dryRun = true`).
- * 2. Never overwrites newer records in the target collections.
- * 3. Never logs intimate private notes to standard output.
- * 4. Preserves isPrivate, timestamps, dates, and author identity.
+ * 1. Category-independent evaluation: existing physical symptoms do NOT block missing mood or private notes.
+ * 2. Strict non-overwrite: existing target documents are NEVER replaced or truncated.
+ * 3. Atomic per-record write inside transactions or precondition checks.
+ * 4. Privacy preservation: private notes are kept strictly inside `/private_notes`.
+ * 5. Dry-run simulation mode delivers exact categorization counters without mutating database.
+ * 6. Anonymized error logging without printing intimate notes.
  */
 class LegacySymptomsMigration(private val db: FirebaseFirestore) {
 
@@ -32,17 +39,20 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
     val legacyCollection = db.collection("couple_spaces").document(spaceId).collection("symptoms")
     val legacyDocs = legacyCollection.get().await().documents
 
-    var physicalCount = 0
-    var moodCount = 0
-    var notesCount = 0
-    var skippedCount = 0
-    var errorCount = 0
+    var physicalMigrated = 0
+    var physicalSkipped = 0
+    var moodMigrated = 0
+    var moodSkipped = 0
+    var notesMigrated = 0
+    var notesSkipped = 0
+    var errorsCount = 0
+    val errorDetails = mutableListOf<String>()
 
     val spaceDoc = db.collection("couple_spaces").document(spaceId)
 
     for (doc in legacyDocs) {
+      val date = doc.getString("date") ?: doc.id
       try {
-        val date = doc.getString("date") ?: doc.id
         val flowLevel = doc.getString("flowLevel") ?: FlowLevel.NONE.name
         val painLevel = doc.getLong("painLevel")?.toInt() ?: 0
         val cramps = doc.getBoolean("cramps") ?: false
@@ -57,92 +67,112 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
         val privateNote = doc.getString("privateNote")
         val mood = doc.getString("mood") ?: Mood.CALM.name
         val energyLevel = doc.getLong("energyLevel")?.toInt() ?: 3
-        val isPrivate = doc.getBoolean("isPrivate") ?: false
+        val isPrivate = doc.getBoolean("isPrivate") ?: true // Conservative default
         val loggedBy = doc.getString("loggedBy") ?: ""
 
-        // Check target collections to prevent overwriting newer records
-        val targetPhysDoc = spaceDoc.collection("physical_symptoms").document(date).get().await()
-        val targetMoodDoc = spaceDoc.collection("mood_records").document(date).get().await()
-        val targetNoteDoc = spaceDoc.collection("private_notes").document(date).get().await()
+        val physRef = spaceDoc.collection("physical_symptoms").document(date)
+        val moodRef = spaceDoc.collection("mood_records").document(date)
+        val noteRef = spaceDoc.collection("private_notes").document(date)
 
-        if (targetPhysDoc.exists() || targetMoodDoc.exists()) {
-          // Newer data already exists for this date, skip to protect user authored data
-          skippedCount++
-          continue
-        }
+        if (dryRun) {
+          // Check existence individually per category
+          val physExists = physRef.get().await().exists()
+          if (physExists) physicalSkipped++ else physicalMigrated++
 
-        if (!dryRun) {
-          val batch = db.batch()
+          val moodExists = moodRef.get().await().exists()
+          if (moodExists) moodSkipped++ else moodMigrated++
 
-          // 1. Physical Symptoms
-          val physRef = spaceDoc.collection("physical_symptoms").document(date)
-          val physPayload = mapOf(
-            "spaceId" to spaceId,
-            "date" to date,
-            "flowLevel" to flowLevel,
-            "painLevel" to painLevel,
-            "cramps" to cramps,
-            "headache" to headache,
-            "backPain" to backPain,
-            "bloating" to bloating,
-            "cervicalMucus" to mucus,
-            "tenderBreasts" to tenderBreasts,
-            "cravings" to cravings,
-            "acne" to acne,
-            "publicNote" to publicNote,
-            "isPrivate" to isPrivate,
-            "loggedBy" to loggedBy,
-            "updatedAt" to FieldValue.serverTimestamp()
-          )
-          batch.set(physRef, physPayload)
-
-          // 2. Mood Record
-          val moodRef = spaceDoc.collection("mood_records").document(date)
-          val moodPayload = mapOf(
-            "spaceId" to spaceId,
-            "date" to date,
-            "mood" to mood,
-            "energyLevel" to energyLevel,
-            "isPrivate" to isPrivate,
-            "loggedBy" to loggedBy,
-            "updatedAt" to FieldValue.serverTimestamp()
-          )
-          batch.set(moodRef, moodPayload)
-
-          // 3. Private Note (isolated)
           if (!privateNote.isNullOrBlank()) {
-            val noteRef = spaceDoc.collection("private_notes").document(date)
-            val notePayload = mapOf(
-              "spaceId" to spaceId,
-              "date" to date,
-              "privateNote" to privateNote,
-              "loggedBy" to loggedBy,
-              "updatedAt" to FieldValue.serverTimestamp()
-            )
-            batch.set(noteRef, notePayload)
-            notesCount++
+            val noteExists = noteRef.get().await().exists()
+            if (noteExists) notesSkipped++ else notesMigrated++
           }
+        } else {
+          // Real transaction ensuring no concurrent overwrite and category independence
+          db.runTransaction { transaction ->
+            val physSnap = transaction.get(physRef)
+            val moodSnap = transaction.get(moodRef)
+            val noteSnap = transaction.get(noteRef)
 
-          batch.commit().await()
-        }
+            // Category 1: Physical symptoms
+            if (!physSnap.exists()) {
+              val physPayload = mapOf(
+                "spaceId" to spaceId,
+                "date" to date,
+                "flowLevel" to flowLevel,
+                "painLevel" to painLevel,
+                "cramps" to cramps,
+                "headache" to headache,
+                "backPain" to backPain,
+                "bloating" to bloating,
+                "cervicalMucus" to mucus,
+                "tenderBreasts" to tenderBreasts,
+                "cravings" to cravings,
+                "acne" to acne,
+                "publicNote" to publicNote,
+                "isPrivate" to isPrivate,
+                "loggedBy" to loggedBy,
+                "migratedAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+              )
+              transaction.set(physRef, physPayload)
+              physicalMigrated++
+            } else {
+              physicalSkipped++
+            }
 
-        physicalCount++
-        moodCount++
-        if (!privateNote.isNullOrBlank() && dryRun) {
-          notesCount++
+            // Category 2: Mood and energy
+            if (!moodSnap.exists()) {
+              val moodPayload = mapOf(
+                "spaceId" to spaceId,
+                "date" to date,
+                "mood" to mood,
+                "energyLevel" to energyLevel,
+                "isPrivate" to isPrivate,
+                "loggedBy" to loggedBy,
+                "migratedAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+              )
+              transaction.set(moodRef, moodPayload)
+              moodMigrated++
+            } else {
+              moodSkipped++
+            }
+
+            // Category 3: Private note (strictly isolated)
+            if (!privateNote.isNullOrBlank()) {
+              if (!noteSnap.exists()) {
+                val notePayload = mapOf(
+                  "spaceId" to spaceId,
+                  "date" to date,
+                  "privateNote" to privateNote,
+                  "loggedBy" to loggedBy,
+                  "migratedAt" to FieldValue.serverTimestamp(),
+                  "updatedAt" to FieldValue.serverTimestamp()
+                )
+                transaction.set(noteRef, notePayload)
+                notesMigrated++
+              } else {
+                notesSkipped++
+              }
+            }
+          }.await()
         }
       } catch (e: Exception) {
-        errorCount++
+        errorsCount++
+        errorDetails.add("Error migrando fecha $date: ${e.message}")
       }
     }
 
     return MigrationResult(
       totalLegacyRead = legacyDocs.size,
-      physicalMigrated = physicalCount,
-      moodMigrated = moodCount,
-      notesMigrated = notesCount,
-      conflictsSkipped = skippedCount,
-      errorsCount = errorCount
+      physicalMigrated = physicalMigrated,
+      physicalSkipped = physicalSkipped,
+      moodMigrated = moodMigrated,
+      moodSkipped = moodSkipped,
+      notesMigrated = notesMigrated,
+      notesSkipped = notesSkipped,
+      errorsCount = errorsCount,
+      errorDetails = errorDetails
     )
   }
 }

@@ -5,6 +5,7 @@ import com.example.data.model.CoupleSpace
 import com.example.data.model.SharingPermissions
 import com.example.data.model.SpaceStatus
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.snapshots
@@ -26,6 +27,7 @@ sealed class SpaceObservationResult {
 
 class CoupleSpaceRepository(context: Context) {
   private val db: FirebaseFirestore = FirestoreProvider.getDb(context)
+  private val auth: FirebaseAuth = FirebaseAuth.getInstance()
   private val secureRandom = SecureRandom()
 
   fun observeSpace(spaceId: String): Flow<CoupleSpace?> {
@@ -36,13 +38,6 @@ class CoupleSpaceRepository(context: Context) {
       }
   }
 
-  /**
-   * Robustly observes space association for a given userId:
-   * - Emits Loading initially
-   * - Combines ownerQuery and partnerQuery asynchronously
-   * - Explicitly distinguishes between Loading, Success, NoSpaceFound, PairingLost, and Error
-   * - Handles PERMISSION_DENIED cleanly when access is revoked
-   */
   fun observeUserSpaceDetailed(userId: String): Flow<SpaceObservationResult> = callbackFlow {
     trySend(SpaceObservationResult.Loading)
 
@@ -54,7 +49,6 @@ class CoupleSpaceRepository(context: Context) {
 
     fun evaluateAndEmit() {
       if (!ownerLoaded || !partnerLoaded) {
-        // Wait for both queries to complete initial snapshot
         return
       }
 
@@ -149,120 +143,145 @@ class CoupleSpaceRepository(context: Context) {
     return spaceDoc.id
   }
 
+  /**
+   * Generates a pairing invite code atomically using a Firestore transaction:
+   * - Increments activeInviteVersion on the space document.
+   * - Generates a secure, non-colliding LUNA-XXXX code.
+   * - Writes the new pairing_invites document inside the transaction.
+   * Both writes succeed or fail together.
+   */
   suspend fun generateInviteCode(spaceId: String, createdBy: String): String {
-    val spaceRef = db.collection("couple_spaces").document(spaceId)
-    val spaceSnap = spaceRef.get().await()
-    val currentVersion = spaceSnap.getLong("activeInviteVersion") ?: 1L
-    val newVersion = currentVersion + 1
-
-    // Update space's active invite version first or concurrently so any stale invites are invalidated
-    spaceRef.update("activeInviteVersion", newVersion).await()
-
-    // Generate cryptographically secure invite code: LUNA-XXXX
     val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    val sb = StringBuilder(4)
-    for (i in 0 until 4) {
-      val idx = secureRandom.nextInt(chars.length)
-      sb.append(chars[idx])
-    }
-    val inviteCode = "LUNA-$sb"
+    val spaceRef = db.collection("couple_spaces").document(spaceId)
 
-    val expiresAt = Timestamp(Date(System.currentTimeMillis() + 48 * 3600 * 1000L)) // 48h
-    val newInviteRef = db.collection("pairing_invites").document(inviteCode)
-    val inviteData = mapOf(
-      "spaceId" to spaceId,
-      "createdBy" to createdBy,
-      "status" to "ACTIVE",
-      "version" to newVersion,
-      "expiresAt" to expiresAt,
-      "createdAt" to FieldValue.serverTimestamp()
-    )
-    newInviteRef.set(inviteData).await()
+    var generatedCode = ""
 
-    return inviteCode
+    db.runTransaction { transaction ->
+      val spaceSnap = transaction.get(spaceRef)
+      if (!spaceSnap.exists()) {
+        throw IllegalStateException("El espacio no existe")
+      }
+      val currentOwner = spaceSnap.getString("ownerId")
+      if (currentOwner != createdBy) {
+        throw IllegalStateException("Solo la propietaria puede generar invitaciones")
+      }
+
+      val currentVersion = spaceSnap.getLong("activeInviteVersion") ?: 1L
+      val newVersion = currentVersion + 1L
+
+      // Generate non-colliding code
+      var attempts = 0
+      var codeCandidate = ""
+      var inviteRef = db.collection("pairing_invites").document()
+
+      while (attempts < 5) {
+        val sb = StringBuilder(4)
+        for (i in 0 until 4) {
+          val idx = secureRandom.nextInt(chars.length)
+          sb.append(chars[idx])
+        }
+        codeCandidate = "LUNA-$sb"
+        val candidateRef = db.collection("pairing_invites").document(codeCandidate)
+        val candidateSnap = transaction.get(candidateRef)
+        if (!candidateSnap.exists()) {
+          inviteRef = candidateRef
+          break
+        }
+        attempts++
+      }
+
+      if (codeCandidate.isEmpty() || attempts >= 5) {
+        throw IllegalStateException("No se pudo generar un código único")
+      }
+
+      // Update space's active invite version
+      transaction.update(
+        spaceRef,
+        mapOf(
+          "activeInviteVersion" to newVersion,
+          "updatedAt" to FieldValue.serverTimestamp()
+        )
+      )
+
+      val expiresAt = Timestamp(Date(System.currentTimeMillis() + 48 * 3600 * 1000L)) // 48h
+      val inviteData = mapOf(
+        "spaceId" to spaceId,
+        "createdBy" to createdBy,
+        "status" to "ACTIVE",
+        "version" to newVersion,
+        "expiresAt" to expiresAt,
+        "createdAt" to FieldValue.serverTimestamp()
+      )
+      transaction.set(inviteRef, inviteData)
+
+      generatedCode = codeCandidate
+    }.await()
+
+    return generatedCode
   }
 
   /**
-   * Atomic Firestore transaction for joining with code:
-   * - Validates existence, status ACTIVE, and expiration
-   * - Prevents owner from self-pairing
-   * - Validates space is UNPAIRED and not already taken
-   * - Validates invite version matches space's active version
-   * - Atomically marks invite CONSUMED and space PAIRED
+   * Atomic join with code WITHOUT illegal prior read of private couple_space document:
+   * - Reads pairing_invites document (authorized for get if authenticated).
+   * - Validates code existence, ACTIVE status, and expiration.
+   * - Derives current partner UID strictly from authenticated session (request.auth.uid).
+   * - Executes atomic batch write pairing space and consuming invite.
+   * - Firestore rules evaluate and enforce getAfter() coupling, version match, and partnerId verification.
    */
   suspend fun joinWithCode(code: String, partnerId: String): Result<String> {
     val cleanCode = code.trim().uppercase()
     val inviteRef = db.collection("pairing_invites").document(cleanCode)
 
     return try {
-      val spaceId = db.runTransaction { transaction ->
-        val inviteSnap = transaction.get(inviteRef)
-        if (!inviteSnap.exists()) {
-          throw IllegalArgumentException("Código de invitación no encontrado")
-        }
+      val inviteSnap = inviteRef.get().await()
+      if (!inviteSnap.exists()) {
+        throw IllegalArgumentException("Código de invitación no encontrado")
+      }
 
-        val status = inviteSnap.getString("status") ?: "EXPIRED"
-        if (status != "ACTIVE") {
-          throw IllegalStateException("Este código ya fue utilizado o ha sido revocado")
-        }
+      val status = inviteSnap.getString("status") ?: "EXPIRED"
+      if (status != "ACTIVE") {
+        throw IllegalStateException("Este código ya fue utilizado o ha sido revocado")
+      }
 
-        val expiresAt = inviteSnap.getTimestamp("expiresAt")
-        if (expiresAt == null || expiresAt.toDate().before(Date())) {
-          throw IllegalStateException("Este código de invitación ha expirado")
-        }
+      val expiresAt = inviteSnap.getTimestamp("expiresAt")
+      if (expiresAt == null || expiresAt.toDate().before(Date())) {
+        throw IllegalStateException("Este código de invitación ha expirado")
+      }
 
-        val targetSpaceId = inviteSnap.getString("spaceId")
-          ?: throw IllegalStateException("Espacio no asociado a este código")
+      val targetSpaceId = inviteSnap.getString("spaceId")
+        ?: throw IllegalStateException("Espacio no asociado a este código")
 
-        val inviteVersion = inviteSnap.getLong("version") ?: 1L
+      val createdBy = inviteSnap.getString("createdBy")
+      val actualUid = auth.currentUser?.uid ?: partnerId
+      if (createdBy == actualUid) {
+        throw IllegalStateException("No puedes vincularte a tu propio espacio como pareja")
+      }
 
-        val spaceRef = db.collection("couple_spaces").document(targetSpaceId)
-        val spaceSnap = transaction.get(spaceRef)
+      val spaceRef = db.collection("couple_spaces").document(targetSpaceId)
 
-        if (!spaceSnap.exists()) {
-          throw IllegalStateException("El espacio de pareja no existe")
-        }
-
-        val ownerId = spaceSnap.getString("ownerId")
-        if (ownerId == partnerId) {
-          throw IllegalStateException("No puedes vincularte a tu propio espacio como pareja")
-        }
-
-        val currentPartner = spaceSnap.getString("partnerId")
-        val currentStatus = spaceSnap.getString("status")
-        if (!currentPartner.isNullOrBlank() || currentStatus == SpaceStatus.PAIRED.name) {
-          throw IllegalStateException("Este espacio ya cuenta con una pareja vinculada")
-        }
-
-        val spaceVersion = spaceSnap.getLong("activeInviteVersion") ?: 1L
-        if (inviteVersion != spaceVersion) {
-          throw IllegalStateException("Esta invitación ha sido reemplazada por una más reciente")
-        }
-
-        // Apply atomic updates
-        transaction.update(
-          inviteRef,
-          mapOf(
-            "status" to "CONSUMED",
-            "consumedBy" to partnerId,
-            "consumedAt" to FieldValue.serverTimestamp()
-          )
+      // Atomic commit: updates both documents simultaneously.
+      // Firestore rules verify with getAfter that both documents transitioned together.
+      val batch = db.batch()
+      batch.update(
+        inviteRef,
+        mapOf(
+          "status" to "CONSUMED",
+          "consumedBy" to actualUid,
+          "consumedAt" to FieldValue.serverTimestamp()
         )
-
-        transaction.update(
-          spaceRef,
-          mapOf(
-            "partnerId" to partnerId,
-            "status" to SpaceStatus.PAIRED.name,
-            "claimedInviteCode" to cleanCode,
-            "updatedAt" to FieldValue.serverTimestamp()
-          )
+      )
+      batch.update(
+        spaceRef,
+        mapOf(
+          "partnerId" to actualUid,
+          "status" to SpaceStatus.PAIRED.name,
+          "claimedInviteCode" to cleanCode,
+          "updatedAt" to FieldValue.serverTimestamp()
         )
+      )
+      batch.commit().await()
 
-        targetSpaceId
-      }.await()
-
-      Result.success(spaceId)
+      Result.success(targetSpaceId)
     } catch (e: Exception) {
       Result.failure(e)
     }
@@ -284,7 +303,7 @@ class CoupleSpaceRepository(context: Context) {
   /**
    * Atomic revocation:
    * Sets partnerId to null, marks space UNPAIRED, increments activeInviteVersion
-   * to immediately invalidate any outstanding invites concurrently or offline.
+   * to immediately invalidate any outstanding invites.
    */
   suspend fun revokePairing(spaceId: String) {
     val spaceRef = db.collection("couple_spaces").document(spaceId)

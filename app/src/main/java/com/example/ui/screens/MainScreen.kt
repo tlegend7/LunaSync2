@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Favorite
@@ -36,6 +37,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -87,6 +89,7 @@ fun MainScreen(
   val snackbarHostState = remember { SnackbarHostState() }
 
   var currentNavTab by remember { mutableIntStateOf(0) }
+  var showJoinCodeFormOnboarding by remember { mutableStateOf(false) }
 
   // Dialog triggers
   var showSymptomDialog by remember { mutableStateOf(false) }
@@ -126,56 +129,58 @@ fun MainScreen(
       )
     },
     bottomBar = {
-      // iOS Style Tab Bar
-      NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        modifier = Modifier
-          .navigationBarsPadding()
-          .border(0.5.dp, AppleHairlineBorder)
-      ) {
-        NavigationBarItem(
-          selected = currentNavTab == 0,
-          onClick = { currentNavTab = 0 },
-          icon = { Icon(Icons.Default.Spa, contentDescription = "Hoy", modifier = Modifier.size(22.dp)) },
-          label = { Text("Hoy", fontWeight = if (currentNavTab == 0) FontWeight.SemiBold else FontWeight.Normal) },
-          colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = AppleSystemBlue,
-            selectedTextColor = AppleSystemBlue,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            indicatorColor = Color.Transparent
-          ),
-          modifier = Modifier.testTag("nav_tab_dashboard")
-        )
-        NavigationBarItem(
-          selected = currentNavTab == 1,
-          onClick = { currentNavTab = 1 },
-          icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Calendario", modifier = Modifier.size(22.dp)) },
-          label = { Text("Calendario", fontWeight = if (currentNavTab == 1) FontWeight.SemiBold else FontWeight.Normal) },
-          colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = AppleSystemBlue,
-            selectedTextColor = AppleSystemBlue,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            indicatorColor = Color.Transparent
-          ),
-          modifier = Modifier.testTag("nav_tab_calendar")
-        )
-        NavigationBarItem(
-          selected = currentNavTab == 2,
-          onClick = { currentNavTab = 2 },
-          icon = { Icon(Icons.Default.Favorite, contentDescription = "Pareja", modifier = Modifier.size(22.dp)) },
-          label = { Text("Pareja", fontWeight = if (currentNavTab == 2) FontWeight.SemiBold else FontWeight.Normal) },
-          colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = AppleSystemBlue,
-            selectedTextColor = AppleSystemBlue,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            indicatorColor = Color.Transparent
-          ),
-          modifier = Modifier.testTag("nav_tab_pairing")
-        )
+      if (uiState.space != null || uiState.isGuestMode) {
+        // iOS Style Tab Bar (only when in active space or demo)
+        NavigationBar(
+          containerColor = MaterialTheme.colorScheme.surface,
+          tonalElevation = 0.dp,
+          modifier = Modifier
+            .navigationBarsPadding()
+            .border(0.5.dp, AppleHairlineBorder)
+        ) {
+          NavigationBarItem(
+            selected = currentNavTab == 0,
+            onClick = { currentNavTab = 0 },
+            icon = { Icon(Icons.Default.Spa, contentDescription = "Hoy", modifier = Modifier.size(22.dp)) },
+            label = { Text("Hoy", fontWeight = if (currentNavTab == 0) FontWeight.SemiBold else FontWeight.Normal) },
+            colors = NavigationBarItemDefaults.colors(
+              selectedIconColor = AppleSystemBlue,
+              selectedTextColor = AppleSystemBlue,
+              unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              indicatorColor = Color.Transparent
+            ),
+            modifier = Modifier.testTag("nav_tab_dashboard")
+          )
+          NavigationBarItem(
+            selected = currentNavTab == 1,
+            onClick = { currentNavTab = 1 },
+            icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Calendario", modifier = Modifier.size(22.dp)) },
+            label = { Text("Calendario", fontWeight = if (currentNavTab == 1) FontWeight.SemiBold else FontWeight.Normal) },
+            colors = NavigationBarItemDefaults.colors(
+              selectedIconColor = AppleSystemBlue,
+              selectedTextColor = AppleSystemBlue,
+              unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              indicatorColor = Color.Transparent
+            ),
+            modifier = Modifier.testTag("nav_tab_calendar")
+          )
+          NavigationBarItem(
+            selected = currentNavTab == 2,
+            onClick = { currentNavTab = 2 },
+            icon = { Icon(Icons.Default.Favorite, contentDescription = "Pareja", modifier = Modifier.size(22.dp)) },
+            label = { Text("Pareja", fontWeight = if (currentNavTab == 2) FontWeight.SemiBold else FontWeight.Normal) },
+            colors = NavigationBarItemDefaults.colors(
+              selectedIconColor = AppleSystemBlue,
+              selectedTextColor = AppleSystemBlue,
+              unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              indicatorColor = Color.Transparent
+            ),
+            modifier = Modifier.testTag("nav_tab_pairing")
+          )
+        }
       }
     },
     modifier = modifier.fillMaxSize()
@@ -187,7 +192,6 @@ fun MainScreen(
 
       Box(modifier = Modifier.weight(1f)) {
         if (uiState.isResolvingSpace) {
-          // Loading space state
           Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
               CircularProgressIndicator(color = AppleSystemBlue)
@@ -196,12 +200,21 @@ fun MainScreen(
             }
           }
         } else if (uiState.space == null && !uiState.isGuestMode) {
-          // Authenticated account with NO space yet
-          UnpairedAccountOnboardingView(
-            isLoading = uiState.isLoading,
-            onCreateSpace = { viewModel.createOwnerSpace() },
-            onGoToPairing = { currentNavTab = 2 }
-          )
+          // Unpaired authenticated account onboarding
+          if (showJoinCodeFormOnboarding) {
+            OnboardingJoinCodeScreen(
+              isLoading = uiState.isLoading,
+              errorMessage = uiState.errorMessage,
+              onBack = { showJoinCodeFormOnboarding = false },
+              onSubmitCode = { code -> viewModel.joinWithCode(code) }
+            )
+          } else {
+            UnpairedAccountOnboardingView(
+              isLoading = uiState.isLoading,
+              onCreateSpace = { viewModel.createOwnerSpace() },
+              onGoToPairing = { showJoinCodeFormOnboarding = true }
+            )
+          }
         } else {
           when (currentNavTab) {
             0 -> {
@@ -289,7 +302,7 @@ fun MainScreen(
     SymptomLogDialog(
       initialSymptom = uiState.todaySymptom,
       onDismiss = { showSymptomDialog = false },
-      onSave = { flow, pain, mood, energy, cramps, headache, backPain, bloating, mucus, breasts, cravings, acne, pubNote, privNote, isPriv ->
+      onSave = { flow, pain, mood, energy, cramps, headache, backPain, bloating, mucus, breasts, cravings, acne, pubNote, privNote, isPriv, onComplete ->
         viewModel.saveSymptom(
           flowLevel = flow,
           painLevel = pain,
@@ -305,7 +318,8 @@ fun MainScreen(
           acne = acne,
           publicNote = pubNote,
           privateNote = privNote,
-          isPrivate = isPriv
+          isPrivate = isPriv,
+          onComplete = onComplete
         )
       }
     )
@@ -314,8 +328,8 @@ fun MainScreen(
   if (showIntimacyDialog) {
     IntimacyLogDialog(
       onDismiss = { showIntimacyDialog = false },
-      onSave = { type, lube, orgasm, effect, notes, isPriv ->
-        viewModel.logIntimacy(type, lube, orgasm, effect, notes, isPriv)
+      onSave = { type, lube, orgasm, effect, notes, isPriv, onComplete ->
+        viewModel.logIntimacy(type, lube, orgasm, effect, notes, isPriv, onComplete)
       }
     )
   }
@@ -356,6 +370,83 @@ fun MainScreen(
         }
       }
     )
+  }
+}
+
+@Composable
+fun OnboardingJoinCodeScreen(
+  isLoading: Boolean,
+  errorMessage: String?,
+  onBack: () -> Unit,
+  onSubmitCode: (String) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  var inputCode by remember { mutableStateOf("") }
+
+  Column(
+    modifier = modifier
+      .fillMaxSize()
+      .padding(24.dp),
+    verticalArrangement = Arrangement.Center,
+    horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      IconButton(onClick = onBack, modifier = Modifier.testTag("onboarding_back_button")) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+      }
+      Spacer(modifier = Modifier.width(8.dp))
+      Text("Vincular con tu pareja", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    }
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    Text(
+      text = "Ingresa el código que te compartió tu novia (ej. LUNA-8X4K):",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    OutlinedTextField(
+      value = inputCode,
+      onValueChange = { inputCode = it.uppercase() },
+      label = { Text("Código de invitación") },
+      placeholder = { Text("LUNA-XXXX") },
+      singleLine = true,
+      shape = RoundedCornerShape(14.dp),
+      modifier = Modifier.fillMaxWidth().testTag("onboarding_code_input")
+    )
+
+    if (errorMessage != null) {
+      Spacer(modifier = Modifier.height(12.dp))
+      Text(
+        text = errorMessage,
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall
+      )
+    }
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    Button(
+      onClick = { onSubmitCode(inputCode) },
+      enabled = inputCode.isNotBlank() && !isLoading,
+      shape = RoundedCornerShape(14.dp),
+      colors = ButtonDefaults.buttonColors(containerColor = AppleSystemBlue),
+      modifier = Modifier.fillMaxWidth().height(52.dp).testTag("onboarding_submit_code_button")
+    ) {
+      if (isLoading) {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+      } else {
+        Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Conectarme al espacio", fontWeight = FontWeight.Bold)
+      }
+    }
   }
 }
 

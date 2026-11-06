@@ -35,6 +35,7 @@ import com.example.data.repository.PartnerSupportRepository
 import com.example.data.repository.SpaceObservationResult
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.util.UUID
 
 data class AppUiState(
   val currentUser: FirebaseUser? = null,
@@ -76,6 +78,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _uiState = MutableStateFlow(AppUiState())
   val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
+  // Track session identity strictly to protect against cross-session race conditions
+  private var currentSessionId: String = UUID.randomUUID().toString()
   private var activeObservedUserId: String? = null
   private var userSpaceJob: Job? = null
   private val spaceDataJobs = mutableListOf<Job>()
@@ -85,9 +89,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
       authRepo.currentUser.collectLatest { user ->
         _uiState.value = _uiState.value.copy(currentUser = user)
         if (user != null) {
+          currentSessionId = UUID.randomUUID().toString()
           activeObservedUserId = user.uid
-          observeUserData(user.uid)
+          observeUserData(user.uid, currentSessionId)
         } else {
+          currentSessionId = UUID.randomUUID().toString()
           activeObservedUserId = null
           cancelAllListeners()
           if (!_uiState.value.isGuestMode) {
@@ -121,14 +127,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     _uiState.value = _uiState.value.copy(errorMessage = null, successMessage = null)
   }
 
-  private fun observeUserData(userId: String) {
+  private fun isSessionValid(sessionId: String, expectedUserId: String? = null): Boolean {
+    if (currentSessionId != sessionId) return false
+    if (expectedUserId != null && activeObservedUserId != expectedUserId) return false
+    return true
+  }
+
+  private fun observeUserData(userId: String, sessionId: String) {
     userSpaceJob?.cancel()
     _uiState.value = _uiState.value.copy(isResolvingSpace = true)
 
     userSpaceJob = viewModelScope.launch {
       spaceRepo.observeUserSpaceDetailed(userId).collectLatest { result ->
-        if (activeObservedUserId != userId) {
-          // Discard late emissions from a previous session
+        if (!isSessionValid(sessionId, userId)) {
           return@collectLatest
         }
 
@@ -150,10 +161,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
               isResolvingSpace = false,
               pairingRevoked = false
             )
-            observeSpaceData(space.id, resolvedRole, space.sharingPermissions, userId)
+            observeSpaceData(space.id, resolvedRole, space.sharingPermissions, userId, sessionId)
           }
           is SpaceObservationResult.PairingLost -> {
-            // REVOCATION OR UNPAIRING: Immediate purge of sensitive cached data
             cancelSpaceDataListeners()
             _uiState.value = _uiState.value.copy(
               space = null,
@@ -194,14 +204,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     spaceId: String,
     role: UserRole,
     permissions: SharingPermissions,
-    sessionUserId: String
+    sessionUserId: String,
+    sessionId: String
   ) {
     cancelSpaceDataListeners()
     val isElla = role == UserRole.PRIMARY_ELLA
 
     val cyclesJob = viewModelScope.launch {
       cycleRepo.observeCycles(spaceId).collectLatest { cycles ->
-        if (activeObservedUserId == sessionUserId) {
+        if (isSessionValid(sessionId, sessionUserId)) {
           _uiState.value = _uiState.value.copy(pastCycles = cycles)
           refreshCycleCalculations()
         }
@@ -216,7 +227,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         shareSymptoms = permissions.shareSymptoms,
         shareMood = permissions.shareMood
       ).collectLatest { symptoms ->
-        if (activeObservedUserId == sessionUserId) {
+        if (isSessionValid(sessionId, sessionUserId)) {
           val todayStr = LocalDate.now().toString()
           val todayEntry = symptoms.firstOrNull { it.date == todayStr }
           _uiState.value = _uiState.value.copy(todaySymptom = todayEntry)
@@ -231,7 +242,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         isElla = isElla,
         shareIntimacyAllowed = permissions.shareIntimacy
       ).collectLatest { logs ->
-        if (activeObservedUserId == sessionUserId) {
+        if (isSessionValid(sessionId, sessionUserId)) {
           _uiState.value = _uiState.value.copy(intimacyLogs = logs)
         }
       }
@@ -240,7 +251,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val observationsJob = viewModelScope.launch {
       partnerRepo.observeObservations(spaceId).collectLatest { observations ->
-        if (activeObservedUserId == sessionUserId) {
+        if (isSessionValid(sessionId, sessionUserId)) {
           _uiState.value = _uiState.value.copy(partnerObservations = observations)
           val pendingSpotting = observations.firstOrNull {
             it.unloggedSpottingReported && it.spottingSuggestionStatus == SpottingSuggestionStatus.PENDING.name
@@ -253,7 +264,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val checkInsJob = viewModelScope.launch {
       partnerRepo.observeLatestCheckIn(spaceId).collectLatest { checkIn ->
-        if (activeObservedUserId == sessionUserId) {
+        if (isSessionValid(sessionId, sessionUserId)) {
           _uiState.value = _uiState.value.copy(latestCheckIn = checkIn)
         }
       }
@@ -298,6 +309,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   fun createOwnerSpace() {
     val user = _uiState.value.currentUser ?: return
+    val sessionId = currentSessionId
     viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       try {
@@ -308,20 +320,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         val periodStart = LocalDate.now().minusDays(12).toString()
         cycleRepo.addCycleEntry(spaceId, periodStart, 5)
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          successMessage = "¡Espacio personal creado con éxito!"
-        )
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            successMessage = "¡Espacio personal creado con éxito!"
+          )
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          errorMessage = e.localizedMessage ?: "Error al crear espacio"
-        )
+        if (e is CancellationException) throw e
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            errorMessage = e.localizedMessage ?: "Error al crear espacio"
+          )
+        }
       }
     }
   }
 
   fun enterGuestDemoMode() {
+    currentSessionId = UUID.randomUUID().toString()
     val today = LocalDate.now()
     val periodStart = today.minusDays(13)
     val demoCycles = listOf(
@@ -441,12 +459,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun exitGuestMode() {
+    currentSessionId = UUID.randomUUID().toString()
     activeObservedUserId = null
     cancelAllListeners()
     _uiState.value = AppUiState()
   }
 
   fun signOut(scope: kotlinx.coroutines.CoroutineScope) {
+    currentSessionId = UUID.randomUUID().toString()
     activeObservedUserId = null
     cancelAllListeners()
     _uiState.value = AppUiState()
@@ -463,20 +483,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     val space = _uiState.value.space ?: return
     val user = _uiState.value.currentUser ?: return
+    val sessionId = currentSessionId
+
     viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       try {
         val code = spaceRepo.generateInviteCode(space.id, user.uid)
-        _uiState.value = _uiState.value.copy(
-          activePairingCode = code,
-          isLoading = false,
-          successMessage = "¡Código de vinculación generado con éxito!"
-        )
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(
+            activePairingCode = code,
+            isLoading = false,
+            successMessage = "¡Código de vinculación generado con éxito!"
+          )
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          errorMessage = e.localizedMessage ?: "Error al generar código"
-        )
+        if (e is CancellationException) throw e
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            errorMessage = e.localizedMessage ?: "Error al generar código"
+          )
+        }
       }
     }
   }
@@ -489,24 +516,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
       return
     }
     val user = _uiState.value.currentUser ?: return
+    val sessionId = currentSessionId
+
     viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       val result = spaceRepo.joinWithCode(code, user.uid)
-      result.fold(
-        onSuccess = { spaceId ->
-          observeUserData(user.uid)
-          _uiState.value = _uiState.value.copy(
-            isLoading = false,
-            successMessage = "¡Vinculado exitosamente con tu pareja!"
-          )
-        },
-        onFailure = { error ->
-          _uiState.value = _uiState.value.copy(
-            isLoading = false,
-            errorMessage = error.localizedMessage ?: "Código inválido, expirado o ya consumido"
-          )
-        }
-      )
+      if (isSessionValid(sessionId, user.uid)) {
+        result.fold(
+          onSuccess = { spaceId ->
+            observeUserData(user.uid, sessionId)
+            _uiState.value = _uiState.value.copy(
+              isLoading = false,
+              successMessage = "¡Vinculado exitosamente con tu pareja!"
+            )
+          },
+          onFailure = { error ->
+            _uiState.value = _uiState.value.copy(
+              isLoading = false,
+              errorMessage = error.localizedMessage ?: "Código inválido, expirado o ya consumido"
+            )
+          }
+        )
+      }
     }
   }
 
@@ -524,20 +555,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val space = _uiState.value.space ?: return
+    val sessionId = currentSessionId
+    val user = _uiState.value.currentUser
+
     viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       try {
         spaceRepo.revokePairing(space.id)
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          activePairingCode = null,
-          successMessage = "Has desvinculado a tu pareja. El acceso ha sido revocado en el servidor."
-        )
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            activePairingCode = null,
+            successMessage = "Has desvinculado a tu pareja. El acceso ha sido revocado en el servidor."
+          )
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          errorMessage = e.localizedMessage ?: "Error al desvincular pareja"
-        )
+        if (e is CancellationException) throw e
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            errorMessage = e.localizedMessage ?: "Error al desvincular pareja"
+          )
+        }
       }
     }
   }
@@ -557,7 +596,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     acne: Boolean = false,
     publicNote: String?,
     privateNote: String?,
-    isPrivate: Boolean
+    isPrivate: Boolean,
+    onComplete: (Boolean, String?) -> Unit
   ) {
     val dateStr = _uiState.value.selectedDate.toString()
     val symptom = DailySymptom(
@@ -587,22 +627,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         successMessage = "Síntomas guardados correctamente"
       )
       refreshCycleCalculations()
+      onComplete(true, null)
       return
     }
 
-    val space = _uiState.value.space ?: return
+    val space = _uiState.value.space
+    if (space == null) {
+      onComplete(false, "No hay un espacio activo para guardar")
+      return
+    }
+
+    val sessionId = currentSessionId
+    val user = _uiState.value.currentUser
+
     viewModelScope.launch {
       try {
         cycleRepo.saveDailySymptom(symptom)
-        _uiState.value = _uiState.value.copy(
-          todaySymptom = symptom,
-          successMessage = "Síntomas guardados correctamente"
-        )
-        refreshCycleCalculations()
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(
+            todaySymptom = symptom,
+            successMessage = "Síntomas guardados correctamente"
+          )
+          refreshCycleCalculations()
+          onComplete(true, null)
+        } else {
+          onComplete(false, "Sesión no válida")
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          errorMessage = e.localizedMessage ?: "Error al guardar síntomas"
-        )
+        if (e is CancellationException) throw e
+        val err = e.localizedMessage ?: "Error al guardar síntomas"
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(errorMessage = err)
+        }
+        onComplete(false, err)
       }
     }
   }
@@ -613,7 +670,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     hadOrgasm: Boolean = false,
     postContactEffect: PostContactEffect = PostContactEffect.NONE,
     notes: String?,
-    isPrivate: Boolean
+    isPrivate: Boolean,
+    onComplete: (Boolean, String?) -> Unit
   ) {
     val dateStr = _uiState.value.selectedDate.toString()
     val log = IntimacyLog(
@@ -634,11 +692,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         intimacyLogs = listOf(log) + _uiState.value.intimacyLogs,
         successMessage = "Registro íntimo guardado"
       )
+      onComplete(true, null)
       return
     }
 
-    val space = _uiState.value.space ?: return
-    val user = _uiState.value.currentUser ?: return
+    val space = _uiState.value.space
+    val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete(false, "No hay usuario o espacio activo")
+      return
+    }
+
+    val sessionId = currentSessionId
+
     viewModelScope.launch {
       try {
         intimacyRepo.saveIntimacyLog(
@@ -652,9 +718,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
           isPrivate = isPrivate,
           userId = user.uid
         )
-        _uiState.value = _uiState.value.copy(successMessage = "Registro íntimo guardado")
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(successMessage = "Registro íntimo guardado")
+          onComplete(true, null)
+        } else {
+          onComplete(false, "Sesión no válida")
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al guardar intimidad")
+        if (e is CancellationException) throw e
+        val err = e.localizedMessage ?: "Error al guardar intimidad"
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(errorMessage = err)
+        }
+        onComplete(false, err)
       }
     }
   }
@@ -691,6 +767,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val space = _uiState.value.space ?: return
     val user = _uiState.value.currentUser ?: return
+    val sessionId = currentSessionId
+
     viewModelScope.launch {
       try {
         partnerRepo.logObservation(
@@ -703,9 +781,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
           sweetMessage = sweetMessage,
           userId = user.uid
         )
-        _uiState.value = _uiState.value.copy(successMessage = "¡Observación y cuidado registrados!")
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(successMessage = "¡Observación y cuidado registrados!")
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al registrar observación")
+        if (e is CancellationException) throw e
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al registrar observación")
+        }
       }
     }
   }
@@ -730,6 +813,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val space = _uiState.value.space ?: return
     val user = _uiState.value.currentUser ?: return
+    val sessionId = currentSessionId
+
     viewModelScope.launch {
       try {
         partnerRepo.sendCheckIn(
@@ -738,9 +823,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
           promptType = promptType,
           customNote = customNote
         )
-        _uiState.value = _uiState.value.copy(successMessage = "¡Check-in afectivo enviado a tu pareja!")
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(successMessage = "¡Check-in afectivo enviado a tu pareja!")
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al enviar check-in")
+        if (e is CancellationException) throw e
+        if (isSessionValid(sessionId, user.uid)) {
+          _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al enviar check-in")
+        }
       }
     }
   }
@@ -764,6 +854,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val space = _uiState.value.space ?: return
     val checkIn = _uiState.value.latestCheckIn ?: return
+    val sessionId = currentSessionId
+    val user = _uiState.value.currentUser
+
     viewModelScope.launch {
       try {
         partnerRepo.answerCheckIn(
@@ -772,9 +865,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
           responseOption = responseOption,
           responseNote = responseNote
         )
-        _uiState.value = _uiState.value.copy(successMessage = "¡Respuesta enviada a tu pareja!")
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(successMessage = "¡Respuesta enviada a tu pareja!")
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al responder check-in")
+        if (e is CancellationException) throw e
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al responder check-in")
+        }
       }
     }
   }
@@ -791,6 +889,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val space = _uiState.value.space ?: return
     val user = _uiState.value.currentUser ?: return
     val suggestion = _uiState.value.activeSpottingSuggestion ?: return
+    val sessionId = currentSessionId
+
     viewModelScope.launch {
       val result = cycleRepo.acceptSpottingSuggestion(
         spaceId = space.id,
@@ -798,17 +898,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         date = suggestion.date,
         userId = user.uid
       )
-      result.fold(
-        onSuccess = {
-          _uiState.value = _uiState.value.copy(
-            activeSpottingSuggestion = null,
-            successMessage = "Manchado agregado a tu registro diario (conservando tu privacidad)"
-          )
-        },
-        onFailure = { error ->
-          _uiState.value = _uiState.value.copy(errorMessage = error.localizedMessage ?: "Error al aceptar sugerencia")
-        }
-      )
+      if (isSessionValid(sessionId, user.uid)) {
+        result.fold(
+          onSuccess = {
+            _uiState.value = _uiState.value.copy(
+              activeSpottingSuggestion = null,
+              successMessage = "Manchado agregado a tu registro diario (conservando tu privacidad)"
+            )
+          },
+          onFailure = { error ->
+            _uiState.value = _uiState.value.copy(errorMessage = error.localizedMessage ?: "Error al aceptar sugerencia")
+          }
+        )
+      }
     }
   }
 
@@ -820,12 +922,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val space = _uiState.value.space ?: return
     val suggestion = _uiState.value.activeSpottingSuggestion ?: return
+    val sessionId = currentSessionId
+    val user = _uiState.value.currentUser
+
     viewModelScope.launch {
       try {
         cycleRepo.dismissSpottingSuggestion(space.id, suggestion.id)
-        _uiState.value = _uiState.value.copy(activeSpottingSuggestion = null)
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(activeSpottingSuggestion = null)
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al descartar sugerencia")
+        if (e is CancellationException) throw e
+        if (isSessionValid(sessionId, user?.uid)) {
+          _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al descartar sugerencia")
+        }
       }
     }
   }
@@ -843,15 +953,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val space = _uiState.value.space ?: return Result.failure(IllegalStateException("No hay espacio activo"))
+    val sessionId = currentSessionId
+    val user = _uiState.value.currentUser
+
     return try {
       spaceRepo.updatePermissions(space.id, permissions)
-      _uiState.value = _uiState.value.copy(
-        space = space.copy(sharingPermissions = permissions),
-        successMessage = "Permisos de privacidad actualizados en el servidor"
-      )
+      if (isSessionValid(sessionId, user?.uid)) {
+        _uiState.value = _uiState.value.copy(
+          space = space.copy(sharingPermissions = permissions),
+          successMessage = "Permisos de privacidad actualizados en el servidor"
+        )
+      }
       Result.success(Unit)
     } catch (e: Exception) {
-      _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al actualizar permisos")
+      if (e is CancellationException) throw e
+      if (isSessionValid(sessionId, user?.uid)) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al actualizar permisos")
+      }
       Result.failure(e)
     }
   }

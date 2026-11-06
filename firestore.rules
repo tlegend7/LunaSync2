@@ -30,7 +30,7 @@ service cloud.firestore {
     function isValidCoupleSpace(data) {
       return data.keys().hasOnly(['ownerId', 'partnerId', 'status', 'averageCycleLength', 'averagePeriodLength', 'sharingPermissions', 'activeInviteVersion', 'claimedInviteCode', 'createdAt', 'updatedAt']) &&
              data.ownerId is string &&
-             (data.partnerId == null || data.partnerId is string) &&
+             (data.partnerId == null || (data.partnerId is string && data.partnerId != data.ownerId)) &&
              data.status in ['UNPAIRED', 'PENDING', 'PAIRED', 'REVOKED'] &&
              data.averageCycleLength is int && data.averageCycleLength >= 20 && data.averageCycleLength <= 45 &&
              data.averagePeriodLength is int && data.averagePeriodLength >= 1 && data.averagePeriodLength <= 10 &&
@@ -127,34 +127,35 @@ service cloud.firestore {
                     isValidCoupleSpace(request.resource.data);
 
       // Actualización:
-      // Caso 1: La dueña puede actualizar permisos, parámetros de ciclo o revocar/desvincular a su pareja
-      // Caso 2: Canje atómico verificado mediante pairing_invites válido, vigente, no consumido y correspondiente a este espacio
+      // Caso 1: La dueña legítima actualiza configuración, permisos o desvincula pareja
+      // Caso 2: Canje atómico verificado. REQUIERE que en la misma transacción la invitación quede CONSUMED (verificado con getAfter)
       allow update: if isAuthenticated() && isValidCoupleSpace(request.resource.data) && (
-        // Dueña legítima
+        // Caso 1: Dueña legítima actualiza parámetros o revoca pareja (no puede asignar unilateralmente pareja nueva)
         (resource.data.ownerId == request.auth.uid &&
-         request.resource.data.ownerId == resource.data.ownerId) ||
-        // Canje verificado de invitación por parte de la pareja
+         request.resource.data.ownerId == resource.data.ownerId &&
+         (request.resource.data.partnerId == resource.data.partnerId ||
+          (request.resource.data.partnerId == null && request.resource.data.status in ['UNPAIRED', 'REVOKED', 'PENDING']))) ||
+        // Caso 2: Canje atómico por la pareja
         (
-          // No debe ser ya pareja ni ser la propia dueña
           request.auth.uid != resource.data.ownerId &&
           request.resource.data.ownerId == resource.data.ownerId &&
-          // Espacio debe estar desvinculado actualmente (no sustitución silenciosa)
           resource.data.partnerId == null &&
           resource.data.status != 'PAIRED' &&
           request.resource.data.partnerId == request.auth.uid &&
           request.resource.data.status == 'PAIRED' &&
-          // Preservar inmutabilidad de configuración personal, permisos y parámetros de ciclo
           request.resource.data.sharingPermissions == resource.data.sharingPermissions &&
           request.resource.data.averageCycleLength == resource.data.averageCycleLength &&
           request.resource.data.averagePeriodLength == resource.data.averagePeriodLength &&
-          // Verificación de invitación válida y vigente correspondiente a este espacio
+          ('claimedInviteCode' in request.resource.data) &&
           request.resource.data.claimedInviteCode is string &&
           exists(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)) &&
           get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.spaceId == spaceId &&
           get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.status == 'ACTIVE' &&
           get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.expiresAt > request.time &&
-          // Invalidador de versión: si el espacio tiene activeInviteVersion, la invitación debe coincidir
-          (!('activeInviteVersion' in resource.data) || get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.version == resource.data.activeInviteVersion)
+          (!('activeInviteVersion' in resource.data) || get(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.version == resource.data.activeInviteVersion) &&
+          // REGLA ATÓMICA OBLIGATORIA (getAfter): La invitación DEBE quedar CONSUMED por este usuario al final de la transacción
+          getAfter(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.status == 'CONSUMED' &&
+          getAfter(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.consumedBy == request.auth.uid
         )
       );
 
@@ -209,7 +210,7 @@ service cloud.firestore {
         allow delete: if isSpaceOwner(spaceId);
       }
 
-      // Subcolección legacy: protegiendo registros antiguos para la dueña exclusivamente
+      // Subcolección legacy: protegida exclusivamente para la dueña
       match /symptoms/{symptomId} {
         allow read: if isSpaceOwner(spaceId);
         allow write: if isSpaceOwner(spaceId);
@@ -240,9 +241,7 @@ service cloud.firestore {
                          request.resource.data.spottingSuggestionStatus == 'PENDING' &&
                          isValidPartnerObservation(request.resource.data);
 
-        // Actualización estricta por rol:
-        // Pareja: Solo puede editar careActionTaken y sweetMessage sin cambiar status, datos de manchado ni autor
-        // Propietaria: Solo puede actualizar spottingSuggestionStatus a ACCEPTED o DISMISSED sin alterar autor ni contenido
+        // Actualización estricta por rol
         allow update: if isValidPartnerObservation(request.resource.data) && (
           (
             isCurrentPartner(spaceId) &&
@@ -290,7 +289,6 @@ service cloud.firestore {
                          isValidCheckIn(request.resource.data);
 
         // Actualización estricta: Solo la dueña puede responder (PENDING -> ANSWERED)
-        // senderUid, promptType, customNote, spaceId y createdAt son inmutables
         allow update: if isSpaceOwner(spaceId) &&
                          resource.data.senderUid != request.auth.uid &&
                          request.resource.data.spaceId == resource.data.spaceId &&
@@ -308,9 +306,7 @@ service cloud.firestore {
     }
 
     // Pairing Invites Lookup
-    // Las invitaciones individuales pueden consultarse por ID exacto si se conoce el código, pero NO listarse arbitrariamente por terceros
     match /pairing_invites/{inviteCode} {
-      // Lectura: La creadora puede listar o leer sus invitaciones; cualquier usuario autenticado puede leer una invitación concreta si conoce el código
       allow get: if isAuthenticated();
       allow list: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
 
@@ -325,10 +321,11 @@ service cloud.firestore {
 
       // Actualización:
       // Dueña: puede marcar REVOKED o renovar
-      // Canjeador: puede marcar CONSUMED si estaba ACTIVE y no expirado, sin alterar spaceId, createdBy ni expiresAt
+      // Canjeador: puede marcar CONSUMED si y solo si en la misma operación atómica el espacio queda PAIRED con este usuario (getAfter)
       allow update: if isAuthenticated() && (
-        (resource.data.createdBy == request.auth.uid) ||
+        (resource.data.createdBy == request.auth.uid && request.resource.data.status in ['REVOKED', 'ACTIVE']) ||
         (
+          resource.data.createdBy != request.auth.uid &&
           resource.data.status == 'ACTIVE' &&
           resource.data.expiresAt > request.time &&
           request.resource.data.status == 'CONSUMED' &&
@@ -336,7 +333,11 @@ service cloud.firestore {
           request.resource.data.createdBy == resource.data.createdBy &&
           request.resource.data.expiresAt == resource.data.expiresAt &&
           request.resource.data.keys().hasOnly(['spaceId', 'createdBy', 'status', 'expiresAt', 'version', 'createdAt', 'consumedBy', 'consumedAt']) &&
-          request.resource.data.consumedBy == request.auth.uid
+          request.resource.data.consumedBy == request.auth.uid &&
+          // REGLA ATÓMICA OBLIGATORIA (getAfter): El espacio DEBE quedar PAIRED con request.auth.uid en la misma transacción
+          getAfter(/databases/$(database)/documents/couple_spaces/$(resource.data.spaceId)).data.status == 'PAIRED' &&
+          getAfter(/databases/$(database)/documents/couple_spaces/$(resource.data.spaceId)).data.partnerId == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/couple_spaces/$(resource.data.spaceId)).data.claimedInviteCode == inviteCode
         )
       );
 

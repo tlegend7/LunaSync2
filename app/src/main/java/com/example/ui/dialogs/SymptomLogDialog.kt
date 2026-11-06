@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -26,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -47,7 +50,6 @@ import com.example.data.model.CervicalMucus
 import com.example.data.model.DailySymptom
 import com.example.data.model.FlowLevel
 import com.example.data.model.Mood
-import com.example.ui.theme.AppleHairlineBorder
 import com.example.ui.theme.BrandTerracottaRose
 import com.example.ui.theme.PhaseFertileSage
 import com.example.ui.theme.PhaseFollicularPeach
@@ -75,7 +77,8 @@ fun SymptomLogDialog(
     acne: Boolean,
     publicNote: String?,
     privateNote: String?,
-    isPrivate: Boolean
+    isPrivate: Boolean,
+    onComplete: (Boolean, String?) -> Unit
   ) -> Unit
 ) {
   var flowLevel by remember {
@@ -122,6 +125,7 @@ fun SymptomLogDialog(
   var privateNote by remember { mutableStateOf(initialSymptom?.privateNote ?: "") }
   var isPrivate by remember { mutableStateOf(initialSymptom?.isPrivate ?: false) }
   var isSubmitting by remember { mutableStateOf(false) }
+  var dialogError by remember { mutableStateOf<String?>(null) }
 
   AlertDialog(
     onDismissRequest = { if (!isSubmitting) onDismiss() },
@@ -141,6 +145,21 @@ fun SymptomLogDialog(
           .verticalScroll(rememberScrollState())
           .padding(vertical = 4.dp)
       ) {
+        if (dialogError != null) {
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.errorContainer,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+          ) {
+            Text(
+              text = dialogError!!,
+              color = MaterialTheme.colorScheme.onErrorContainer,
+              style = MaterialTheme.typography.bodySmall,
+              modifier = Modifier.padding(10.dp)
+            )
+          }
+        }
+
         // 1. Flow Level
         Text(
           text = "Flujo / Sangrado:",
@@ -453,6 +472,7 @@ fun SymptomLogDialog(
         onClick = {
           if (!isSubmitting) {
             isSubmitting = true
+            dialogError = null
             onSave(
               flowLevel,
               painFloat.roundToInt(),
@@ -469,8 +489,14 @@ fun SymptomLogDialog(
               publicNote.ifBlank { null },
               privateNote.ifBlank { null },
               isPrivate
-            )
-            onDismiss()
+            ) { success, err ->
+              isSubmitting = false
+              if (success) {
+                onDismiss()
+              } else {
+                dialogError = err ?: "Error al guardar síntomas. Intenta nuevamente."
+              }
+            }
           }
         },
         enabled = !isSubmitting,
@@ -478,7 +504,11 @@ fun SymptomLogDialog(
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier.testTag("save_symptom_button")
       ) {
-        Text("Guardar Registro", fontWeight = FontWeight.SemiBold)
+        if (isSubmitting) {
+          CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+        } else {
+          Text("Guardar Registro", fontWeight = FontWeight.SemiBold)
+        }
       }
     },
     dismissButton = {

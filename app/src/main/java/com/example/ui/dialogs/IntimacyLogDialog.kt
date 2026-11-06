@@ -1,7 +1,6 @@
 package com.example.ui.dialogs
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +26,7 @@ import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -68,7 +68,8 @@ fun IntimacyLogDialog(
     hadOrgasm: Boolean,
     postContactEffect: PostContactEffect,
     notes: String?,
-    isPrivate: Boolean
+    isPrivate: Boolean,
+    onComplete: (Boolean, String?) -> Unit
   ) -> Unit
 ) {
   var encounterType by remember { mutableStateOf(EncounterType.PROTECTED) }
@@ -79,6 +80,7 @@ fun IntimacyLogDialog(
   var isPrivate by remember { mutableStateOf(false) }
   var showPhysiologyExplanation by remember { mutableStateOf(false) }
   var isSubmitting by remember { mutableStateOf(false) }
+  var dialogError by remember { mutableStateOf<String?>(null) }
 
   AlertDialog(
     onDismissRequest = { if (!isSubmitting) onDismiss() },
@@ -102,6 +104,21 @@ fun IntimacyLogDialog(
           .verticalScroll(rememberScrollState())
           .padding(vertical = 4.dp)
       ) {
+        if (dialogError != null) {
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.errorContainer,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+          ) {
+            Text(
+              text = dialogError!!,
+              color = MaterialTheme.colorScheme.onErrorContainer,
+              style = MaterialTheme.typography.bodySmall,
+              modifier = Modifier.padding(10.dp)
+            )
+          }
+        }
+
         // 1. Encounter Type Selection
         Text(
           text = "Tipo de contacto o encuentro:",
@@ -167,7 +184,6 @@ fun IntimacyLogDialog(
           modifier = Modifier.fillMaxWidth().border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(16.dp))
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
-            // Lubricant toggle
             Row(
               verticalAlignment = Alignment.CenterVertically,
               modifier = Modifier.fillMaxWidth()
@@ -188,7 +204,6 @@ fun IntimacyLogDialog(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Orgasm toggle
             Row(
               verticalAlignment = Alignment.CenterVertically,
               modifier = Modifier.fillMaxWidth()
@@ -339,6 +354,7 @@ fun IntimacyLogDialog(
         onClick = {
           if (!isSubmitting) {
             isSubmitting = true
+            dialogError = null
             onSave(
               encounterType,
               usedLubricant,
@@ -346,8 +362,14 @@ fun IntimacyLogDialog(
               postContactEffect,
               notes.ifBlank { null },
               isPrivate
-            )
-            onDismiss()
+            ) { success, err ->
+              isSubmitting = false
+              if (success) {
+                onDismiss()
+              } else {
+                dialogError = err ?: "Error al guardar intimidad. Intenta nuevamente."
+              }
+            }
           }
         },
         enabled = !isSubmitting,
@@ -355,7 +377,11 @@ fun IntimacyLogDialog(
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier.testTag("save_intimacy_button")
       ) {
-        Text("Guardar Encuentro", fontWeight = FontWeight.SemiBold)
+        if (isSubmitting) {
+          CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+        } else {
+          Text("Guardar Encuentro", fontWeight = FontWeight.SemiBold)
+        }
       }
     },
     dismissButton = {
