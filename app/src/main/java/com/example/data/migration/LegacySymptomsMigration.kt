@@ -6,8 +6,23 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Migration outcome reporting structured counters:
+ * - totalLegacyRead: Total number of examined legacy documents.
+ * - categoriesCreated: Total new subdocuments created in target collections (physical, mood, private_notes).
+ * - categoriesSkippedExisting: Total categories omitted because the target document already existed.
+ * - categoriesSimulated: Total categories that would be created during a dry-run simulation.
+ * - physicalMigrated, physicalSkipped: Counters for physical_symptoms.
+ * - moodMigrated, moodSkipped: Counters for mood_records.
+ * - notesMigrated, notesSkipped: Counters for private_notes.
+ * - errorsCount: Total failed transactions or unhandled exceptions.
+ * - errorDetails: Anonymized list of error messages (no private/intimate notes included).
+ */
 data class MigrationResult(
   val totalLegacyRead: Int,
+  val categoriesCreated: Int,
+  val categoriesSkippedExisting: Int,
+  val categoriesSimulated: Int,
   val physicalMigrated: Int,
   val physicalSkipped: Int,
   val moodMigrated: Int,
@@ -16,6 +31,15 @@ data class MigrationResult(
   val notesSkipped: Int,
   val errorsCount: Int,
   val errorDetails: List<String> = emptyList()
+)
+
+private data class CategoryOutcome(
+  val physicalCreated: Boolean = false,
+  val physicalSkipped: Boolean = false,
+  val moodCreated: Boolean = false,
+  val moodSkipped: Boolean = false,
+  val noteCreated: Boolean = false,
+  val noteSkipped: Boolean = false
 )
 
 /**
@@ -29,9 +53,10 @@ data class MigrationResult(
  * 1. Category-independent evaluation: existing physical symptoms do NOT block missing mood or private notes.
  * 2. Strict non-overwrite: existing target documents are NEVER replaced or truncated.
  * 3. Atomic per-record write inside transactions or precondition checks.
- * 4. Privacy preservation: private notes are kept strictly inside `/private_notes`.
- * 5. Dry-run simulation mode delivers exact categorization counters without mutating database.
- * 6. Anonymized error logging without printing intimate notes.
+ * 4. Counters are NEVER modified inside the transactional lambda; outcomes are returned and accumulated ONLY after commit confirmation.
+ * 5. Privacy preservation: private notes are kept strictly inside `/private_notes`.
+ * 6. Dry-run simulation mode delivers exact categorization counters without mutating database.
+ * 7. Anonymized error logging without printing intimate notes.
  */
 class LegacySymptomsMigration(private val db: FirebaseFirestore) {
 
@@ -75,7 +100,7 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
         val noteRef = spaceDoc.collection("private_notes").document(date)
 
         if (dryRun) {
-          // Check existence individually per category
+          // Check existence individually per category without mutating any document
           val physExists = physRef.get().await().exists()
           if (physExists) physicalSkipped++ else physicalMigrated++
 
@@ -87,11 +112,19 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
             if (noteExists) notesSkipped++ else notesMigrated++
           }
         } else {
-          // Real transaction ensuring no concurrent overwrite and category independence
-          db.runTransaction { transaction ->
+          // Real transaction: DO NOT mutate outer counters inside lambda.
+          // Lambda returns CategoryOutcome which is accumulated ONLY after await() succeeds.
+          val outcome = db.runTransaction { transaction ->
             val physSnap = transaction.get(physRef)
             val moodSnap = transaction.get(moodRef)
             val noteSnap = transaction.get(noteRef)
+
+            var physCreated = false
+            var physSkipped = false
+            var moodCreated = false
+            var moodSkipped = false
+            var noteCreated = false
+            var noteSkipped = false
 
             // Category 1: Physical symptoms
             if (!physSnap.exists()) {
@@ -115,9 +148,9 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
                 "updatedAt" to FieldValue.serverTimestamp()
               )
               transaction.set(physRef, physPayload)
-              physicalMigrated++
+              physCreated = true
             } else {
-              physicalSkipped++
+              physSkipped = true
             }
 
             // Category 2: Mood and energy
@@ -133,9 +166,9 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
                 "updatedAt" to FieldValue.serverTimestamp()
               )
               transaction.set(moodRef, moodPayload)
-              moodMigrated++
+              moodCreated = true
             } else {
-              moodSkipped++
+              moodSkipped = true
             }
 
             // Category 3: Private note (strictly isolated)
@@ -150,12 +183,29 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
                   "updatedAt" to FieldValue.serverTimestamp()
                 )
                 transaction.set(noteRef, notePayload)
-                notesMigrated++
+                noteCreated = true
               } else {
-                notesSkipped++
+                noteSkipped = true
               }
             }
+
+            CategoryOutcome(
+              physicalCreated = physCreated,
+              physicalSkipped = physSkipped,
+              moodCreated = moodCreated,
+              moodSkipped = moodSkipped,
+              noteCreated = noteCreated,
+              noteSkipped = noteSkipped
+            )
           }.await()
+
+          // Transaction confirmed by server: accumulate verified outcome
+          if (outcome.physicalCreated) physicalMigrated++
+          if (outcome.physicalSkipped) physicalSkipped++
+          if (outcome.moodCreated) moodMigrated++
+          if (outcome.moodSkipped) moodSkipped++
+          if (outcome.noteCreated) notesMigrated++
+          if (outcome.noteSkipped) notesSkipped++
         }
       } catch (e: Exception) {
         errorsCount++
@@ -163,8 +213,15 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
       }
     }
 
+    val totalCreated = if (dryRun) 0 else (physicalMigrated + moodMigrated + notesMigrated)
+    val totalSkipped = physicalSkipped + moodSkipped + notesSkipped
+    val totalSimulated = if (dryRun) (physicalMigrated + moodMigrated + notesMigrated) else 0
+
     return MigrationResult(
       totalLegacyRead = legacyDocs.size,
+      categoriesCreated = totalCreated,
+      categoriesSkippedExisting = totalSkipped,
+      categoriesSimulated = totalSimulated,
       physicalMigrated = physicalMigrated,
       physicalSkipped = physicalSkipped,
       moodMigrated = moodMigrated,

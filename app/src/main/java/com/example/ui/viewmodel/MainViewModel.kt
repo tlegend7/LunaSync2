@@ -79,8 +79,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
   // Track session identity strictly to protect against cross-session race conditions
-  private var currentSessionId: String = UUID.randomUUID().toString()
-  private var activeObservedUserId: String? = null
+  internal var currentSessionId: String = UUID.randomUUID().toString()
+  internal var activeObservedUserId: String? = null
   private var userSpaceJob: Job? = null
   private val spaceDataJobs = mutableListOf<Job>()
 
@@ -127,7 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     _uiState.value = _uiState.value.copy(errorMessage = null, successMessage = null)
   }
 
-  private fun isSessionValid(sessionId: String, expectedUserId: String? = null): Boolean {
+  internal fun isSessionValid(sessionId: String, expectedUserId: String? = null): Boolean {
     if (currentSessionId != sessionId) return false
     if (expectedUserId != null && activeObservedUserId != expectedUserId) return false
     return true

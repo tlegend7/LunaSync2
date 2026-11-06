@@ -185,6 +185,7 @@ data class PhysicalSymptomsRecord(
   val publicNote: String? = null,
   val isPrivate: Boolean = false,
   val loggedBy: String = "",
+  val migratedAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
 )
 
@@ -197,6 +198,7 @@ data class MoodRecord(
   val energyLevel: Int = 3,
   val isPrivate: Boolean = false,
   val loggedBy: String = "",
+  val migratedAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
 )
 
@@ -207,6 +209,7 @@ data class PrivateDailyNote(
   val date: String = "",
   val privateNote: String = "",
   val loggedBy: String = "",
+  val migratedAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
 )
 

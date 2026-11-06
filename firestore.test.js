@@ -702,3 +702,371 @@ test("7.F Propietaria actualiza legítimamente spottingSuggestionStatus sin alte
     })
   );
 });
+
+// 8. PRUEBAS OBLIGATORIAS: INMUTABILIDAD DE VERSIÓN, ATAQUE DE REVOCACIÓN Y MIGRACIÓN CON MIGRATED_AT
+
+test("8.1 Canje que modifica activeInviteVersion a 0: DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_v_test_0";
+  const CODE = "LUNA-VTEST0";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 2,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 2,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const partnerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  const batch = partnerDb.batch();
+  batch.update(partnerDb.collection("pairing_invites").doc(CODE), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  batch.update(partnerDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE,
+    activeInviteVersion: 0 // Intento malicioso de forzar la versión a 0
+  });
+
+  await assertFails(batch.commit());
+});
+
+test("8.2 Canje que reduce, aumenta, elimina o cambia de tipo activeInviteVersion: DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_v_types";
+  const CODE = "LUNA-VTYPES";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 3,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 3,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const partnerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+
+  // Intento A: aumentar versión a 4
+  const batchA = partnerDb.batch();
+  batchA.update(partnerDb.collection("pairing_invites").doc(CODE), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  batchA.update(partnerDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE,
+    activeInviteVersion: 4
+  });
+  await assertFails(batchA.commit());
+
+  // Intento B: cambiar de tipo a string "3"
+  const batchB = partnerDb.batch();
+  batchB.update(partnerDb.collection("pairing_invites").doc(CODE), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  batchB.update(partnerDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE,
+    activeInviteVersion: "3"
+  });
+  await assertFails(batchB.commit());
+});
+
+test("8.3 Consumo de invitación que altera version o createdAt en pairing_invites: DENEGADO", async () => {
+  const UNPAIRED_SPACE = "unpaired_inv_immut";
+  const CODE = "LUNA-INVIMM";
+
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(UNPAIRED_SPACE).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 1,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    await db.collection("pairing_invites").doc(CODE).set({
+      spaceId: UNPAIRED_SPACE,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 1,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const partnerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+  const batch = partnerDb.batch();
+  batch.update(partnerDb.collection("pairing_invites").doc(CODE), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID,
+    version: 99 // Intento de alterar la versión de la invitación
+  });
+  batch.update(partnerDb.collection("couple_spaces").doc(UNPAIRED_SPACE), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE
+  });
+
+  await assertFails(batch.commit());
+});
+
+test("8.4 Intento de reactivar una invitación ya consumida o revocada: DENEGADO", async () => {
+  const CODE_REVOKED = "LUNA-WAS-REVOKED";
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("pairing_invites").doc(CODE_REVOKED).set({
+      spaceId: SPACE_ID,
+      createdBy: ELLA_UID,
+      status: "REVOKED",
+      version: 1,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      createdAt: new Date()
+    });
+  });
+
+  const ellaDb = testEnv.authenticatedContext(ELLA_UID).firestore();
+  // La dueña no puede reactivar a ACTIVE una invitación que ya fue revocada
+  await assertFails(
+    ellaDb.collection("pairing_invites").doc(CODE_REVOKED).update({
+      status: "ACTIVE"
+    })
+  );
+});
+
+test("8.5 Secuencia completa del fallo reportado: rechazada desde el intento de modificar activeInviteVersion", async () => {
+  const SPACE_ATTACK = "space_attack_scenario";
+  const CODE_V1 = "LUNA-ATTACK-V1";
+  const CODE_V2 = "LUNA-ATTACK-V2";
+  const future = new Date(Date.now() + 24 * 3600 * 1000);
+
+  // A. Espacio sin pareja y tiene activeInviteVersion = 2
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await db.collection("couple_spaces").doc(SPACE_ATTACK).set({
+      ownerId: ELLA_UID,
+      partnerId: null,
+      status: "UNPAIRED",
+      averageCycleLength: 28,
+      averagePeriodLength: 5,
+      activeInviteVersion: 2,
+      sharingPermissions: { shareSymptoms: true, shareMood: true, shareIntimacy: false, sharePartnerNotes: true }
+    });
+    // B. Invitación antigua v1
+    await db.collection("pairing_invites").doc(CODE_V1).set({
+      spaceId: SPACE_ATTACK,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 1,
+      expiresAt: future,
+      createdAt: new Date()
+    });
+    // C. Invitación vigente v2
+    await db.collection("pairing_invites").doc(CODE_V2).set({
+      spaceId: SPACE_ATTACK,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 2,
+      expiresAt: future,
+      createdAt: new Date()
+    });
+  });
+
+  const attackerDb = testEnv.authenticatedContext(STRANGER_UID).firestore();
+
+  // D. La cuenta externa intenta canjear v2 y forzar activeInviteVersion a 0
+  const attackBatch = attackerDb.batch();
+  attackBatch.update(attackerDb.collection("pairing_invites").doc(CODE_V2), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  attackBatch.update(attackerDb.collection("couple_spaces").doc(SPACE_ATTACK), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE_V2,
+    activeInviteVersion: 0
+  });
+
+  // DEBE RECHAZARSE EL ATAQUE AQUÍ MISMO
+  await assertFails(attackBatch.commit());
+
+  // Canje legítimo de v2 sin alterar la versión: PERMITIDO
+  const legitBatch = attackerDb.batch();
+  legitBatch.update(attackerDb.collection("pairing_invites").doc(CODE_V2), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  legitBatch.update(attackerDb.collection("couple_spaces").doc(SPACE_ATTACK), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE_V2
+  });
+  await assertSucceeds(legitBatch.commit());
+
+  // E. La propietaria revoca el espacio e incrementa versión a 3
+  const ellaDb = testEnv.authenticatedContext(ELLA_UID).firestore();
+  await assertSucceeds(
+    ellaDb.collection("couple_spaces").doc(SPACE_ATTACK).update({
+      partnerId: null,
+      status: "UNPAIRED",
+      activeInviteVersion: 3
+    })
+  );
+
+  // F. La expareja intenta canjear la invitación antigua v1: DENEGADO
+  const retryV1Batch = attackerDb.batch();
+  retryV1Batch.update(attackerDb.collection("pairing_invites").doc(CODE_V1), {
+    status: "CONSUMED",
+    consumedBy: STRANGER_UID
+  });
+  retryV1Batch.update(attackerDb.collection("couple_spaces").doc(SPACE_ATTACK), {
+    partnerId: STRANGER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE_V1
+  });
+  await assertFails(retryV1Batch.commit());
+
+  // G. Propietaria genera nueva invitación v3
+  const CODE_V3 = "LUNA-ATTACK-V3";
+  await assertSucceeds(
+    ellaDb.collection("pairing_invites").doc(CODE_V3).set({
+      spaceId: SPACE_ATTACK,
+      createdBy: ELLA_UID,
+      status: "ACTIVE",
+      version: 3,
+      expiresAt: future,
+      createdAt: new Date()
+    })
+  );
+
+  // H. Nuevo canje legítimo de v3: PERMITIDO
+  const NEW_PARTNER_UID = "new_partner_real";
+  const newPartnerDb = testEnv.authenticatedContext(NEW_PARTNER_UID).firestore();
+  const legitV3Batch = newPartnerDb.batch();
+  legitV3Batch.update(newPartnerDb.collection("pairing_invites").doc(CODE_V3), {
+    status: "CONSUMED",
+    consumedBy: NEW_PARTNER_UID
+  });
+  legitV3Batch.update(newPartnerDb.collection("couple_spaces").doc(SPACE_ATTACK), {
+    partnerId: NEW_PARTNER_UID,
+    status: "PAIRED",
+    claimedInviteCode: CODE_V3
+  });
+  await assertSucceeds(legitV3Batch.commit());
+});
+
+// 9. PRUEBAS DE MIGRACIÓN: RECONOCIMIENTO DE MIGRATED_AT EN REGLAS
+
+test("9.1 Propietaria escribe documentos de migración con migratedAt: PERMITIDO", async () => {
+  const ellaDb = testEnv.authenticatedContext(ELLA_UID).firestore();
+  const DATE = "2026-09-15";
+
+  // A. physical_symptoms con migratedAt
+  await assertSucceeds(
+    ellaDb.collection("couple_spaces").doc(SPACE_ID).collection("physical_symptoms").doc(DATE).set({
+      spaceId: SPACE_ID,
+      date: DATE,
+      flowLevel: "MEDIUM",
+      painLevel: 3,
+      cramps: true,
+      headache: false,
+      backPain: false,
+      bloating: false,
+      cervicalMucus: "NONE",
+      tenderBreasts: false,
+      cravings: false,
+      acne: false,
+      publicNote: null,
+      isPrivate: true,
+      loggedBy: ELLA_UID,
+      migratedAt: new Date(),
+      updatedAt: new Date()
+    })
+  );
+
+  // B. mood_records con migratedAt
+  await assertSucceeds(
+    ellaDb.collection("couple_spaces").doc(SPACE_ID).collection("mood_records").doc(DATE).set({
+      spaceId: SPACE_ID,
+      date: DATE,
+      mood: "HAPPY",
+      energyLevel: 4,
+      isPrivate: true,
+      loggedBy: ELLA_UID,
+      migratedAt: new Date(),
+      updatedAt: new Date()
+    })
+  );
+
+  // C. private_notes con migratedAt
+  await assertSucceeds(
+    ellaDb.collection("couple_spaces").doc(SPACE_ID).collection("private_notes").doc(DATE).set({
+      spaceId: SPACE_ID,
+      date: DATE,
+      privateNote: "Nota histórica migrada con éxito",
+      loggedBy: ELLA_UID,
+      migratedAt: new Date(),
+      updatedAt: new Date()
+    })
+  );
+});
+
+test("9.2 Pareja o tercero intenta escribir registros de migración: DENEGADO", async () => {
+  const partnerDb = testEnv.authenticatedContext(PARTNER_UID).firestore();
+  const DATE = "2026-09-16";
+
+  await assertFails(
+    partnerDb.collection("couple_spaces").doc(SPACE_ID).collection("physical_symptoms").doc(DATE).set({
+      spaceId: SPACE_ID,
+      date: DATE,
+      flowLevel: "LIGHT",
+      painLevel: 1,
+      cramps: false,
+      headache: false,
+      backPain: false,
+      bloating: false,
+      cervicalMucus: "NONE",
+      tenderBreasts: false,
+      cravings: false,
+      acne: false,
+      publicNote: null,
+      isPrivate: false,
+      loggedBy: PARTNER_UID,
+      migratedAt: new Date(),
+      updatedAt: new Date()
+    })
+  );
+});
+

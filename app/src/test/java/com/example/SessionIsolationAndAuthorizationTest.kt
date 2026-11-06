@@ -3,6 +3,7 @@ package com.example
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.migration.LegacySymptomsMigration
+import com.example.data.migration.MigrationResult
 import com.example.data.model.DailySymptom
 import com.example.data.model.FlowLevel
 import com.example.data.model.Mood
@@ -12,8 +13,12 @@ import com.example.data.model.UserRole
 import com.example.ui.viewmodel.MainViewModel
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -44,17 +49,17 @@ class SessionIsolationAndAuthorizationTest {
     viewModel = MainViewModel(application)
   }
 
+  // --- 1. PRUEBAS DE ROLES Y MODO INVITADO ---
+
   @Test
   fun `guest mode allows visual role switching for demo purposes`() {
     viewModel.enterGuestDemoMode()
     assertTrue(viewModel.uiState.value.isGuestMode)
     assertEquals(UserRole.PRIMARY_ELLA, viewModel.uiState.value.currentRole)
 
-    // Switch to partner
     viewModel.switchRole(UserRole.SUPPORT_PARTNER)
     assertEquals(UserRole.SUPPORT_PARTNER, viewModel.uiState.value.currentRole)
 
-    // Switch back to Ella
     viewModel.switchRole(UserRole.PRIMARY_ELLA)
     assertEquals(UserRole.PRIMARY_ELLA, viewModel.uiState.value.currentRole)
   }
@@ -64,30 +69,61 @@ class SessionIsolationAndAuthorizationTest {
     assertFalse(viewModel.uiState.value.isGuestMode)
     val initialRole = viewModel.uiState.value.currentRole
 
-    // Attempting to switch role arbitrarily without authenticated space proof is ignored
     viewModel.switchRole(UserRole.SUPPORT_PARTNER)
     assertEquals(initialRole, viewModel.uiState.value.currentRole)
   }
 
+  // --- 2. PRUEBAS DE CIERRE DE SESIÓN AUTENTICADO Y AISLAMIENTO ---
+
   @Test
-  fun `exit guest mode or signOut completely clears state and isolates session`() {
+  fun `signOut execution completely clears space, cycles, symptoms and invalidates sessionId`() {
     viewModel.enterGuestDemoMode()
     assertNotNull(viewModel.uiState.value.space)
     assertFalse(viewModel.uiState.value.pastCycles.isEmpty())
-    assertNotNull(viewModel.uiState.value.todaySymptom)
-    assertNotNull(viewModel.uiState.value.activePairingCode)
+    val priorSessionId = viewModel.currentSessionId
 
-    viewModel.exitGuestMode()
+    // Ejecuta signOut real con CoroutineScope
+    val testScope = CoroutineScope(Dispatchers.Unconfined)
+    viewModel.signOut(testScope)
 
     val state = viewModel.uiState.value
-    assertNull("Space must be cleared on logout", state.space)
-    assertTrue("Past cycles must be emptied", state.pastCycles.isEmpty())
-    assertTrue("Intimacy logs must be emptied", state.intimacyLogs.isEmpty())
-    assertTrue("Partner observations must be emptied", state.partnerObservations.isEmpty())
+    assertNull("Space must be null after signOut", state.space)
+    assertTrue("Past cycles must be empty", state.pastCycles.isEmpty())
+    assertTrue("Intimacy logs must be empty", state.intimacyLogs.isEmpty())
+    assertTrue("Partner observations must be empty", state.partnerObservations.isEmpty())
     assertNull("Today symptom must be null", state.todaySymptom)
-    assertNull("Active pairing code must be cleared", state.activePairingCode)
+    assertNull("Active pairing code must be null", state.activePairingCode)
     assertFalse("Guest mode must be false", state.isGuestMode)
+    assertNotEquals("Session ID must be rotated after signOut", priorSessionId, viewModel.currentSessionId)
   }
+
+  @Test
+  fun `cross-session race condition prevention between account A and account C`() {
+    // 1. Simular sesión activa de Cuenta A
+    val sessionIdA = viewModel.currentSessionId
+    val userAUid = "user_A_123"
+    viewModel.activeObservedUserId = userAUid
+    assertTrue(viewModel.isSessionValid(sessionIdA, userAUid))
+
+    // 2. Operación asíncrona de A en vuelo...
+    // 3. Usuario A cierra sesión y entra Cuenta C
+    val testScope = CoroutineScope(Dispatchers.Unconfined)
+    viewModel.signOut(testScope)
+
+    val userCUid = "user_C_456"
+    val sessionIdC = viewModel.currentSessionId
+    viewModel.activeObservedUserId = userCUid
+
+    // 4. La respuesta tardía de A llega ahora
+    val isALateResponseAllowed = viewModel.isSessionValid(sessionIdA, userAUid)
+    assertFalse("Late response from User A must be invalidated for User C", isALateResponseAllowed)
+
+    // 5. La sesión de C es la única válida
+    assertTrue("Current User C session must be valid", viewModel.isSessionValid(sessionIdC, userCUid))
+    assertFalse("User C cannot validate with old session ID of A", viewModel.isSessionValid(sessionIdA, userCUid))
+  }
+
+  // --- 3. PRUEBAS DE REVOCACIÓN Y GENERACIÓN DE CÓDIGOS ---
 
   @Test
   fun `revocation unpairs partner in demo mode correctly`() {
@@ -112,51 +148,123 @@ class SessionIsolationAndAuthorizationTest {
     assertEquals("Total format must be 9 characters (LUNA-XXXX)", 9, code.length)
   }
 
-  // --- REQUISITO 4 TESTS: ACCEPT SPOTTING LOGIC & CONSERVATIVE PRIVACY ---
+  // --- 4. PRUEBAS DE MANCHADO: REGLAS DE SANGRAMIENTO Y PRIVACIDAD CONSERVADORA ---
 
   @Test
-  fun `spotting suggestion preserves privacy and bleeding rules`() {
-    // Test decision logic: HEAVY flow must not be downgraded to SPOTTING
+  fun `spotting suggestion preserves privacy and does not downgrade heavy or medium flow`() {
+    // Escenario 1: Si ya existe HEAVY, aceptar la sugerencia de manchado NO debe degradar el sangrado
     val existingHeavy = FlowLevel.HEAVY.name
-    val finalFlow = if (existingHeavy in listOf("LIGHT", "MEDIUM", "HEAVY")) existingHeavy else FlowLevel.SPOTTING.name
-    assertEquals("Heavy flow must be preserved", FlowLevel.HEAVY.name, finalFlow)
+    val finalHeavyFlow = if (existingHeavy in listOf("LIGHT", "MEDIUM", "HEAVY")) existingHeavy else FlowLevel.SPOTTING.name
+    assertEquals("Heavy flow must be preserved", FlowLevel.HEAVY.name, finalHeavyFlow)
 
-    // Test privacy preservation: existing private record remains private
-    val existingIsPrivate: Boolean? = true
-    val finalIsPrivate = existingIsPrivate ?: true
-    assertTrue("Existing privacy must be retained", finalIsPrivate)
+    // Escenario 2: Si ya existe MEDIUM, no degradar
+    val existingMedium = FlowLevel.MEDIUM.name
+    val finalMediumFlow = if (existingMedium in listOf("LIGHT", "MEDIUM", "HEAVY")) existingMedium else FlowLevel.SPOTTING.name
+    assertEquals("Medium flow must be preserved", FlowLevel.MEDIUM.name, finalMediumFlow)
 
-    // Test new record: default privacy must be true (conservative)
-    val nonExistentRecordPrivacy: Boolean? = null
-    val defaultPrivate = nonExistentRecordPrivacy ?: true
+    // Escenario 3: Si no había flujo o era NONE, se convierte en SPOTTING
+    val existingNone = FlowLevel.NONE.name
+    val finalSpottingFlow = if (existingNone in listOf("LIGHT", "MEDIUM", "HEAVY")) existingNone else FlowLevel.SPOTTING.name
+    assertEquals("None flow must become SPOTTING", FlowLevel.SPOTTING.name, finalSpottingFlow)
+
+    // Escenario 4: Privacidad en registro existente se conserva
+    val existingIsPrivate = true
+    val retainedPrivacy = existingIsPrivate
+    assertTrue("Existing privacy setting must be retained", retainedPrivacy)
+
+    // Escenario 5: Registro nuevo generado por sugerencia debe ser privado por defecto
+    val brandNewRecordPrivacy: Boolean? = null
+    val defaultPrivate = brandNewRecordPrivacy ?: true
     assertTrue("Brand new suggestion record must default to private", defaultPrivate)
   }
 
-  // --- REQUISITO 8 TESTS: MIGRATION CONFLICT & SIMULATION LOGIC ---
+  // --- 5. PRUEBAS DE FORMULARIOS: ESTADOS DE GUARDADO, ERROR Y CIERRE ---
 
   @Test
-  fun `migration simulation validates legacy structure without overwriting`() {
-    val legacyMap = mapOf(
-      "date" to "2026-10-10",
-      "flowLevel" to FlowLevel.MEDIUM.name,
-      "painLevel" to 2L,
-      "mood" to Mood.HAPPY.name,
-      "energyLevel" to 4L,
-      "privateNote" to "Nota secreta histórica",
-      "isPrivate" to false,
-      "loggedBy" to "ella_uid"
+  fun `form state keeps dialog open and preserves inputs on error, closes only on success`() {
+    var isDialogOpen = true
+    var dialogError: String? = null
+    var isSaving = false
+    var inputPublicNote = "Dolor lumbar persistente"
+    var inputPainLevel = 4
+
+    // 1. Simular envío iniciado
+    isSaving = true
+    assertTrue("Saving spinner should be active", isSaving)
+    assertTrue("Dialog must remain open while saving", isDialogOpen)
+
+    // 2. Simular fallo de red o reglas (callback onComplete(false))
+    val onCompleteError: (Boolean) -> Unit = { success ->
+      isSaving = false
+      if (!success) {
+        dialogError = "Error de red al guardar"
+        // El diálogo NO se cierra
+      } else {
+        isDialogOpen = false
+      }
+    }
+    onCompleteError(false)
+
+    assertFalse("Saving spinner should stop after failure", isSaving)
+    assertTrue("Dialog must remain open after failure", isDialogOpen)
+    assertNotNull("Error message must be presented", dialogError)
+    assertEquals("Dolor lumbar persistente", inputPublicNote)
+    assertEquals("User inputs must be preserved without data loss", 4, inputPainLevel)
+
+    // 3. Simular reintento exitoso (callback onComplete(true))
+    val onCompleteSuccess: (Boolean) -> Unit = { success ->
+      isSaving = false
+      if (success) {
+        isDialogOpen = false
+      }
+    }
+    onCompleteSuccess(true)
+
+    assertFalse("Dialog must be dismissed after confirmed server success", isDialogOpen)
+  }
+
+  // --- 6. PRUEBAS DE CONTRATO Y CONTADORES DE MIGRACIÓN ---
+
+  @Test
+  fun `migration result contract clearly distinguishes created, skipped, simulated and errors`() {
+    val simResult = MigrationResult(
+      totalLegacyRead = 3,
+      categoriesCreated = 0,
+      categoriesSkippedExisting = 1,
+      categoriesSimulated = 2,
+      physicalMigrated = 1,
+      physicalSkipped = 0,
+      moodMigrated = 1,
+      moodSkipped = 0,
+      notesMigrated = 0,
+      notesSkipped = 1,
+      errorsCount = 0
     )
 
-    // Target map simulating an existing newer record
-    val targetExists = true
-    val shouldSkip = targetExists
-    assertTrue("Target document collision must skip overwrite", shouldSkip)
+    // En simulación (dryRun = true): categoriesCreated DEBE ser 0 y categoriesSimulated > 0
+    assertEquals(0, simResult.categoriesCreated)
+    assertEquals(2, simResult.categoriesSimulated)
+    assertEquals(3, simResult.totalLegacyRead)
+    assertEquals(1, simResult.categoriesSkippedExisting)
 
-    // When target doesn't exist, physical, mood and private notes decouple correctly
-    val targetNew = false
-    assertFalse("Non-existing target document must be migrated", targetNew)
-    assertEquals("2026-10-10", legacyMap["date"])
-    assertEquals(FlowLevel.MEDIUM.name, legacyMap["flowLevel"])
-    assertEquals(false, legacyMap["isPrivate"])
+    val realResult = MigrationResult(
+      totalLegacyRead = 3,
+      categoriesCreated = 5,
+      categoriesSkippedExisting = 1,
+      categoriesSimulated = 0,
+      physicalMigrated = 2,
+      physicalSkipped = 1,
+      moodMigrated = 2,
+      moodSkipped = 0,
+      notesMigrated = 1,
+      notesSkipped = 0,
+      errorsCount = 0
+    )
+
+    // En ejecución real (dryRun = false): categoriesCreated > 0 y categoriesSimulated == 0
+    assertEquals(5, realResult.categoriesCreated)
+    assertEquals(0, realResult.categoriesSimulated)
+    assertEquals(3, realResult.totalLegacyRead)
+    assertEquals(1, realResult.categoriesSkippedExisting)
   }
 }

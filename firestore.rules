@@ -32,6 +32,7 @@ service cloud.firestore {
              data.ownerId is string &&
              (data.partnerId == null || (data.partnerId is string && data.partnerId != data.ownerId)) &&
              data.status in ['UNPAIRED', 'PENDING', 'PAIRED', 'REVOKED'] &&
+             (!('activeInviteVersion' in data) || (data.activeInviteVersion is int && data.activeInviteVersion >= 1)) &&
              data.averageCycleLength is int && data.averageCycleLength >= 20 && data.averageCycleLength <= 45 &&
              data.averagePeriodLength is int && data.averagePeriodLength >= 1 && data.averagePeriodLength <= 10 &&
              data.sharingPermissions is map &&
@@ -51,33 +52,36 @@ service cloud.firestore {
     }
 
     function isValidPhysicalSymptoms(data) {
-      return data.keys().hasOnly(['spaceId', 'date', 'flowLevel', 'painLevel', 'cramps', 'headache', 'backPain', 'bloating', 'cervicalMucus', 'tenderBreasts', 'cravings', 'acne', 'publicNote', 'isPrivate', 'loggedBy', 'updatedAt']) &&
+      return data.keys().hasOnly(['spaceId', 'date', 'flowLevel', 'painLevel', 'cramps', 'headache', 'backPain', 'bloating', 'cervicalMucus', 'tenderBreasts', 'cravings', 'acne', 'publicNote', 'isPrivate', 'loggedBy', 'updatedAt', 'migratedAt']) &&
              data.spaceId is string &&
              data.date is string &&
              data.flowLevel in ['NONE', 'SPOTTING', 'LIGHT', 'MEDIUM', 'HEAVY'] &&
              data.painLevel is int && data.painLevel >= 0 && data.painLevel <= 5 &&
              data.isPrivate is bool &&
              data.loggedBy is string &&
+             (!('migratedAt' in data) || data.migratedAt is timestamp) &&
              !('privateNote' in data.keys());
     }
 
     function isValidMoodRecord(data) {
-      return data.keys().hasOnly(['spaceId', 'date', 'mood', 'energyLevel', 'isPrivate', 'loggedBy', 'updatedAt']) &&
+      return data.keys().hasOnly(['spaceId', 'date', 'mood', 'energyLevel', 'isPrivate', 'loggedBy', 'updatedAt', 'migratedAt']) &&
              data.spaceId is string &&
              data.date is string &&
              data.mood in ['HAPPY', 'CALM', 'SENSITIVE', 'ENERGETIC', 'CRAVINGS', 'IRRITABLE', 'ANXIOUS', 'SAD'] &&
              data.energyLevel is int && data.energyLevel >= 1 && data.energyLevel <= 5 &&
              data.isPrivate is bool &&
              data.loggedBy is string &&
+             (!('migratedAt' in data) || data.migratedAt is timestamp) &&
              !('privateNote' in data.keys());
     }
 
     function isValidPrivateNote(data) {
-      return data.keys().hasOnly(['spaceId', 'date', 'privateNote', 'loggedBy', 'updatedAt']) &&
+      return data.keys().hasOnly(['spaceId', 'date', 'privateNote', 'loggedBy', 'updatedAt', 'migratedAt']) &&
              data.spaceId is string &&
              data.date is string &&
              data.privateNote is string &&
-             data.loggedBy is string;
+             data.loggedBy is string &&
+             (!('migratedAt' in data) || data.migratedAt is timestamp);
     }
 
     function isValidIntimacyLog(data) {
@@ -133,19 +137,18 @@ service cloud.firestore {
         // Caso 1: Dueña legítima actualiza parámetros o revoca pareja (no puede asignar unilateralmente pareja nueva)
         (resource.data.ownerId == request.auth.uid &&
          request.resource.data.ownerId == resource.data.ownerId &&
+         (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt) &&
+         (!('activeInviteVersion' in request.resource.data) || !('activeInviteVersion' in resource.data) || request.resource.data.activeInviteVersion >= resource.data.activeInviteVersion) &&
          (request.resource.data.partnerId == resource.data.partnerId ||
           (request.resource.data.partnerId == null && request.resource.data.status in ['UNPAIRED', 'REVOKED', 'PENDING']))) ||
         // Caso 2: Canje atómico por la pareja
         (
           request.auth.uid != resource.data.ownerId &&
-          request.resource.data.ownerId == resource.data.ownerId &&
           resource.data.partnerId == null &&
           resource.data.status != 'PAIRED' &&
           request.resource.data.partnerId == request.auth.uid &&
           request.resource.data.status == 'PAIRED' &&
-          request.resource.data.sharingPermissions == resource.data.sharingPermissions &&
-          request.resource.data.averageCycleLength == resource.data.averageCycleLength &&
-          request.resource.data.averagePeriodLength == resource.data.averagePeriodLength &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['partnerId', 'status', 'claimedInviteCode', 'updatedAt']) &&
           ('claimedInviteCode' in request.resource.data) &&
           request.resource.data.claimedInviteCode is string &&
           exists(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)) &&
@@ -323,16 +326,18 @@ service cloud.firestore {
       // Dueña: puede marcar REVOKED o renovar
       // Canjeador: puede marcar CONSUMED si y solo si en la misma operación atómica el espacio queda PAIRED con este usuario (getAfter)
       allow update: if isAuthenticated() && (
-        (resource.data.createdBy == request.auth.uid && request.resource.data.status in ['REVOKED', 'ACTIVE']) ||
+        // Dueña solo puede revocar una invitación activa existente
+        (resource.data.createdBy == request.auth.uid &&
+         resource.data.status == 'ACTIVE' &&
+         request.resource.data.status == 'REVOKED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])) ||
+        // Canjeador: solo puede marcar CONSUMED dentro del canje atómico
         (
           resource.data.createdBy != request.auth.uid &&
           resource.data.status == 'ACTIVE' &&
           resource.data.expiresAt > request.time &&
           request.resource.data.status == 'CONSUMED' &&
-          request.resource.data.spaceId == resource.data.spaceId &&
-          request.resource.data.createdBy == resource.data.createdBy &&
-          request.resource.data.expiresAt == resource.data.expiresAt &&
-          request.resource.data.keys().hasOnly(['spaceId', 'createdBy', 'status', 'expiresAt', 'version', 'createdAt', 'consumedBy', 'consumedAt']) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'consumedBy', 'consumedAt']) &&
           request.resource.data.consumedBy == request.auth.uid &&
           // REGLA ATÓMICA OBLIGATORIA (getAfter): El espacio DEBE quedar PAIRED con request.auth.uid en la misma transacción
           getAfter(/databases/$(database)/documents/couple_spaces/$(resource.data.spaceId)).data.status == 'PAIRED' &&
