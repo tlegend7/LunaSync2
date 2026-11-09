@@ -68,12 +68,14 @@ data class AppUiState(
   val successMessage: String? = null
 )
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
-  val authRepo = AuthRepository(application)
-  val spaceRepo = CoupleSpaceRepository(application)
-  val cycleRepo = CycleRepository(application)
-  val intimacyRepo = IntimacyRepository(application)
-  val partnerRepo = PartnerSupportRepository(application)
+class MainViewModel(
+  application: Application,
+  val authRepo: AuthRepository = AuthRepository(application),
+  val spaceRepo: CoupleSpaceRepository = CoupleSpaceRepository(application),
+  val cycleRepo: CycleRepository = CycleRepository(application),
+  val intimacyRepo: IntimacyRepository = IntimacyRepository(application),
+  val partnerRepo: PartnerSupportRepository = PartnerSupportRepository(application)
+) : AndroidViewModel(application) {
 
   private val _uiState = MutableStateFlow(AppUiState())
   val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -131,6 +133,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     if (currentSessionId != sessionId) return false
     if (expectedUserId != null && activeObservedUserId != expectedUserId) return false
     return true
+  }
+
+  internal fun setUiStateForTesting(update: (AppUiState) -> AppUiState) {
+    _uiState.value = update(_uiState.value)
   }
 
   private fun observeUserData(userId: String, sessionId: String) {

@@ -39,8 +39,10 @@ data class SharedSymptomState(
   val date: String = ""
 )
 
-class CycleRepository(context: Context) {
-  private val db: FirebaseFirestore = FirestoreProvider.getDb(context)
+open class CycleRepository(
+  context: Context,
+  protected val db: FirebaseFirestore = FirestoreProvider.getDb(context)
+) {
 
   fun observeCycles(spaceId: String): Flow<List<CycleEntry>> {
     return db.collection("couple_spaces").document(spaceId)
@@ -193,7 +195,7 @@ class CycleRepository(context: Context) {
    * Atomic batch write ensuring physical symptoms, mood, and private notes are decoupled
    * into their respective protected subcollections.
    */
-  suspend fun saveDailySymptom(symptom: DailySymptom) {
+  open suspend fun saveDailySymptom(symptom: DailySymptom) {
     val batch = db.batch()
     val spaceDoc = db.collection("couple_spaces").document(symptom.spaceId)
 
@@ -258,7 +260,7 @@ class CycleRepository(context: Context) {
    * - If non-existent, creates a valid document with conservative privacy (isPrivate = true) and painLevel = 0
    * - Never downgrades higher bleeding (LIGHT, MEDIUM, HEAVY) without explicit consent
    */
-  suspend fun acceptSpottingSuggestion(spaceId: String, observationId: String, date: String, userId: String): Result<Unit> {
+  open suspend fun acceptSpottingSuggestion(spaceId: String, observationId: String, date: String, userId: String): Result<Unit> {
     val obsRef = db.collection("couple_spaces").document(spaceId)
       .collection("observations").document(observationId)
     val physRef = db.collection("couple_spaces").document(spaceId)

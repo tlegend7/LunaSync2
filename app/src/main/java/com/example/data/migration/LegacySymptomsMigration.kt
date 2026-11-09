@@ -62,7 +62,24 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
 
   suspend fun migrateSpaceSymptoms(spaceId: String, dryRun: Boolean = true): MigrationResult {
     val legacyCollection = db.collection("couple_spaces").document(spaceId).collection("symptoms")
-    val legacyDocs = legacyCollection.get().await().documents
+    val legacyDocs = try {
+      legacyCollection.get().await().documents
+    } catch (e: Exception) {
+      return MigrationResult(
+        totalLegacyRead = 0,
+        categoriesCreated = 0,
+        categoriesSkippedExisting = 0,
+        categoriesSimulated = 0,
+        physicalMigrated = 0,
+        physicalSkipped = 0,
+        moodMigrated = 0,
+        moodSkipped = 0,
+        notesMigrated = 0,
+        notesSkipped = 0,
+        errorsCount = 1,
+        errorDetails = listOf("Error al leer síntomas legacy: ${e.message}")
+      )
+    }
 
     var physicalMigrated = 0
     var physicalSkipped = 0

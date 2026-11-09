@@ -10,6 +10,7 @@ import com.google.firebase.firestore.firestore
 
 object FirestoreProvider {
   private var firestoreInstance: FirebaseFirestore? = null
+  private var authInstance: FirebaseAuth? = null
 
   fun getDb(context: Context): FirebaseFirestore {
     if (firestoreInstance == null) {
@@ -18,14 +19,51 @@ object FirestoreProvider {
       } catch (e: Exception) {
         ""
       }
-      firestoreInstance = if (dbId.isNotBlank()) {
+      val db = if (dbId.isNotBlank()) {
         FirebaseFirestore.getInstance(dbId)
       } else {
         Firebase.firestore
       }
+      val emulatorHost = System.getenv("FIRESTORE_EMULATOR_HOST")
+      if (!emulatorHost.isNullOrBlank()) {
+        val parts = emulatorHost.split(":")
+        val host = parts[0]
+        val port = if (parts.size > 1) parts[1].toInt() else 8085
+        try {
+          db.useEmulator(host, port)
+          val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder(db.firestoreSettings)
+            .setPersistenceEnabled(false)
+            .build()
+          db.firestoreSettings = settings
+        } catch (_: Exception) {}
+      }
+      firestoreInstance = db
     }
     return firestoreInstance!!
   }
 
-  fun getAuth(): FirebaseAuth = Firebase.auth
+  fun getAuth(): FirebaseAuth {
+    if (authInstance == null) {
+      val auth = Firebase.auth
+      val emulatorHost = System.getenv("FIREBASE_AUTH_EMULATOR_HOST")
+      if (!emulatorHost.isNullOrBlank()) {
+        val parts = emulatorHost.split(":")
+        val host = parts[0]
+        val port = if (parts.size > 1) parts[1].toInt() else 9099
+        try {
+          auth.useEmulator(host, port)
+        } catch (_: Exception) {}
+      }
+      authInstance = auth
+    }
+    return authInstance!!
+  }
+
+  fun setDbForTesting(db: FirebaseFirestore?) {
+    firestoreInstance = db
+  }
+
+  fun setAuthForTesting(auth: FirebaseAuth?) {
+    authInstance = auth
+  }
 }

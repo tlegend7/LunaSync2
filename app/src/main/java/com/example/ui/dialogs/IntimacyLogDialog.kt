@@ -308,7 +308,7 @@ fun IntimacyLogDialog(
           label = { Text("Notas íntimas (opcional)", fontSize = 12.sp) },
           placeholder = { Text("Sensaciones, caricias o detalles personales...", fontSize = 12.sp) },
           shape = RoundedCornerShape(14.dp),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("intimacy_notes_input")
         )
 
         Spacer(modifier = Modifier.height(12.dp))

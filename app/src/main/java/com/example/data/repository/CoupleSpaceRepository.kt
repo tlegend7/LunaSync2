@@ -25,9 +25,11 @@ sealed class SpaceObservationResult {
   data class Error(val exception: Throwable) : SpaceObservationResult()
 }
 
-class CoupleSpaceRepository(context: Context) {
-  private val db: FirebaseFirestore = FirestoreProvider.getDb(context)
-  private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+open class CoupleSpaceRepository(
+  context: Context,
+  protected val db: FirebaseFirestore = FirestoreProvider.getDb(context)
+) {
+  protected val auth: FirebaseAuth = FirestoreProvider.getAuth()
   private val secureRandom = SecureRandom()
 
   fun observeSpace(spaceId: String): Flow<CoupleSpace?> {
@@ -150,7 +152,7 @@ class CoupleSpaceRepository(context: Context) {
    * - Writes the new pairing_invites document inside the transaction.
    * Both writes succeed or fail together.
    */
-  suspend fun generateInviteCode(spaceId: String, createdBy: String): String {
+  open suspend fun generateInviteCode(spaceId: String, createdBy: String): String {
     val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     val spaceRef = db.collection("couple_spaces").document(spaceId)
 
@@ -228,7 +230,7 @@ class CoupleSpaceRepository(context: Context) {
    * - Executes atomic batch write pairing space and consuming invite.
    * - Firestore rules evaluate and enforce getAfter() coupling, version match, and partnerId verification.
    */
-  suspend fun joinWithCode(code: String, partnerId: String): Result<String> {
+  open suspend fun joinWithCode(code: String, partnerId: String): Result<String> {
     val cleanCode = code.trim().uppercase()
     val inviteRef = db.collection("pairing_invites").document(cleanCode)
 
@@ -287,7 +289,7 @@ class CoupleSpaceRepository(context: Context) {
     }
   }
 
-  suspend fun updatePermissions(spaceId: String, permissions: SharingPermissions) {
+  open suspend fun updatePermissions(spaceId: String, permissions: SharingPermissions) {
     db.collection("couple_spaces").document(spaceId).update(
       "sharingPermissions",
       mapOf(
@@ -305,7 +307,7 @@ class CoupleSpaceRepository(context: Context) {
    * Sets partnerId to null, marks space UNPAIRED, increments activeInviteVersion
    * to immediately invalidate any outstanding invites.
    */
-  suspend fun revokePairing(spaceId: String) {
+  open suspend fun revokePairing(spaceId: String) {
     val spaceRef = db.collection("couple_spaces").document(spaceId)
     db.runTransaction { transaction ->
       val snapshot = transaction.get(spaceRef)

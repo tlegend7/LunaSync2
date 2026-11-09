@@ -417,7 +417,7 @@ fun SymptomLogDialog(
           label = { Text("Nota para tu pareja (visible)", fontSize = 12.sp) },
           placeholder = { Text("Ej: Me vendría genial cenar algo liviano hoy...", fontSize = 12.sp) },
           shape = RoundedCornerShape(12.dp),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("symptom_public_note_input")
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -434,7 +434,7 @@ fun SymptomLogDialog(
             }
           },
           shape = RoundedCornerShape(12.dp),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("symptom_private_note_input")
         )
 
         Spacer(modifier = Modifier.height(12.dp))
