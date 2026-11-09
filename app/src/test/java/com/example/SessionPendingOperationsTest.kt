@@ -1,6 +1,7 @@
 package com.example
 
 import android.app.Application
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.CoupleSpace
 import com.example.data.model.DailySymptom
@@ -10,16 +11,29 @@ import com.example.data.model.PartnerObservation
 import com.example.data.model.SharingPermissions
 import com.example.data.model.SpaceStatus
 import com.example.data.model.SpottingSuggestionStatus
+import com.example.data.model.UserRole
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.CoupleSpaceRepository
 import com.example.data.repository.CycleRepository
+import com.example.data.repository.SpaceObservationResult
 import com.example.ui.viewmodel.MainViewModel
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -31,20 +45,42 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 
 /**
- * Doble de prueba controlable para CycleRepository.
- * Permite retener en vuelo cualquier operacion asincrona para simular
- * respuestas tardias de red que compiten con el cierre o cambio de sesion.
+ * Repositorio de autenticación controlable para pruebas deterministas de sesión.
+ * Permite emitir identidades de usuario reales o nulas sin depender de estado residual.
+ */
+class ControllableAuthRepository(context: Context) : AuthRepository(context) {
+  private val _testUserFlow = MutableStateFlow<FirebaseUser?>(null)
+  override val currentUser: StateFlow<FirebaseUser?> = _testUserFlow.asStateFlow()
+
+  fun emitUser(user: FirebaseUser?) {
+    _testUserFlow.value = user
+  }
+
+  override fun signOut(scope: CoroutineScope, onComplete: () -> Unit) {
+    _testUserFlow.value = null
+    onComplete()
+  }
+}
+
+/**
+ * Doble de prueba controlable para CycleRepository con registro estricto de llamadas,
+ * argumentos y señales deterministas de inicio y finalización.
  */
 class ControllableCycleRepository(app: Application) : CycleRepository(app) {
-  var saveSymptomCompletable = CompletableDeferred<Unit>()
-  var acceptSpottingCompletable = CompletableDeferred<Result<Unit>>()
-  var lastSavedSymptom: DailySymptom? = null
+  // Señales explícitas de inicio de llamada
+  var saveSymptomCalled = CompletableDeferred<DailySymptom>()
+  var acceptSpottingCalled = CompletableDeferred<Triple<String, String, String>>() // spaceId, obsId, userId
+
+  // Control de resolución
+  var saveSymptomDeferred = CompletableDeferred<Unit>()
+  var acceptSpottingDeferred = CompletableDeferred<Result<Unit>>()
 
   override suspend fun saveDailySymptom(symptom: DailySymptom) {
-    lastSavedSymptom = symptom
-    saveSymptomCompletable.await()
+    saveSymptomCalled.complete(symptom)
+    saveSymptomDeferred.await()
   }
 
   override suspend fun acceptSpottingSuggestion(
@@ -53,41 +89,50 @@ class ControllableCycleRepository(app: Application) : CycleRepository(app) {
     date: String,
     userId: String
   ): Result<Unit> {
-    return acceptSpottingCompletable.await()
+    acceptSpottingCalled.complete(Triple(spaceId, observationId, userId))
+    return acceptSpottingDeferred.await()
   }
 }
 
 /**
- * Doble de prueba controlable para CoupleSpaceRepository.
+ * Doble de prueba controlable para CoupleSpaceRepository con registro de llamadas y argumentos.
  */
 class ControllableCoupleSpaceRepository(app: Application) : CoupleSpaceRepository(app) {
-  var generateCodeCompletable = CompletableDeferred<String>()
-  var joinCodeCompletable = CompletableDeferred<Result<String>>()
-  var revokeCompletable = CompletableDeferred<Unit>()
+  var generateCodeCalled = CompletableDeferred<Pair<String, String>>() // spaceId, createdBy
+  var joinCodeCalled = CompletableDeferred<Pair<String, String>>() // code, partnerId
 
-  override suspend fun generateInviteCode(spaceId: String, ownerId: String): String {
-    return generateCodeCompletable.await()
+  var generateCodeDeferred = CompletableDeferred<String>()
+  var joinCodeDeferred = CompletableDeferred<Result<String>>()
+
+  val spaceMap = mutableMapOf<String, CoupleSpace>()
+
+  override fun observeUserSpaceDetailed(userId: String): Flow<SpaceObservationResult> = flow {
+    val space = spaceMap[userId]
+    if (space != null) {
+      emit(SpaceObservationResult.Success(space))
+    } else {
+      emit(SpaceObservationResult.NoSpaceFound)
+    }
   }
 
-  override suspend fun joinWithCode(inviteCode: String, partnerId: String): Result<String> {
-    return joinCodeCompletable.await()
+  override suspend fun generateInviteCode(spaceId: String, createdBy: String): String {
+    generateCodeCalled.complete(Pair(spaceId, createdBy))
+    return generateCodeDeferred.await()
   }
 
-  override suspend fun revokePairing(spaceId: String) {
-    revokeCompletable.await()
+  override suspend fun joinWithCode(code: String, partnerId: String): Result<String> {
+    joinCodeCalled.complete(Pair(code, partnerId))
+    return joinCodeDeferred.await()
   }
 }
 
-/**
- * Pruebas de EJECUCIÓN REAL de aislamiento de sesión y operaciones pendientes en MainViewModel.
- * Verifica que ante carreras asíncronas entre la Cuenta A (que cierra sesión) y la Cuenta C (que inicia sesión),
- * ninguna respuesta tardía (exitosa o fallida) de A altere el estado, espacio o datos de C.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SessionPendingOperationsTest {
 
   private lateinit var application: Application
+  private lateinit var auth: FirebaseAuth
+  private lateinit var controllableAuthRepo: ControllableAuthRepository
   private lateinit var controllableCycleRepo: ControllableCycleRepository
   private lateinit var controllableSpaceRepo: ControllableCoupleSpaceRepository
   private lateinit var viewModel: MainViewModel
@@ -104,34 +149,54 @@ class SessionPendingOperationsTest {
       FirebaseApp.initializeApp(application, options)
     }
 
+    auth = FirebaseAuth.getInstance()
+    try {
+      auth.useEmulator("127.0.0.1", 9099)
+    } catch (_: Exception) {}
+
+    controllableAuthRepo = ControllableAuthRepository(application)
     controllableCycleRepo = ControllableCycleRepository(application)
     controllableSpaceRepo = ControllableCoupleSpaceRepository(application)
 
     viewModel = MainViewModel(
       application = application,
+      authRepo = controllableAuthRepo,
       cycleRepo = controllableCycleRepo,
       spaceRepo = controllableSpaceRepo
     )
   }
 
-  private fun setupSessionForUser(userId: String, spaceId: String): String {
+  private suspend fun createRealTestUser(prefix: String): FirebaseUser {
+    val email = "${prefix}_${UUID.randomUUID().toString().take(8)}@test.com"
+    val result = auth.createUserWithEmailAndPassword(email, "password123").await()
+    return result.user!!
+  }
+
+  private fun setupCoherentSession(user: FirebaseUser, spaceId: String): String {
+    val space = CoupleSpace(
+      id = spaceId,
+      ownerId = user.uid,
+      partnerId = null,
+      status = SpaceStatus.UNPAIRED.name,
+      averageCycleLength = 28,
+      averagePeriodLength = 5,
+      sharingPermissions = SharingPermissions()
+    )
+    controllableSpaceRepo.spaceMap[user.uid] = space
+    controllableAuthRepo.emitUser(user)
+
     val sessionId = UUID.randomUUID().toString()
     viewModel.currentSessionId = sessionId
-    viewModel.activeObservedUserId = userId
+    viewModel.activeObservedUserId = user.uid
 
     viewModel.setUiStateForTesting { state ->
       state.copy(
+        currentUser = user,
+        currentRole = UserRole.PRIMARY_ELLA,
+        space = space,
         isGuestMode = false,
-        space = CoupleSpace(
-          id = spaceId,
-          ownerId = userId,
-          partnerId = null,
-          status = SpaceStatus.UNPAIRED.name,
-          averageCycleLength = 28,
-          averagePeriodLength = 5,
-          sharingPermissions = SharingPermissions()
-        ),
         todaySymptom = null,
+        activePairingCode = null,
         errorMessage = null,
         successMessage = null
       )
@@ -139,186 +204,281 @@ class SessionPendingOperationsTest {
     return sessionId
   }
 
+  private fun <T> runWithLooper(timeoutMs: Long = 25000, block: suspend () -> T): T {
+    val deferred = CoroutineScope(Dispatchers.IO).async { block() }
+    val start = System.currentTimeMillis()
+    while (!deferred.isCompleted && (System.currentTimeMillis() - start < timeoutMs)) {
+      ShadowLooper.idleMainLooper()
+      Thread.sleep(40)
+    }
+    if (!deferred.isCompleted) {
+      throw java.util.concurrent.TimeoutException("runWithLooper timed out after ${timeoutMs}ms")
+    }
+    return runBlocking { deferred.await() }
+  }
+
   // --- PRUEBA 1: saveSymptom éxito tardío de A NO fuga a Cuenta C ---
   @Test
-  fun `saveSymptom late success from user A does not leak into user C session`() = runBlocking {
-    val userAUid = "user_A_111"
-    val spaceA = "space_A"
-    val sessionA = setupSessionForUser(userAUid, spaceA)
+  fun `saveSymptom late success from user A does not leak into user C session`() {
+    runWithLooper {
+      val userA = createRealTestUser("userA")
+      val spaceA = "space_A"
+      val sessionA = setupCoherentSession(userA, spaceA)
 
-    var callbackInvoked = false
-    var callbackSuccess = false
-    var callbackError: String? = null
+      var callbackInvoked = false
+      var callbackSuccess = false
+      var callbackError: String? = null
 
-    // 1. Usuario A inicia guardado de síntoma (operación queda retenida en el repo)
-    viewModel.saveSymptom(
-      flowLevel = FlowLevel.LIGHT,
-      painLevel = 2,
-      mood = Mood.CALM,
-      energyLevel = 3,
-      cramps = false,
-      headache = false,
-      backPain = false,
-      bloating = false,
-      publicNote = "Nota confidencial de A",
-      privateNote = null,
-      isPrivate = false
-    ) { success, err ->
-      callbackInvoked = true
-      callbackSuccess = success
-      callbackError = err
+      // 1. Invocar guardado real en ViewModel
+      viewModel.saveSymptom(
+        flowLevel = FlowLevel.LIGHT,
+        painLevel = 2,
+        mood = Mood.CALM,
+        energyLevel = 3,
+        cramps = false,
+        headache = false,
+        backPain = false,
+        bloating = false,
+        publicNote = "Nota confidencial de A",
+        privateNote = null,
+        isPrivate = false
+      ) { success, err ->
+        callbackInvoked = true
+        callbackSuccess = success
+        callbackError = err
+      }
+
+      // 2. Esperar de forma determinista a que el repositorio confirme recepción
+      val receivedSymptom = withTimeout(5000) { controllableCycleRepo.saveSymptomCalled.await() }
+      assertNotNull("Operation MUST reach repository or test fails", receivedSymptom)
+      assertEquals(spaceA, receivedSymptom.spaceId)
+      assertEquals(userA.uid, receivedSymptom.loggedBy)
+      assertEquals("Nota confidencial de A", receivedSymptom.publicNote)
+      assertFalse("Operation must still be pending", controllableCycleRepo.saveSymptomDeferred.isCompleted)
+      assertFalse("Callback must not be invoked yet", callbackInvoked)
+
+      // 3. Cerrar sesión de A mediante ruta real
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
+
+      // 4. Activar sesión C
+      val userC = createRealTestUser("userC")
+      val spaceC = "space_C"
+      val sessionC = setupCoherentSession(userC, spaceC)
+      assertNotEquals("Session ID must be rotated", sessionA, sessionC)
+
+      // 5. Completar la operación de A
+      controllableCycleRepo.saveSymptomDeferred.complete(Unit)
+      Thread.sleep(150)
+
+      // 6. Verificación de blindaje
+      assertTrue("Callback must be invoked", callbackInvoked)
+      assertFalse("Late response must be rejected for invalidated session", callbackSuccess)
+      assertEquals("Sesión no válida", callbackError)
+
+      val stateC = viewModel.uiState.value
+      assertNull("User C must NOT receive User A symptom", stateC.todaySymptom)
+      assertEquals("User C space must remain space_C", spaceC, stateC.space?.id)
+      assertEquals(userC.uid, stateC.currentUser?.uid)
     }
-
-    assertNotNull("Operation must be pending in repository", controllableCycleRepo.lastSavedSymptom)
-    assertFalse("Callback must not be invoked yet", callbackInvoked)
-
-    // 2. Usuario A cierra sesión y entra Cuenta C
-    val testScope = CoroutineScope(Dispatchers.Unconfined)
-    viewModel.signOut(testScope)
-
-    val userCUid = "user_C_222"
-    val spaceC = "space_C"
-    val sessionC = setupSessionForUser(userCUid, spaceC)
-
-    assertNotEquals("Session ID must be different", sessionA, sessionC)
-    assertEquals(userCUid, viewModel.activeObservedUserId)
-
-    // 3. La operación tardía de A finalmente se completa en el backend
-    controllableCycleRepo.saveSymptomCompletable.complete(Unit)
-
-    // 4. Verificación de blindaje:
-    // El callback recibe fallo por sesión invalidada y NO hay fuga al estado de C
-    assertTrue("Callback must be invoked after completion", callbackInvoked)
-    assertFalse("Late response must be marked as invalid session", callbackSuccess)
-    assertEquals("Sesión no válida", callbackError)
-
-    val stateC = viewModel.uiState.value
-    assertNull("User C must NOT receive User A symptom", stateC.todaySymptom)
-    assertNotEquals("User C space must remain untouched", spaceA, stateC.space?.id)
-    assertEquals(spaceC, stateC.space?.id)
   }
 
   // --- PRUEBA 2: saveSymptom error tardío de A NO fuga a Cuenta C ---
   @Test
-  fun `saveSymptom late error from user A does not leak error message into user C session`() = runBlocking {
-    val userAUid = "user_A_333"
-    val spaceA = "space_A"
-    setupSessionForUser(userAUid, spaceA)
+  fun `saveSymptom late error from user A does not leak error message into user C session`() {
+    runWithLooper {
+      val userA = createRealTestUser("userA")
+      val spaceA = "space_A"
+      setupCoherentSession(userA, spaceA)
 
-    var callbackInvoked = false
-    var callbackError: String? = null
+      var callbackInvoked = false
+      var callbackError: String? = null
 
-    viewModel.saveSymptom(
-      flowLevel = FlowLevel.NONE,
-      painLevel = 0,
-      mood = Mood.CALM,
-      energyLevel = 3,
-      cramps = false,
-      headache = false,
-      backPain = false,
-      bloating = false,
-      publicNote = null,
-      privateNote = null,
-      isPrivate = false
-    ) { success, err ->
-      callbackInvoked = true
-      callbackError = err
+      viewModel.saveSymptom(
+        flowLevel = FlowLevel.NONE,
+        painLevel = 0,
+        mood = Mood.CALM,
+        energyLevel = 3,
+        cramps = false,
+        headache = false,
+        backPain = false,
+        bloating = false,
+        publicNote = null,
+        privateNote = null,
+        isPrivate = false
+      ) { success, err ->
+        callbackInvoked = true
+        callbackError = err
+      }
+
+      val receivedSymptom = withTimeout(5000) { controllableCycleRepo.saveSymptomCalled.await() }
+      assertNotNull(receivedSymptom)
+
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
+
+      val userC = createRealTestUser("userC")
+      val spaceC = "space_C"
+      setupCoherentSession(userC, spaceC)
+
+      // Falla la operación de A
+      val networkEx = RuntimeException("Error fatal en la red de A")
+      controllableCycleRepo.saveSymptomDeferred.completeExceptionally(networkEx)
+      Thread.sleep(150)
+
+      assertTrue(callbackInvoked)
+      assertEquals("Error fatal en la red de A", callbackError)
+      assertNull("User C errorMessage must NOT be contaminated with User A error", viewModel.uiState.value.errorMessage)
     }
-
-    // Usuario A cierra sesión y entra C
-    val testScope = CoroutineScope(Dispatchers.Unconfined)
-    viewModel.signOut(testScope)
-
-    val userCUid = "user_C_444"
-    val spaceC = "space_C"
-    setupSessionForUser(userCUid, spaceC)
-
-    // Falla la operación tardía de A
-    controllableCycleRepo.saveSymptomCompletable.completeExceptionally(RuntimeException("Error en la red de A"))
-
-    // Verificación: el mensaje de error de A NO se asigna al UI state de C
-    assertTrue(callbackInvoked)
-    assertNull("User C errorMessage must NOT be populated with User A error", viewModel.uiState.value.errorMessage)
   }
 
   // --- PRUEBA 3: generatePairingCode tardío de A NO fuga a Cuenta C ---
   @Test
-  fun `generatePairingCode late completion from user A does not update user C activePairingCode`() = runBlocking {
-    val userAUid = "user_A_555"
-    val spaceA = "space_A"
-    setupSessionForUser(userAUid, spaceA)
+  fun `generatePairingCode late completion from user A does not update user C activePairingCode`() {
+    runWithLooper {
+      val userA = createRealTestUser("userA")
+      val spaceA = "space_A"
+      setupCoherentSession(userA, spaceA)
 
-    viewModel.generatePairingCode()
+      viewModel.generatePairingCode()
 
-    // A cierra sesión y entra C
-    val testScope = CoroutineScope(Dispatchers.Unconfined)
-    viewModel.signOut(testScope)
+      // Confirmar que entró al repositorio con los argumentos de A
+      val (calledSpace, calledUser) = withTimeout(5000) { controllableSpaceRepo.generateCodeCalled.await() }
+      assertEquals(spaceA, calledSpace)
+      assertEquals(userA.uid, calledUser)
 
-    val userCUid = "user_C_666"
-    val spaceC = "space_C"
-    setupSessionForUser(userCUid, spaceC)
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
 
-    // Se resuelve el código de A
-    controllableSpaceRepo.generateCodeCompletable.complete("LUNA-AAAA")
+      val userC = createRealTestUser("userC")
+      val spaceC = "space_C"
+      setupCoherentSession(userC, spaceC)
 
-    // Verificación: C no tiene el código de vinculación de A
-    assertNull("User C must NOT receive User A pairing code", viewModel.uiState.value.activePairingCode)
+      // Se resuelve el código de A
+      controllableSpaceRepo.generateCodeDeferred.complete("LUNA-AAAA")
+      Thread.sleep(150)
+
+      assertNull("User C must NOT receive User A pairing code", viewModel.uiState.value.activePairingCode)
+      assertEquals(spaceC, viewModel.uiState.value.space?.id)
+    }
   }
 
-  // --- PRUEBA 4: joinWithCode tardío de A NO vincula a Cuenta C ---
+  // --- PRUEBA 4: joinWithCode tardío de A NO altera el espacio de Cuenta C ---
   @Test
-  fun `joinWithCode late completion from user A does not affect user C space`() = runBlocking {
-    val userAUid = "user_A_777"
-    val spaceA = "space_A"
-    setupSessionForUser(userAUid, spaceA)
+  fun `joinWithCode late completion from user A does not affect user C space`() {
+    runWithLooper {
+      val userA = createRealTestUser("userA")
+      val spaceA = "space_A"
+      setupCoherentSession(userA, spaceA)
 
-    viewModel.joinWithCode("LUNA-JOIN")
+      viewModel.joinWithCode("LUNA-JOIN")
 
-    // A cierra sesión y entra C
-    val testScope = CoroutineScope(Dispatchers.Unconfined)
-    viewModel.signOut(testScope)
+      val (calledCode, calledPartner) = withTimeout(5000) { controllableSpaceRepo.joinCodeCalled.await() }
+      assertEquals("LUNA-JOIN", calledCode)
+      assertEquals(userA.uid, calledPartner)
 
-    val userCUid = "user_C_888"
-    val spaceC = "space_C"
-    setupSessionForUser(userCUid, spaceC)
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
 
-    // Se resuelve la vinculación de A
-    controllableSpaceRepo.joinCodeCompletable.complete(Result.success("space_joined_by_A"))
+      val userC = createRealTestUser("userC")
+      val spaceC = "space_C"
+      setupCoherentSession(userC, spaceC)
 
-    // Verificación: El espacio de C sigue siendo space_C y no el de A
-    assertEquals("User C space must remain space_C", spaceC, viewModel.uiState.value.space?.id)
+      controllableSpaceRepo.joinCodeDeferred.complete(Result.success("space_from_code"))
+      Thread.sleep(150)
+
+      assertEquals("User C space must remain space_C", spaceC, viewModel.uiState.value.space?.id)
+    }
   }
 
-  // --- PRUEBA 5: acceptSpottingSuggestion tardío de A NO fuga a Cuenta C ---
+  // --- PRUEBA 5: acceptSpottingSuggestion tardío de A NO altera Cuenta C ---
   @Test
-  fun `acceptSpottingSuggestion late completion from user A does not alter user C state`() = runBlocking {
-    val userAUid = "user_A_999"
-    val spaceA = "space_A"
-    setupSessionForUser(userAUid, spaceA)
+  fun `acceptSpottingSuggestion late completion from user A does not alter user C state`() {
+    runWithLooper {
+      val userA = createRealTestUser("userA")
+      val spaceA = "space_A"
+      setupCoherentSession(userA, spaceA)
 
-    val suggestion = PartnerObservation(
-      id = "obs_A",
-      spaceId = spaceA,
-      date = "2026-06-15",
-      unloggedSpottingReported = true,
-      spottingSuggestionStatus = SpottingSuggestionStatus.PENDING.name
-    )
-    viewModel.setUiStateForTesting { it.copy(activeSpottingSuggestion = suggestion) }
+      val suggestion = PartnerObservation(
+        id = "obs_A",
+        spaceId = spaceA,
+        date = "2026-06-15",
+        unloggedSpottingReported = true,
+        spottingSuggestionStatus = SpottingSuggestionStatus.PENDING.name
+      )
+      viewModel.setUiStateForTesting { it.copy(activeSpottingSuggestion = suggestion) }
 
-    viewModel.acceptSpottingSuggestion()
+      viewModel.acceptSpottingSuggestion()
 
-    // A cierra sesión y entra C
-    val testScope = CoroutineScope(Dispatchers.Unconfined)
-    viewModel.signOut(testScope)
+      val (calledSpace, calledObs, calledUser) = withTimeout(5000) { controllableCycleRepo.acceptSpottingCalled.await() }
+      assertEquals(spaceA, calledSpace)
+      assertEquals("obs_A", calledObs)
+      assertEquals(userA.uid, calledUser)
 
-    val userCUid = "user_C_000"
-    val spaceC = "space_C"
-    setupSessionForUser(userCUid, spaceC)
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
 
-    // Se resuelve la aceptación de A
-    controllableCycleRepo.acceptSpottingCompletable.complete(Result.success(Unit))
+      val userC = createRealTestUser("userC")
+      val spaceC = "space_C"
+      setupCoherentSession(userC, spaceC)
 
-    // Verificación: El estado de éxito de A no se inyecta en C
-    assertNull(viewModel.uiState.value.successMessage)
+      controllableCycleRepo.acceptSpottingDeferred.complete(Result.success(Unit))
+      Thread.sleep(150)
+
+      assertNull("User C must NOT receive User A successMessage", viewModel.uiState.value.successMessage)
+      assertNull(viewModel.uiState.value.activeSpottingSuggestion)
+    }
+  }
+
+  // --- PRUEBA 6 (Requisito I): Cierre y reapertura de la MISMA cuenta invalida la sesión anterior ---
+  @Test
+  fun `same account sign-out and re-entry invalidates operations from prior session`() {
+    runWithLooper {
+      val userA = createRealTestUser("userA_same")
+      val spaceA = "space_A"
+      val session1 = setupCoherentSession(userA, spaceA)
+
+      var callbackInvoked = false
+      var callbackSuccess = false
+
+      // 1. Inicia guardado bajo la sesión 1
+      viewModel.saveSymptom(
+        flowLevel = FlowLevel.MEDIUM,
+        painLevel = 3,
+        mood = Mood.ANXIOUS,
+        energyLevel = 2,
+        cramps = true,
+        headache = false,
+        backPain = false,
+        bloating = false,
+        publicNote = "Nota sesión 1",
+        privateNote = null,
+        isPrivate = false
+      ) { success, _ ->
+        callbackInvoked = true
+        callbackSuccess = success
+      }
+
+      val received = withTimeout(5000) { controllableCycleRepo.saveSymptomCalled.await() }
+      assertNotNull(received)
+
+      // 2. Usuario A cierra sesión
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
+
+      // 3. El MISMO usuario A vuelve a iniciar sesión (mismo UID, nueva identidad de sesión)
+      val session2 = setupCoherentSession(userA, spaceA)
+      assertNotEquals("Session ID must be rotated upon re-entry", session1, session2)
+      assertEquals(userA.uid, viewModel.activeObservedUserId)
+
+      // 4. Se completa la operación pendiente de la sesión 1
+      controllableCycleRepo.saveSymptomDeferred.complete(Unit)
+      Thread.sleep(150)
+
+      // 5. La continuación debe descartarse por sessionId obsoleto
+      assertTrue(callbackInvoked)
+      assertFalse("Stale operation from prior session must be rejected even for same user", callbackSuccess)
+      assertNull("Session 2 todaySymptom must remain null without stale overwrite", viewModel.uiState.value.todaySymptom)
+    }
   }
 }

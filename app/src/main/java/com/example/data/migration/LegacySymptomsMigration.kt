@@ -58,7 +58,10 @@ private data class CategoryOutcome(
  * 6. Dry-run simulation mode delivers exact categorization counters without mutating database.
  * 7. Anonymized error logging without printing intimate notes.
  */
-class LegacySymptomsMigration(private val db: FirebaseFirestore) {
+open class LegacySymptomsMigration(
+  private val db: FirebaseFirestore,
+  internal var onAfterReadInTransactionHook: ((date: String, attempt: Int) -> Unit)? = null
+) {
 
   suspend fun migrateSpaceSymptoms(spaceId: String, dryRun: Boolean = true): MigrationResult {
     val legacyCollection = db.collection("couple_spaces").document(spaceId).collection("symptoms")
@@ -131,10 +134,14 @@ class LegacySymptomsMigration(private val db: FirebaseFirestore) {
         } else {
           // Real transaction: DO NOT mutate outer counters inside lambda.
           // Lambda returns CategoryOutcome which is accumulated ONLY after await() succeeds.
+          var transactionAttempt = 0
           val outcome = db.runTransaction { transaction ->
+            transactionAttempt++
             val physSnap = transaction.get(physRef)
             val moodSnap = transaction.get(moodRef)
             val noteSnap = transaction.get(noteRef)
+
+            onAfterReadInTransactionHook?.invoke(date, transactionAttempt)
 
             var physCreated = false
             var physSkipped = false

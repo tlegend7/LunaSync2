@@ -366,29 +366,88 @@ class LegacySymptomsMigrationRealExecutionTest {
     }
   }
 
-  // --- ESCENARIO G: Acumulación de contadores solo post-commit confirmado ---
+  // --- ESCENARIO G: Conflicto OCC concurrente real con reintento, preservación e idempotencia ---
   @Test
-  fun `Escenario G - contadores se acumulan exclusivamente tras el commit de la transaccion`() {
+  fun `Escenario G - conflicto OCC entre lectura y commit provoca reintento sin sobreescritura ni duplicacion de contadores`() {
     runWithLooper {
       val (spaceId, uid) = createAuthenticatedSpace()
       val date = "2026-05-15"
 
+      // Legacy doc contiene físico, estado de ánimo y nota privada
       val legacyDoc = db.collection("couple_spaces").document(spaceId)
         .collection("symptoms").document(date)
       legacyDoc.set(mapOf(
         "spaceId" to spaceId,
         "date" to date,
-        "flowLevel" to FlowLevel.NONE.name,
+        "flowLevel" to FlowLevel.LIGHT.name,
+        "painLevel" to 1,
         "mood" to Mood.CALM.name,
+        "energyLevel" to 3,
+        "privateNote" to "Nota privada legacy",
         "loggedBy" to uid
       )).await()
 
+      var hookInvocations = 0
       val migration = LegacySymptomsMigration(db)
+      migration.onAfterReadInTransactionHook = { hookDate, attempt ->
+        hookInvocations++
+        if (attempt == 1) {
+          // Inyectamos una escritura concurrente externa sobre physical_symptoms
+          // justo después de que la transacción leyó (physSnap no existía en attempt 1)
+          // Esto causa un conflicto OCC garantizado al intentar el commit de attempt 1.
+          runBlocking(Dispatchers.IO) {
+            val physDoc = db.collection("couple_spaces").document(spaceId)
+              .collection("physical_symptoms").document(hookDate)
+            physDoc.set(mapOf(
+              "spaceId" to spaceId,
+              "date" to hookDate,
+              "flowLevel" to FlowLevel.HEAVY.name,
+              "painLevel" to 4,
+              "isPrivate" to true,
+              "loggedBy" to uid,
+              "updatedAt" to FieldValue.serverTimestamp()
+            )).await()
+          }
+        }
+      }
+
       val result = migration.migrateSpaceSymptoms(spaceId, dryRun = false)
 
-      assertEquals(2, result.categoriesCreated) // physical + mood (sin note)
-      assertEquals(0, result.notesMigrated)
+      // Verificamos que la transacción se reintentó (hook invocado al menos 2 veces)
+      assertTrue("Transaction must have reattempted due to OCC conflict", hookInvocations >= 2)
+
+      // Verificamos que el documento concurrente NO fue sobreescrito
+      val physSnap = db.collection("couple_spaces").document(spaceId)
+        .collection("physical_symptoms").document(date).get().await()
+      assertEquals("Concurrent external write must NOT be overwritten", FlowLevel.HEAVY.name, physSnap.getString("flowLevel"))
+      assertEquals(4L, physSnap.getLong("painLevel"))
+
+      // Verificamos que las categorías restantes (mood y private_note) SÍ se migraron
+      val moodSnap = db.collection("couple_spaces").document(spaceId)
+        .collection("mood_records").document(date).get().await()
+      assertTrue("Mood record must be migrated", moodSnap.exists())
+      assertEquals(Mood.CALM.name, moodSnap.getString("mood"))
+
+      val noteSnap = db.collection("couple_spaces").document(spaceId)
+        .collection("private_notes").document(date).get().await()
+      assertTrue("Private note must be migrated", noteSnap.exists())
+      assertEquals("Nota privada legacy", noteSnap.getString("privateNote"))
+
+      // Verificamos que los contadores NO se duplicaron por los reintentos:
+      // physicalSkipped = 1, physicalMigrated = 0, moodMigrated = 1, notesMigrated = 1, categoriesCreated = 2
+      assertEquals(0, result.physicalMigrated)
+      assertEquals(1, result.physicalSkipped)
+      assertEquals(1, result.moodMigrated)
+      assertEquals(1, result.notesMigrated)
+      assertEquals(2, result.categoriesCreated)
+      assertEquals(1, result.categoriesSkippedExisting)
       assertEquals(0, result.errorsCount)
+
+      // Verificamos idempotencia en una segunda pasada
+      val idempotentResult = migration.migrateSpaceSymptoms(spaceId, dryRun = false)
+      assertEquals(0, idempotentResult.categoriesCreated)
+      assertEquals(3, idempotentResult.categoriesSkippedExisting)
+      assertEquals(0, idempotentResult.errorsCount)
     }
   }
 
@@ -423,6 +482,49 @@ class LegacySymptomsMigrationRealExecutionTest {
         accessDenied = true
       }
       assertTrue("Stranger must be denied access to private notes by firestore.rules", accessDenied)
+    }
+  }
+
+  // --- ESCENARIO I: Rechazo de commit por reglas de seguridad y rollback atómico completo ---
+  @Test
+  fun `Escenario I - rechazo de commit por reglas provoca rollback atomico completo sin escrituras parciales`() {
+    runWithLooper {
+      val (spaceId, uid) = createAuthenticatedSpace()
+      val date = "2026-05-17"
+
+      // Insertar legacy con datos inválidos según firestore.rules (painLevel = 99 excede el máximo permitido [0..5])
+      val legacyDoc = db.collection("couple_spaces").document(spaceId)
+        .collection("symptoms").document(date)
+      legacyDoc.set(mapOf(
+        "spaceId" to spaceId,
+        "date" to date,
+        "flowLevel" to FlowLevel.LIGHT.name,
+        "painLevel" to 99, // Inválido por firestore.rules
+        "mood" to Mood.HAPPY.name,
+        "energyLevel" to 4,
+        "privateNote" to "Nota que no debe persistirse si falla el commit",
+        "loggedBy" to uid
+      )).await()
+
+      val migration = LegacySymptomsMigration(db)
+      val result = migration.migrateSpaceSymptoms(spaceId, dryRun = false)
+
+      // Verificación de contadores de error: 0 creados, 1 error registrado
+      assertEquals(0, result.categoriesCreated)
+      assertEquals(1, result.errorsCount)
+      assertEquals(1, result.errorDetails.size)
+
+      // Verificación directa en base de datos: NINGÚN documento parcial fue creado (rollback atómico total)
+      val physExists = db.collection("couple_spaces").document(spaceId)
+        .collection("physical_symptoms").document(date).get().await().exists()
+      val moodExists = db.collection("couple_spaces").document(spaceId)
+        .collection("mood_records").document(date).get().await().exists()
+      val noteExists = db.collection("couple_spaces").document(spaceId)
+        .collection("private_notes").document(date).get().await().exists()
+
+      assertFalse("Physical symptoms document must NOT exist after rollback", physExists)
+      assertFalse("Mood record document must NOT exist after rollback", moodExists)
+      assertFalse("Private note document must NOT exist after rollback", noteExists)
     }
   }
 }

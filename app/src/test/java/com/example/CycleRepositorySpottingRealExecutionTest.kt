@@ -329,4 +329,129 @@ class CycleRepositorySpottingRealExecutionTest {
       assertEquals(FlowLevel.SPOTTING.name, physSnap.getString("flowLevel"))
     }
   }
+
+  // --- ESCENARIO I: Rollback atómico ante fallo de commit por reglas de seguridad ---
+  @Test
+  fun `Escenario I - rechazo de commit por reglas provoca rollback atomico preservando estado PENDING y sintomas intactos`() {
+    runWithLooper {
+      val date = "2026-06-10"
+      val ellaEmail = "ella_${UUID.randomUUID()}@test.com"
+      val ellaAuth = auth.createUserWithEmailAndPassword(ellaEmail, "password123").await()
+      val ellaUid = ellaAuth.user!!.uid
+
+      val partnerEmail = "partner_${UUID.randomUUID()}@test.com"
+      val partnerAuth = auth.createUserWithEmailAndPassword(partnerEmail, "password123").await()
+      val partnerUid = partnerAuth.user!!.uid
+
+      val spaceRepo = com.example.data.repository.CoupleSpaceRepository(application, db)
+
+      auth.signInWithEmailAndPassword(ellaEmail, "password123").await()
+      val spaceId = spaceRepo.createSpace(ellaUid, 28, 5)
+      val inviteCode = spaceRepo.generateInviteCode(spaceId, ellaUid)
+
+      auth.signInWithEmailAndPassword(partnerEmail, "password123").await()
+      val joinRes = spaceRepo.joinWithCode(inviteCode, partnerUid)
+      assertTrue(joinRes.isSuccess)
+
+      val obsId = "obs_${UUID.randomUUID().toString().take(8)}"
+      val obsDoc = db.collection("couple_spaces").document(spaceId)
+        .collection("observations").document(obsId)
+      obsDoc.set(mapOf(
+        "spaceId" to spaceId,
+        "date" to date,
+        "perceivedMood" to PerceivedMood.TIRED.name,
+        "apparentPainLevel" to 2,
+        "unloggedSpottingReported" to true,
+        "spottingSuggestionStatus" to SpottingSuggestionStatus.PENDING.name,
+        "careActionTaken" to "Bolsa térmica",
+        "sweetMessage" to "Descansa amor",
+        "loggedBy" to partnerUid,
+        "createdAt" to FieldValue.serverTimestamp()
+      )).await()
+
+      // Ella inicia sesión y crea legítimamente un registro de síntoma previo
+      auth.signInWithEmailAndPassword(ellaEmail, "password123").await()
+      val physDoc = db.collection("couple_spaces").document(spaceId)
+        .collection("physical_symptoms").document(date)
+      physDoc.set(mapOf(
+        "spaceId" to spaceId,
+        "date" to date,
+        "flowLevel" to FlowLevel.NONE.name,
+        "painLevel" to 1,
+        "isPrivate" to true,
+        "loggedBy" to ellaUid,
+        "updatedAt" to FieldValue.serverTimestamp()
+      )).await()
+
+      // Hook post-lectura: provocamos el rechazo en commit cerrando la sesión antes del commit.
+      // Al no estar autenticado al momento del commit, firestore.rules rechaza la actualización atómica.
+      cycleRepo.onAfterReadInSpottingTransactionHook = { _, _ ->
+        auth.signOut()
+      }
+
+      val result = cycleRepo.acceptSpottingSuggestion(spaceId, obsId, date, ellaUid)
+      assertTrue("Result must be failure when transaction commit is rejected by rules", result.isFailure)
+
+      // Ella vuelve a autenticarse para verificar el estado en el servidor
+      auth.signInWithEmailAndPassword(ellaEmail, "password123").await()
+
+      // Verificación directa en el servidor de Firestore:
+      // 1. La observación debe PERMANECER en PENDING (rollback atómico completo del commit)
+      val obsSnap = obsDoc.get().await()
+      assertEquals("Observation MUST remain PENDING due to atomic rollback", SpottingSuggestionStatus.PENDING.name, obsSnap.getString("spottingSuggestionStatus"))
+
+      // 2. El síntoma físico debe estar intacto: flujo NONE, privacidad true, loggedBy original
+      val physSnap = physDoc.get().await()
+      assertEquals(FlowLevel.NONE.name, physSnap.getString("flowLevel"))
+      assertEquals(true, physSnap.getBoolean("isPrivate"))
+      assertEquals(ellaUid, physSnap.getString("loggedBy"))
+    }
+  }
+
+  // --- ESCENARIO J: Edición concurrente controlada preserva flujo abundante y privacidad ---
+  @Test
+  fun `Escenario J - edicion concurrente controlada preserva flujo HEAVY y privacidad tras reintento transaccional`() {
+    runWithLooper {
+      val date = "2026-06-11"
+      val (spaceId, obsId, uid) = createAuthenticatedSpaceAndObservation(date)
+
+      var hookInvocations = 0
+      cycleRepo.onAfterReadInSpottingTransactionHook = { hookDate, attempt ->
+        hookInvocations++
+        if (attempt == 1) {
+          // Simulamos una edición concurrente externa legítima por la usuaria
+          // justo después de que la transacción leyó (provoca conflicto OCC y reintento)
+          runBlocking(Dispatchers.IO) {
+            val physDoc = db.collection("couple_spaces").document(spaceId)
+              .collection("physical_symptoms").document(hookDate)
+            physDoc.set(mapOf(
+              "spaceId" to spaceId,
+              "date" to hookDate,
+              "flowLevel" to FlowLevel.HEAVY.name,
+              "painLevel" to 3,
+              "isPrivate" to true,
+              "loggedBy" to uid,
+              "updatedAt" to FieldValue.serverTimestamp()
+            )).await()
+          }
+        }
+      }
+
+      val result = cycleRepo.acceptSpottingSuggestion(spaceId, obsId, date, uid)
+      assertTrue("Transaction must eventually succeed after OCC retry", result.isSuccess)
+      assertTrue("Hook must have been invoked at least twice", hookInvocations >= 2)
+
+      // Verificación directa en Firestore:
+      // La observación quedó ACCEPTED
+      val obsSnap = db.collection("couple_spaces").document(spaceId)
+        .collection("observations").document(obsId).get().await()
+      assertEquals(SpottingSuggestionStatus.ACCEPTED.name, obsSnap.getString("spottingSuggestionStatus"))
+
+      // El flujo HEAVY NO fue degradado a SPOTTING y la privacidad fue preservada en true
+      val physSnap = db.collection("couple_spaces").document(spaceId)
+        .collection("physical_symptoms").document(date).get().await()
+      assertEquals("HEAVY flow must be strictly preserved without downgrade", FlowLevel.HEAVY.name, physSnap.getString("flowLevel"))
+      assertEquals("Privacy must remain true", true, physSnap.getBoolean("isPrivate"))
+    }
+  }
 }

@@ -24,15 +24,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-class AuthRepository(private val context: Context) {
-  private val auth: FirebaseAuth = FirestoreProvider.getAuth()
+open class AuthRepository(
+  private val context: Context,
+  protected val auth: FirebaseAuth = FirestoreProvider.getAuth()
+) {
   private val credentialManager: CredentialManager = CredentialManager.create(context)
 
-  private val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
-  val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
+  protected val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
+  open val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
 
-  private val _userRole = MutableStateFlow(UserRole.PRIMARY_ELLA)
-  val userRole: StateFlow<UserRole> = _userRole.asStateFlow()
+  protected val _userRole = MutableStateFlow(UserRole.PRIMARY_ELLA)
+  open val userRole: StateFlow<UserRole> = _userRole.asStateFlow()
 
   init {
     auth.addAuthStateListener { firebaseAuth ->
@@ -40,7 +42,7 @@ class AuthRepository(private val context: Context) {
     }
   }
 
-  fun setRole(role: UserRole) {
+  open fun setRole(role: UserRole) {
     _userRole.value = role
   }
 
@@ -131,7 +133,7 @@ class AuthRepository(private val context: Context) {
     }
   }
 
-  fun signOut(scope: CoroutineScope, onComplete: () -> Unit) {
+  open fun signOut(scope: CoroutineScope, onComplete: () -> Unit) {
     auth.signOut()
     _currentUser.value = null
     scope.launch {

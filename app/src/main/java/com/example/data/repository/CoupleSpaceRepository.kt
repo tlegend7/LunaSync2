@@ -32,7 +32,7 @@ open class CoupleSpaceRepository(
   protected val auth: FirebaseAuth = FirestoreProvider.getAuth()
   private val secureRandom = SecureRandom()
 
-  fun observeSpace(spaceId: String): Flow<CoupleSpace?> {
+  open fun observeSpace(spaceId: String): Flow<CoupleSpace?> {
     return db.collection("couple_spaces").document(spaceId)
       .snapshots()
       .map { snapshot ->
@@ -40,7 +40,7 @@ open class CoupleSpaceRepository(
       }
   }
 
-  fun observeUserSpaceDetailed(userId: String): Flow<SpaceObservationResult> = callbackFlow {
+  open fun observeUserSpaceDetailed(userId: String): Flow<SpaceObservationResult> = callbackFlow {
     trySend(SpaceObservationResult.Loading)
 
     var ownerSpace: CoupleSpace? = null

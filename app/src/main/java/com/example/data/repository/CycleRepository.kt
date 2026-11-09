@@ -41,7 +41,8 @@ data class SharedSymptomState(
 
 open class CycleRepository(
   context: Context,
-  protected val db: FirebaseFirestore = FirestoreProvider.getDb(context)
+  protected val db: FirebaseFirestore = FirestoreProvider.getDb(context),
+  internal var onAfterReadInSpottingTransactionHook: ((date: String, attempt: Int) -> Unit)? = null
 ) {
 
   fun observeCycles(spaceId: String): Flow<List<CycleEntry>> {
@@ -266,8 +267,10 @@ open class CycleRepository(
     val physRef = db.collection("couple_spaces").document(spaceId)
       .collection("physical_symptoms").document(date)
 
+    var transactionAttempt = 0
     return try {
       db.runTransaction { transaction ->
+        transactionAttempt++
         val obsSnap = transaction.get(obsRef)
         if (!obsSnap.exists()) {
           throw IllegalArgumentException("La observación no existe")
@@ -286,6 +289,7 @@ open class CycleRepository(
         }
 
         val physSnap = transaction.get(physRef)
+        onAfterReadInSpottingTransactionHook?.invoke(date, transactionAttempt)
         val existingFlow = physSnap.getString("flowLevel")
         val existingIsPrivate = physSnap.getBoolean("isPrivate")
         val existingPainLevel = physSnap.getLong("painLevel")?.toInt() ?: 0
