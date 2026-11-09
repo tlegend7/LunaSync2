@@ -225,12 +225,10 @@ class SessionPendingOperationsTest {
       val spaceA = "space_A"
       val sessionA = setupCoherentSession(userA, spaceA)
 
-      var callbackInvoked = false
-      var callbackSuccess = false
-      var callbackError: String? = null
+      val callbackDeferred = CompletableDeferred<Pair<Boolean, String?>>()
 
       // 1. Invocar guardado real en ViewModel
-      viewModel.saveSymptom(
+      val operationJob = viewModel.saveSymptom(
         flowLevel = FlowLevel.LIGHT,
         painLevel = 2,
         mood = Mood.CALM,
@@ -243,19 +241,18 @@ class SessionPendingOperationsTest {
         privateNote = null,
         isPrivate = false
       ) { success, err ->
-        callbackInvoked = true
-        callbackSuccess = success
-        callbackError = err
+        callbackDeferred.complete(Pair(success, err))
       }
 
-      // 2. Esperar de forma determinista a que el repositorio confirme recepción
+      // 2. Señal 1: Esperar de forma determinista a que el repositorio confirme recepción
       val receivedSymptom = withTimeout(5000) { controllableCycleRepo.saveSymptomCalled.await() }
       assertNotNull("Operation MUST reach repository or test fails", receivedSymptom)
       assertEquals(spaceA, receivedSymptom.spaceId)
       assertEquals(userA.uid, receivedSymptom.loggedBy)
       assertEquals("Nota confidencial de A", receivedSymptom.publicNote)
       assertFalse("Operation must still be pending", controllableCycleRepo.saveSymptomDeferred.isCompleted)
-      assertFalse("Callback must not be invoked yet", callbackInvoked)
+      assertFalse("Callback must not be invoked yet", callbackDeferred.isCompleted)
+      assertFalse("Job must not be completed yet", operationJob.isCompleted)
 
       // 3. Cerrar sesión de A mediante ruta real
       val testScope = CoroutineScope(Dispatchers.Unconfined)
@@ -269,10 +266,13 @@ class SessionPendingOperationsTest {
 
       // 5. Completar la operación de A
       controllableCycleRepo.saveSymptomDeferred.complete(Unit)
-      Thread.sleep(150)
+
+      // Señal 2: Sincronización determinista sin Thread.sleep
+      val (callbackSuccess, callbackError) = withTimeout(5000) { callbackDeferred.await() }
+      withTimeout(5000) { operationJob.join() }
+      assertTrue("ViewModel job must be completed", operationJob.isCompleted)
 
       // 6. Verificación de blindaje
-      assertTrue("Callback must be invoked", callbackInvoked)
       assertFalse("Late response must be rejected for invalidated session", callbackSuccess)
       assertEquals("Sesión no válida", callbackError)
 
@@ -291,10 +291,9 @@ class SessionPendingOperationsTest {
       val spaceA = "space_A"
       setupCoherentSession(userA, spaceA)
 
-      var callbackInvoked = false
-      var callbackError: String? = null
+      val callbackDeferred = CompletableDeferred<Pair<Boolean, String?>>()
 
-      viewModel.saveSymptom(
+      val operationJob = viewModel.saveSymptom(
         flowLevel = FlowLevel.NONE,
         painLevel = 0,
         mood = Mood.CALM,
@@ -307,12 +306,14 @@ class SessionPendingOperationsTest {
         privateNote = null,
         isPrivate = false
       ) { success, err ->
-        callbackInvoked = true
-        callbackError = err
+        callbackDeferred.complete(Pair(success, err))
       }
 
       val receivedSymptom = withTimeout(5000) { controllableCycleRepo.saveSymptomCalled.await() }
       assertNotNull(receivedSymptom)
+      assertFalse("Operation must still be pending", controllableCycleRepo.saveSymptomDeferred.isCompleted)
+      assertFalse("Job must not be completed yet", operationJob.isCompleted)
+      assertFalse("Callback must not be invoked yet", callbackDeferred.isCompleted)
 
       val testScope = CoroutineScope(Dispatchers.Unconfined)
       viewModel.signOut(testScope)
@@ -324,9 +325,13 @@ class SessionPendingOperationsTest {
       // Falla la operación de A
       val networkEx = RuntimeException("Error fatal en la red de A")
       controllableCycleRepo.saveSymptomDeferred.completeExceptionally(networkEx)
-      Thread.sleep(150)
 
-      assertTrue(callbackInvoked)
+      // Señal 2: Sincronización determinista sin Thread.sleep
+      val (callbackSuccess, callbackError) = withTimeout(5000) { callbackDeferred.await() }
+      withTimeout(5000) { operationJob.join() }
+      assertTrue("ViewModel job must be completed", operationJob.isCompleted)
+
+      assertFalse("Failure callback must report failure", callbackSuccess)
       assertEquals("Error fatal en la red de A", callbackError)
       assertNull("User C errorMessage must NOT be contaminated with User A error", viewModel.uiState.value.errorMessage)
     }
@@ -340,12 +345,14 @@ class SessionPendingOperationsTest {
       val spaceA = "space_A"
       setupCoherentSession(userA, spaceA)
 
-      viewModel.generatePairingCode()
+      val operationJob = viewModel.generatePairingCode()
 
-      // Confirmar que entró al repositorio con los argumentos de A
+      // Señal 1: Confirmar que entró al repositorio con los argumentos de A
       val (calledSpace, calledUser) = withTimeout(5000) { controllableSpaceRepo.generateCodeCalled.await() }
       assertEquals(spaceA, calledSpace)
       assertEquals(userA.uid, calledUser)
+      assertFalse("Operation must still be pending", controllableSpaceRepo.generateCodeDeferred.isCompleted)
+      assertFalse("Job must not be completed yet", operationJob.isCompleted)
 
       val testScope = CoroutineScope(Dispatchers.Unconfined)
       viewModel.signOut(testScope)
@@ -356,7 +363,10 @@ class SessionPendingOperationsTest {
 
       // Se resuelve el código de A
       controllableSpaceRepo.generateCodeDeferred.complete("LUNA-AAAA")
-      Thread.sleep(150)
+
+      // Señal 2: Sincronización determinista mediante Job.join() sin Thread.sleep
+      withTimeout(5000) { operationJob.join() }
+      assertTrue("Operation job must be completed", operationJob.isCompleted)
 
       assertNull("User C must NOT receive User A pairing code", viewModel.uiState.value.activePairingCode)
       assertEquals(spaceC, viewModel.uiState.value.space?.id)
@@ -371,11 +381,14 @@ class SessionPendingOperationsTest {
       val spaceA = "space_A"
       setupCoherentSession(userA, spaceA)
 
-      viewModel.joinWithCode("LUNA-JOIN")
+      val operationJob = viewModel.joinWithCode("LUNA-JOIN")
 
+      // Señal 1: Confirmar que entró al repositorio
       val (calledCode, calledPartner) = withTimeout(5000) { controllableSpaceRepo.joinCodeCalled.await() }
       assertEquals("LUNA-JOIN", calledCode)
       assertEquals(userA.uid, calledPartner)
+      assertFalse("Operation must still be pending", controllableSpaceRepo.joinCodeDeferred.isCompleted)
+      assertFalse("Job must not be completed yet", operationJob.isCompleted)
 
       val testScope = CoroutineScope(Dispatchers.Unconfined)
       viewModel.signOut(testScope)
@@ -385,7 +398,10 @@ class SessionPendingOperationsTest {
       setupCoherentSession(userC, spaceC)
 
       controllableSpaceRepo.joinCodeDeferred.complete(Result.success("space_from_code"))
-      Thread.sleep(150)
+
+      // Señal 2: Sincronización determinista mediante Job.join() sin Thread.sleep
+      withTimeout(5000) { operationJob.join() }
+      assertTrue("Operation job must be completed", operationJob.isCompleted)
 
       assertEquals("User C space must remain space_C", spaceC, viewModel.uiState.value.space?.id)
     }
@@ -408,12 +424,15 @@ class SessionPendingOperationsTest {
       )
       viewModel.setUiStateForTesting { it.copy(activeSpottingSuggestion = suggestion) }
 
-      viewModel.acceptSpottingSuggestion()
+      val operationJob = viewModel.acceptSpottingSuggestion()
 
+      // Señal 1: Confirmar que entró al repositorio
       val (calledSpace, calledObs, calledUser) = withTimeout(5000) { controllableCycleRepo.acceptSpottingCalled.await() }
       assertEquals(spaceA, calledSpace)
       assertEquals("obs_A", calledObs)
       assertEquals(userA.uid, calledUser)
+      assertFalse("Operation must still be pending", controllableCycleRepo.acceptSpottingDeferred.isCompleted)
+      assertFalse("Job must not be completed yet", operationJob.isCompleted)
 
       val testScope = CoroutineScope(Dispatchers.Unconfined)
       viewModel.signOut(testScope)
@@ -423,7 +442,10 @@ class SessionPendingOperationsTest {
       setupCoherentSession(userC, spaceC)
 
       controllableCycleRepo.acceptSpottingDeferred.complete(Result.success(Unit))
-      Thread.sleep(150)
+
+      // Señal 2: Sincronización determinista mediante Job.join() sin Thread.sleep
+      withTimeout(5000) { operationJob.join() }
+      assertTrue("Operation job must be completed", operationJob.isCompleted)
 
       assertNull("User C must NOT receive User A successMessage", viewModel.uiState.value.successMessage)
       assertNull(viewModel.uiState.value.activeSpottingSuggestion)
@@ -438,11 +460,10 @@ class SessionPendingOperationsTest {
       val spaceA = "space_A"
       val session1 = setupCoherentSession(userA, spaceA)
 
-      var callbackInvoked = false
-      var callbackSuccess = false
+      val callbackDeferred = CompletableDeferred<Pair<Boolean, String?>>()
 
       // 1. Inicia guardado bajo la sesión 1
-      viewModel.saveSymptom(
+      val operationJob = viewModel.saveSymptom(
         flowLevel = FlowLevel.MEDIUM,
         painLevel = 3,
         mood = Mood.ANXIOUS,
@@ -454,13 +475,16 @@ class SessionPendingOperationsTest {
         publicNote = "Nota sesión 1",
         privateNote = null,
         isPrivate = false
-      ) { success, _ ->
-        callbackInvoked = true
-        callbackSuccess = success
+      ) { success, err ->
+        callbackDeferred.complete(Pair(success, err))
       }
 
+      // Señal 1: Recepción en repositorio
       val received = withTimeout(5000) { controllableCycleRepo.saveSymptomCalled.await() }
       assertNotNull(received)
+      assertFalse("Operation must still be pending", controllableCycleRepo.saveSymptomDeferred.isCompleted)
+      assertFalse("Job must not be completed yet", operationJob.isCompleted)
+      assertFalse("Callback must not be invoked yet", callbackDeferred.isCompleted)
 
       // 2. Usuario A cierra sesión
       val testScope = CoroutineScope(Dispatchers.Unconfined)
@@ -473,11 +497,15 @@ class SessionPendingOperationsTest {
 
       // 4. Se completa la operación pendiente de la sesión 1
       controllableCycleRepo.saveSymptomDeferred.complete(Unit)
-      Thread.sleep(150)
+
+      // Señal 2: Sincronización determinista sin Thread.sleep
+      val (callbackSuccess, callbackError) = withTimeout(5000) { callbackDeferred.await() }
+      withTimeout(5000) { operationJob.join() }
+      assertTrue("Operation job must be completed", operationJob.isCompleted)
 
       // 5. La continuación debe descartarse por sessionId obsoleto
-      assertTrue(callbackInvoked)
       assertFalse("Stale operation from prior session must be rejected even for same user", callbackSuccess)
+      assertEquals("Sesión no válida", callbackError)
       assertNull("Session 2 todaySymptom must remain null without stale overwrite", viewModel.uiState.value.todaySymptom)
     }
   }

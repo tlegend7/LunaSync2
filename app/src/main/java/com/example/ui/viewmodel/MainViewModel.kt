@@ -479,19 +479,19 @@ class MainViewModel(
     authRepo.signOut(scope) {}
   }
 
-  fun generatePairingCode() {
+  fun generatePairingCode(): Job {
     if (_uiState.value.isGuestMode) {
       _uiState.value = _uiState.value.copy(
         activePairingCode = "LUNA-DEMO",
         successMessage = "Código demo activo: LUNA-DEMO"
       )
-      return
+      return Job().apply { complete() }
     }
-    val space = _uiState.value.space ?: return
-    val user = _uiState.value.currentUser ?: return
+    val space = _uiState.value.space ?: return Job().apply { complete() }
+    val user = _uiState.value.currentUser ?: return Job().apply { complete() }
     val sessionId = currentSessionId
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       try {
         val code = spaceRepo.generateInviteCode(space.id, user.uid)
@@ -514,17 +514,17 @@ class MainViewModel(
     }
   }
 
-  fun joinWithCode(code: String) {
+  fun joinWithCode(code: String): Job {
     if (_uiState.value.isGuestMode) {
       _uiState.value = _uiState.value.copy(
         successMessage = "¡Vinculado en Modo Demo con éxito!"
       )
-      return
+      return Job().apply { complete() }
     }
-    val user = _uiState.value.currentUser ?: return
+    val user = _uiState.value.currentUser ?: return Job().apply { complete() }
     val sessionId = currentSessionId
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       val result = spaceRepo.joinWithCode(code, user.uid)
       if (isSessionValid(sessionId, user.uid)) {
@@ -604,7 +604,7 @@ class MainViewModel(
     privateNote: String?,
     isPrivate: Boolean,
     onComplete: (Boolean, String?) -> Unit
-  ) {
+  ): Job {
     val dateStr = _uiState.value.selectedDate.toString()
     val symptom = DailySymptom(
       spaceId = _uiState.value.space?.id ?: "demo_space",
@@ -634,19 +634,19 @@ class MainViewModel(
       )
       refreshCycleCalculations()
       onComplete(true, null)
-      return
+      return Job().apply { complete() }
     }
 
     val space = _uiState.value.space
     if (space == null) {
       onComplete(false, "No hay un espacio activo para guardar")
-      return
+      return Job().apply { complete() }
     }
 
     val sessionId = currentSessionId
     val user = _uiState.value.currentUser
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       try {
         cycleRepo.saveDailySymptom(symptom)
         if (isSessionValid(sessionId, user?.uid)) {
@@ -883,21 +883,21 @@ class MainViewModel(
     }
   }
 
-  fun acceptSpottingSuggestion() {
+  fun acceptSpottingSuggestion(): Job {
     if (_uiState.value.isGuestMode) {
       _uiState.value = _uiState.value.copy(
         activeSpottingSuggestion = null,
         successMessage = "Manchado confirmado y añadido a tu registro de hoy"
       )
-      return
+      return Job().apply { complete() }
     }
 
-    val space = _uiState.value.space ?: return
-    val user = _uiState.value.currentUser ?: return
-    val suggestion = _uiState.value.activeSpottingSuggestion ?: return
+    val space = _uiState.value.space ?: return Job().apply { complete() }
+    val user = _uiState.value.currentUser ?: return Job().apply { complete() }
+    val suggestion = _uiState.value.activeSpottingSuggestion ?: return Job().apply { complete() }
     val sessionId = currentSessionId
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       val result = cycleRepo.acceptSpottingSuggestion(
         spaceId = space.id,
         observationId = suggestion.id,
