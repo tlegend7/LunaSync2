@@ -480,4 +480,162 @@ class SessionAndCalendarIntegrationTest {
     assertNotNull("Intimacy log must be saved for the captured date", savedLog)
     assertNull("No log should exist for the subsequently mutated date", vm.uiState.value.intimacyLogs.firstOrNull { it.date == subsequentDate.toString() })
   }
+
+  @Test
+  fun testDailyBleedingSymptomUpdatesTodaySummaryAndSelectedDetail() = runWithLooper {
+    val email = "ella_bleed_${UUID.randomUUID()}@test.com"
+    val authResult = auth.createUserWithEmailAndPassword(email, "password123").await()
+    val user = authResult.user!!
+
+    val vm = createVm()
+    val spaceId = coupleRepo.createSpace(user.uid, 28, 5)
+    setupCoherentSession(vm, user, spaceId)
+
+    // Setup active cycle: started 10 days ago, confirmed ended 7 days ago
+    val startPast = fixedDate.minusDays(10)
+    val endPast = fixedDate.minusDays(7)
+    cycleRepo.recordPeriodStart(spaceId, startPast, endPast).getOrThrow()
+
+    // Refresh calculations for initial state
+    vm.setUiStateForTesting { state ->
+      state.copy(
+        pastCycles = listOf(
+          com.example.data.model.CycleEntry(
+            id = startPast.toString(),
+            startDate = startPast.toString(),
+            endDate = endPast.toString(),
+            periodDuration = 4,
+            cycleLength = null,
+            isCalculated = false
+          )
+        )
+      )
+    }
+    vm.selectDate(fixedDate)
+
+    // Initially on Day 11 post-period: Phase should be FOLLICULAR
+    assertNotNull(vm.uiState.value.cycleStatus)
+    assertEquals(com.example.data.model.CyclePhase.FOLLICULAR, vm.uiState.value.cycleStatus!!.currentPhase)
+
+    // 1. Log daily bleeding (LIGHT) on today (Day 11, outside confirmed menstrual interval)
+    var saveSuccess = false
+    vm.saveSymptom(
+      date = fixedDate,
+      flowLevel = FlowLevel.LIGHT,
+      painLevel = 1,
+      mood = Mood.CALM,
+      energyLevel = 3,
+      cramps = false,
+      headache = false,
+      backPain = false,
+      bloating = false,
+      cervicalMucus = com.example.data.model.CervicalMucus.NONE,
+      tenderBreasts = false,
+      cravings = false,
+      acne = false,
+      publicNote = null,
+      privateNote = null,
+      isPrivate = false,
+      onComplete = { success, _ -> saveSuccess = success }
+    ).join()
+
+    assertTrue("Symptom save must succeed", saveSuccess)
+
+    // Summary must immediately update to MENSTRUAL phase based on today's bleeding fact
+    assertEquals(com.example.data.model.CyclePhase.MENSTRUAL, vm.uiState.value.cycleStatus!!.currentPhase)
+    assertEquals(com.example.data.model.DayHighlightType.ACTUAL_PERIOD, vm.uiState.value.selectedDayDetail!!.highlightType)
+    assertTrue(vm.uiState.value.selectedDayDetail!!.isPeriodConfirmed)
+
+    // 2. Retract bleeding: edit today's symptom to flowLevel = NONE
+    var retractSuccess = false
+    vm.saveSymptom(
+      date = fixedDate,
+      flowLevel = FlowLevel.NONE,
+      painLevel = 0,
+      mood = Mood.CALM,
+      energyLevel = 3,
+      cramps = false,
+      headache = false,
+      backPain = false,
+      bloating = false,
+      cervicalMucus = com.example.data.model.CervicalMucus.NONE,
+      tenderBreasts = false,
+      cravings = false,
+      acne = false,
+      publicNote = null,
+      privateNote = null,
+      isPrivate = false,
+      onComplete = { success, _ -> retractSuccess = success }
+    ).join()
+
+    assertTrue("Retract save must succeed", retractSuccess)
+
+    // Summary must immediately revert back to FOLLICULAR phase
+    assertEquals(com.example.data.model.CyclePhase.FOLLICULAR, vm.uiState.value.cycleStatus!!.currentPhase)
+    assertFalse(vm.uiState.value.selectedDayDetail!!.isPeriodConfirmed)
+    assertFalse(vm.uiState.value.selectedDayDetail!!.highlightType == com.example.data.model.DayHighlightType.ACTUAL_PERIOD)
+  }
+
+  @Test
+  fun testPartnerZeroTrustBleedingAndSymptomPermissions() = runWithLooper {
+    val ellaEmail = "ella_perm_${UUID.randomUUID()}@test.com"
+    val ellaAuth = auth.createUserWithEmailAndPassword(ellaEmail, "password123").await()
+    val ellaUser = ellaAuth.user!!
+
+    val partnerEmail = "partner_perm_${UUID.randomUUID()}@test.com"
+    val partnerAuth = auth.createUserWithEmailAndPassword(partnerEmail, "password123").await()
+    val partnerUser = partnerAuth.user!!
+
+    val spaceId = coupleRepo.createSpace(ellaUser.uid, 28, 5)
+
+    // Ella logs a shared symptom (public) and a private symptom (isPrivate = true)
+    val publicDate = "2026-06-14"
+    val privateDate = "2026-06-15"
+
+    cycleRepo.saveDailySymptom(
+      com.example.data.model.DailySymptom(
+        spaceId = spaceId,
+        date = publicDate,
+        flowLevel = FlowLevel.LIGHT.name,
+        isPrivate = false,
+        loggedBy = ellaUser.uid
+      )
+    )
+
+    cycleRepo.saveDailySymptom(
+      com.example.data.model.DailySymptom(
+        spaceId = spaceId,
+        date = privateDate,
+        flowLevel = FlowLevel.MEDIUM.name,
+        privateNote = "Nota médica confidencial",
+        isPrivate = true,
+        loggedBy = ellaUser.uid
+      )
+    )
+
+    // 1. Partner with shareSymptoms = false receives empty list
+    val partnerSymptomsNoShare = kotlinx.coroutines.flow.first(
+      cycleRepo.observeDailySymptoms(
+        spaceId = spaceId,
+        isElla = false,
+        shareSymptoms = false,
+        shareMood = false
+      )
+    )
+    assertTrue("Partner without shareSymptoms permission must receive empty list", partnerSymptomsNoShare.isEmpty())
+
+    // 2. Partner with shareSymptoms = true receives ONLY the public symptom
+    val partnerSymptomsWithShare = kotlinx.coroutines.flow.first(
+      cycleRepo.observeDailySymptoms(
+        spaceId = spaceId,
+        isElla = false,
+        shareSymptoms = true,
+        shareMood = false
+      )
+    )
+    assertEquals(1, partnerSymptomsWithShare.size)
+    assertEquals(publicDate, partnerSymptomsWithShare[0].date)
+    assertNull("Partner must never receive privateNote", partnerSymptomsWithShare[0].privateNote)
+    assertFalse("Partner must not see private symptoms", partnerSymptomsWithShare.any { it.isPrivate })
+  }
 }

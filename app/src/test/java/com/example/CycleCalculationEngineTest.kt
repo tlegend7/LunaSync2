@@ -552,4 +552,83 @@ class CycleCalculationEngineTest {
     assertTrue(tips.isNotEmpty())
     assertTrue(tips.any { it.title.contains("Paciencia") || it.description.contains("estrés") })
   }
+
+  @Test
+  fun testProblemA_DailyBleedingConnectsToDayDetailAndOverridesProjections() {
+    // Exact reproduction case from review:
+    // Start: 2026-11-01, confirmed end: 2026-11-03, cycle length: 28 days
+    val lastStart = LocalDate.of(2026, 11, 1)
+    val cycle = CycleEntry(
+      id = "c1",
+      startDate = "2026-11-01",
+      endDate = "2026-11-03",
+      periodDuration = 3,
+      cycleLength = null,
+      isCalculated = false
+    )
+    val pastCycles = listOf(cycle)
+    val testDate = LocalDate.of(2026, 11, 10) // Nov 10 falls in fertile window without bleeding facts
+
+    // 1. Without confirmed bleeding facts (empty confirmedBleedingDates):
+    // Returns FERTILE_WINDOW (highlightType = FERTILE_WINDOW, isPeriodConfirmed = false)
+    val detailWithoutBleeding = CycleCalculationEngine.getDayDetail(
+      date = testDate,
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      configuredAverageCycle = 28,
+      today = LocalDate.of(2026, 11, 5),
+      confirmedBleedingDates = emptySet()
+    )
+    assertEquals(DayHighlightType.FERTILE_WINDOW, detailWithoutBleeding.highlightType)
+    assertFalse(detailWithoutBleeding.isPeriodConfirmed)
+
+    // 2. With confirmed bleeding facts on Nov 10 (confirmedBleedingDates = {2026-11-10}):
+    // Must return ACTUAL_PERIOD with isPeriodConfirmed = true and cycleDay = 10
+    val detailWithBleeding = CycleCalculationEngine.getDayDetail(
+      date = testDate,
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      configuredAverageCycle = 28,
+      today = LocalDate.of(2026, 11, 5),
+      confirmedBleedingDates = setOf(testDate)
+    )
+    assertEquals(DayHighlightType.ACTUAL_PERIOD, detailWithBleeding.highlightType)
+    assertTrue("Confirmed bleeding must set isPeriodConfirmed to true", detailWithBleeding.isPeriodConfirmed)
+    assertFalse("Confirmed fact must not be marked as predicted", detailWithBleeding.isPredicted)
+    assertEquals(10, detailWithBleeding.cycleDay)
+    assertTrue(detailWithBleeding.phaseName.contains("Menstruación confirmada"))
+  }
+
+  @Test
+  fun testProblemB_SpottingDoesNotMarkDayAsConfirmedPeriod() {
+    // Start: 2026-11-01, confirmed end: 2026-11-03.
+    // Spotting on Nov 10 must NOT be treated as confirmed menstrual bleeding.
+    val lastStart = LocalDate.of(2026, 11, 1)
+    val cycle = CycleEntry(
+      id = "c1",
+      startDate = "2026-11-01",
+      endDate = "2026-11-03",
+      periodDuration = 3,
+      cycleLength = null,
+      isCalculated = false
+    )
+    val pastCycles = listOf(cycle)
+    val testDate = LocalDate.of(2026, 11, 10)
+
+    // Under consistent policy, spotting is excluded from confirmedBleedingDates.
+    // Therefore, getDayDetail does not receive it in confirmedBleedingDates.
+    val detail = CycleCalculationEngine.getDayDetail(
+      date = testDate,
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      configuredAverageCycle = 28,
+      today = LocalDate.of(2026, 11, 5),
+      confirmedBleedingDates = emptySet() // SPOTTING is NOT in confirmed bleeding dates
+    )
+    assertFalse("Spotting must not turn day into ACTUAL_PERIOD", detail.highlightType == DayHighlightType.ACTUAL_PERIOD)
+    assertFalse("Spotting must not confirm period", detail.isPeriodConfirmed)
+  }
 }
