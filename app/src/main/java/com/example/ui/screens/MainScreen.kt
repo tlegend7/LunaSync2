@@ -68,6 +68,7 @@ import com.example.data.model.SpaceStatus
 import com.example.data.model.UserRole
 import com.example.ui.dialogs.IntimacyLogDialog
 import com.example.ui.dialogs.PartnerObservationDialog
+import com.example.ui.dialogs.PeriodLogDialog
 import com.example.ui.dialogs.SendCheckInDialog
 import com.example.ui.dialogs.SymptomLogDialog
 import com.example.ui.theme.AppleHairlineBorder
@@ -92,6 +93,7 @@ fun MainScreen(
   var showJoinCodeFormOnboarding by remember { mutableStateOf(false) }
 
   // Dialog triggers
+  var showPeriodDialog by remember { mutableStateOf(false) }
   var showSymptomDialog by remember { mutableStateOf(false) }
   var showIntimacyDialog by remember { mutableStateOf(false) }
   var showObservationDialog by remember { mutableStateOf(false) }
@@ -226,6 +228,7 @@ fun MainScreen(
                   partnerObservations = uiState.partnerObservations,
                   latestCheckIn = uiState.latestCheckIn,
                   activeSpottingSuggestion = uiState.activeSpottingSuggestion,
+                  onOpenPeriodDialog = { showPeriodDialog = true },
                   onOpenSymptomDialog = { showSymptomDialog = true },
                   onOpenIntimacyDialog = { showIntimacyDialog = true },
                   onNavigateToCalendar = { currentNavTab = 1 },
@@ -251,15 +254,12 @@ fun MainScreen(
             }
             1 -> {
               val lastPeriodStart = remember(uiState.pastCycles) {
-                val last = uiState.pastCycles.firstOrNull()
-                if (last != null) {
-                  try { java.time.LocalDate.parse(last.startDate) } catch (e: Exception) { java.time.LocalDate.now().minusDays(14) }
-                } else {
-                  java.time.LocalDate.now().minusDays(14)
-                }
+                uiState.pastCycles.mapNotNull {
+                  try { java.time.LocalDate.parse(it.startDate) } catch (e: Exception) { null }
+                }.maxOrNull()
               }
-              val symptomsList = remember(uiState.todaySymptom) {
-                listOfNotNull(uiState.todaySymptom)
+              val symptomsList = remember(uiState.allSymptoms, uiState.todaySymptom) {
+                if (uiState.allSymptoms.isNotEmpty()) uiState.allSymptoms else listOfNotNull(uiState.todaySymptom)
               }
               CycleCalendarView(
                 lastPeriodStart = lastPeriodStart,
@@ -269,12 +269,18 @@ fun MainScreen(
                 symptoms = symptomsList,
                 intimacyLogs = uiState.intimacyLogs,
                 predictedCycles = uiState.predictedCycles,
+                selectedDate = uiState.selectedDate,
                 canLogSymptoms = uiState.currentRole == UserRole.PRIMARY_ELLA,
                 onDateSelected = { date -> viewModel.selectDate(date) },
                 onOpenSymptomDialogForDate = { date ->
                   if (uiState.currentRole == UserRole.PRIMARY_ELLA) {
                     viewModel.selectDate(date)
                     showSymptomDialog = true
+                  }
+                },
+                onOpenPeriodDialog = {
+                  if (uiState.currentRole == UserRole.PRIMARY_ELLA) {
+                    showPeriodDialog = true
                   }
                 }
               )
@@ -298,12 +304,53 @@ fun MainScreen(
   }
 
   // Dialogs
+  if (showPeriodDialog) {
+    val selectedDateStr = uiState.selectedDate.toString()
+    val existingCycleForDate = remember(uiState.selectedDate, uiState.pastCycles) {
+      uiState.pastCycles.firstOrNull { it.startDate == selectedDateStr }
+        ?: uiState.pastCycles.firstOrNull { cycle ->
+          val start = try { java.time.LocalDate.parse(cycle.startDate) } catch (e: Exception) { null }
+          val end = cycle.endDate?.let { try { java.time.LocalDate.parse(it) } catch (e: Exception) { null } }
+          if (start != null && end != null) {
+            !uiState.selectedDate.isBefore(start) && !uiState.selectedDate.isAfter(end)
+          } else false
+        }
+    }
+
+    PeriodLogDialog(
+      initialDate = uiState.selectedDate,
+      existingCycle = existingCycleForDate,
+      today = viewModel.getToday(),
+      onDismiss = { showPeriodDialog = false },
+      onSave = { startDate, endDate, onComplete ->
+        if (existingCycleForDate != null) {
+          viewModel.updateCycleDates(existingCycleForDate.id, startDate, endDate, onComplete)
+        } else {
+          viewModel.recordPeriodStart(startDate, endDate, onComplete = onComplete)
+        }
+      },
+      onDelete = if (existingCycleForDate != null) {
+        { onComplete ->
+          viewModel.deleteCycle(existingCycleForDate.id, onComplete)
+        }
+      } else null
+    )
+  }
+
   if (showSymptomDialog) {
+    val symptomForSelectedDate = remember(uiState.selectedDate, uiState.allSymptoms, uiState.todaySymptom) {
+      val dateStr = uiState.selectedDate.toString()
+      uiState.allSymptoms.firstOrNull { it.date == dateStr }
+        ?: if (dateStr == viewModel.getToday().toString()) uiState.todaySymptom else null
+    }
+
     SymptomLogDialog(
-      initialSymptom = uiState.todaySymptom,
+      initialSymptom = symptomForSelectedDate,
+      date = uiState.selectedDate,
       onDismiss = { showSymptomDialog = false },
       onSave = { flow, pain, mood, energy, cramps, headache, backPain, bloating, mucus, breasts, cravings, acne, pubNote, privNote, isPriv, onComplete ->
         viewModel.saveSymptom(
+          date = uiState.selectedDate,
           flowLevel = flow,
           painLevel = pain,
           mood = mood,
@@ -327,9 +374,19 @@ fun MainScreen(
 
   if (showIntimacyDialog) {
     IntimacyLogDialog(
+      date = uiState.selectedDate,
       onDismiss = { showIntimacyDialog = false },
       onSave = { type, lube, orgasm, effect, notes, isPriv, onComplete ->
-        viewModel.logIntimacy(type, lube, orgasm, effect, notes, isPriv, onComplete)
+        viewModel.logIntimacy(
+          date = uiState.selectedDate,
+          encounterType = type,
+          usedLubricant = lube,
+          hadOrgasm = orgasm,
+          postContactEffect = effect,
+          notes = notes,
+          isPrivate = isPriv,
+          onComplete = onComplete
+        )
       }
     )
   }

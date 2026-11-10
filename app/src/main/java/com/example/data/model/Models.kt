@@ -130,15 +130,30 @@ data class PairingInvite(
   @ServerTimestamp val createdAt: Timestamp? = null
 )
 
+/**
+ * Registro de inicio de ciclo menstrual.
+ *
+ * Definición inequívoca de campos:
+ * - [startDate]: Fecha (ISO YYYY-MM-DD) de inicio del sangrado / menstruación (Día 1 del ciclo).
+ * - [endDate]: Fecha (ISO YYYY-MM-DD) en que la usuaria confirmó el fin del sangrado menstrual (último día de sangrado).
+ *              null si no ha sido confirmado aún por la usuaria. NUNCA representa el fin del ciclo.
+ * - [cycleLength]: Duración en días del ciclo menstrual completo, derivada exclusivamente de la distancia entre dos
+ *                  inicios consecutivos (siguiente.startDate - este.startDate). null para el ciclo activo más reciente
+ *                  sin inicio posterior (incompleto).
+ * - [periodDuration]: Duración en días del sangrado. Si [endDate] != null, es la duración real confirmada; si [endDate] == null,
+ *                     es una estimación predeterminada (con [isCalculated] = true).
+ * - [isCalculated]: true si [periodDuration] o el ciclo se basan en valores estimados o sin confirmación de fin de sangrado;
+ *                   false si el sangrado fue explícitamente confirmado con fecha de fin.
+ */
 @IgnoreExtraProperties
 data class CycleEntry(
   @DocumentId val id: String = "",
   val spaceId: String = "",
-  val startDate: String = "", // ISO YYYY-MM-DD
-  val endDate: String? = null,
-  val cycleLength: Int? = null,
-  val periodDuration: Int = 5,
-  val isCalculated: Boolean = false,
+  val startDate: String = "", // ISO YYYY-MM-DD: Inicio menstrual registrado (Día 1 del sangrado)
+  val endDate: String? = null, // ISO YYYY-MM-DD: Fin del sangrado confirmado por la usuaria (null si aún no finalizó/confirmó)
+  val cycleLength: Int? = null, // Duración total del ciclo completo derivada de 2 inicios consecutivos (null si es el ciclo en curso)
+  val periodDuration: Int = 5, // Días de sangrado (real si endDate != null, estimado si endDate == null)
+  val isCalculated: Boolean = false, // true si es una estimación no confirmada, false si fue confirmada por la usuaria
   @ServerTimestamp val createdAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -276,7 +291,9 @@ data class CycleStatusData(
   val daysUntilNextPeriod: Int,
   val fertileWindow: FertileWindow,
   val nextPeriodDate: LocalDate,
-  val confidenceIntervalDays: Double
+  val confidenceIntervalDays: Double,
+  val isDelayed: Boolean = daysUntilNextPeriod < 0,
+  val delayedDays: Int = if (daysUntilNextPeriod < 0) -daysUntilNextPeriod else 0
 )
 
 data class PredictedCycle(
@@ -307,5 +324,6 @@ data class DayCycleDetail(
   val hormoneInsight: String,
   val hasSymptomLogged: Boolean = false,
   val hasIntimacyLogged: Boolean = false,
-  val isPredicted: Boolean = false
+  val isPredicted: Boolean = false,
+  val isPeriodConfirmed: Boolean = false
 )

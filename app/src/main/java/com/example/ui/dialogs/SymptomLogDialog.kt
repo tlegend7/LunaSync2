@@ -61,6 +61,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SymptomLogDialog(
   initialSymptom: DailySymptom?,
+  date: java.time.LocalDate = java.time.LocalDate.now(),
   onDismiss: () -> Unit,
   onSave: (
     flowLevel: FlowLevel,
@@ -127,16 +128,29 @@ fun SymptomLogDialog(
   var isSubmitting by remember { mutableStateOf(false) }
   var dialogError by remember { mutableStateOf<String?>(null) }
 
+  val formattedDate = remember(date) {
+    date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", java.util.Locale("es", "ES")))
+      .replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
+  }
+
   AlertDialog(
     onDismissRequest = { if (!isSubmitting) onDismiss() },
     shape = RoundedCornerShape(26.dp),
     title = {
-      Text(
-        text = "Registro Holístico Diario",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-      )
+      Column {
+        Text(
+          text = "Registro Holístico Diario",
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+          text = formattedDate,
+          style = MaterialTheme.typography.labelMedium,
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.primary
+        )
+      }
     },
     text = {
       Column(

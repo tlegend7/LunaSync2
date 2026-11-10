@@ -85,21 +85,22 @@ import java.util.Locale
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CycleCalendarView(
-  lastPeriodStart: LocalDate,
+  lastPeriodStart: LocalDate?,
   averagePeriodLength: Int,
   averageCycleLength: Int,
   pastCycles: List<CycleEntry>,
   symptoms: List<DailySymptom>,
   intimacyLogs: List<IntimacyLog>,
   predictedCycles: List<PredictedCycle>,
+  selectedDate: LocalDate = LocalDate.now(),
   canLogSymptoms: Boolean = true,
   onDateSelected: (LocalDate) -> Unit,
   onOpenSymptomDialogForDate: (LocalDate) -> Unit,
+  onOpenPeriodDialog: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val today = remember { LocalDate.now() }
-  var displayedMonth by remember { mutableStateOf(YearMonth.from(today)) }
-  var selectedDate by remember { mutableStateOf(today) }
+  var displayedMonth by remember { mutableStateOf(YearMonth.from(selectedDate)) }
 
   val symptomDates = remember(symptoms) {
     symptoms.mapNotNull {
@@ -280,10 +281,7 @@ fun CycleCalendarView(
                   detail = detail,
                   isToday = cellDate.isEqual(today),
                   isSelected = cellDate.isEqual(selectedDate),
-                  onClick = {
-                    selectedDate = cellDate
-                    onDateSelected(cellDate)
-                  },
+                  onClick = { onDateSelected(cellDate) },
                   modifier = Modifier.weight(1f)
                 )
               } else {
@@ -306,10 +304,12 @@ fun CycleCalendarView(
           verticalArrangement = Arrangement.spacedBy(6.dp),
           modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
         ) {
-          LegendItem(color = PhaseMenstrualRose, label = "Periodo actual")
-          LegendItem(color = PhaseMenstrualRose, isOutlined = true, label = "Periodo estimado")
+          LegendItem(color = PhaseMenstrualRose, label = "Periodo confirmado")
+          LegendItem(color = PhaseMenstrualRose, isOutlined = true, label = "Periodo proyectado")
           LegendItem(color = PhaseFertileSage, label = "Ventana fértil")
           LegendItem(color = PhaseOvulationGold, isStar = true, label = "Ovulación")
+          LegendItem(color = PhaseLutealLavender, label = "Síntoma")
+          LegendItem(color = PhaseMenstrualRose, isDot = true, label = "Intimidad")
         }
       }
     }
@@ -320,10 +320,12 @@ fun CycleCalendarView(
     DayDetailCard(
       detail = selectedDayDetail,
       selectedDate = selectedDate,
+      hasCycles = pastCycles.isNotEmpty(),
       todaySymptom = selectedDateSymptom,
       isToday = selectedDate.isEqual(today),
       canLogSymptoms = canLogSymptoms,
-      onLogSymptoms = { onOpenSymptomDialogForDate(selectedDate) }
+      onLogSymptoms = { onOpenSymptomDialogForDate(selectedDate) },
+      onOpenPeriodDialog = onOpenPeriodDialog
     )
   }
 }
@@ -424,7 +426,8 @@ private fun LegendItem(
   color: Color,
   label: String,
   isOutlined: Boolean = false,
-  isStar: Boolean = false
+  isStar: Boolean = false,
+  isDot: Boolean = false
 ) {
   Row(verticalAlignment = Alignment.CenterVertically) {
     if (isStar) {
@@ -437,6 +440,13 @@ private fun LegendItem(
       ) {
         Icon(Icons.Default.Star, contentDescription = null, tint = Color.White, modifier = Modifier.size(8.dp))
       }
+    } else if (isDot) {
+      Box(
+        modifier = Modifier
+          .size(8.dp)
+          .clip(CircleShape)
+          .background(color)
+      )
     } else {
       Box(
         modifier = Modifier
@@ -460,10 +470,12 @@ private fun LegendItem(
 private fun DayDetailCard(
   detail: com.example.data.model.DayCycleDetail,
   selectedDate: LocalDate,
+  hasCycles: Boolean = true,
   todaySymptom: DailySymptom?,
   isToday: Boolean,
   canLogSymptoms: Boolean = true,
   onLogSymptoms: () -> Unit,
+  onOpenPeriodDialog: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val dateTitle = selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("es", "ES")))
@@ -597,6 +609,27 @@ private fun DayDetailCard(
             text = if (todaySymptom != null) "Editar registro de este día" else "Registrar síntomas de este día",
             fontWeight = FontWeight.SemiBold
           )
+        }
+
+        if (onOpenPeriodDialog != null) {
+          Spacer(modifier = Modifier.height(8.dp))
+          androidx.compose.material3.OutlinedButton(
+            onClick = onOpenPeriodDialog,
+            shape = RoundedCornerShape(14.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, PhaseMenstrualRose.copy(alpha = 0.5f)),
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(46.dp)
+              .testTag("manage_period_from_calendar_button")
+          ) {
+            Icon(Icons.Default.Spa, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = if (!hasCycles) "Registrar primer periodo" else "Registrar / Corregir inicio de periodo",
+              color = PhaseMenstrualRose,
+              fontWeight = FontWeight.SemiBold
+            )
+          }
         }
       }
     }

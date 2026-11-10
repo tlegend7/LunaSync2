@@ -61,6 +61,7 @@ import com.example.ui.theme.PhaseMenstrualRose
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun IntimacyLogDialog(
+  date: java.time.LocalDate = java.time.LocalDate.now(),
   onDismiss: () -> Unit,
   onSave: (
     encounterType: EncounterType,
@@ -82,6 +83,11 @@ fun IntimacyLogDialog(
   var isSubmitting by remember { mutableStateOf(false) }
   var dialogError by remember { mutableStateOf<String?>(null) }
 
+  val formattedDate = remember(date) {
+    date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", java.util.Locale("es", "ES")))
+      .replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
+  }
+
   AlertDialog(
     onDismissRequest = { if (!isSubmitting) onDismiss() },
     shape = RoundedCornerShape(26.dp),
@@ -89,12 +95,20 @@ fun IntimacyLogDialog(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Default.Favorite, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(24.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Text(
-          text = "Registro Íntimo & Contacto",
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface
-        )
+        Column {
+          Text(
+            text = "Registro Íntimo & Contacto",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Text(
+            text = formattedDate,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+          )
+        }
       }
     },
     text = {

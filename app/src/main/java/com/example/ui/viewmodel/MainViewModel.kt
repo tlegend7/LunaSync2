@@ -35,6 +35,7 @@ import com.example.data.repository.PartnerSupportRepository
 import com.example.data.repository.SpaceObservationResult
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseUser
+import com.example.data.model.DayCycleDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +44,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 data class AppUiState(
@@ -57,7 +59,9 @@ data class AppUiState(
   val pastCycles: List<CycleEntry> = emptyList(),
   val predictedCycles: List<PredictedCycle> = emptyList(),
   val selectedDate: LocalDate = LocalDate.now(),
+  val selectedDayDetail: DayCycleDetail? = null,
   val todaySymptom: DailySymptom? = null,
+  val allSymptoms: List<DailySymptom> = emptyList(),
   val intimacyLogs: List<IntimacyLog> = emptyList(),
   val partnerObservations: List<PartnerObservation> = emptyList(),
   val latestCheckIn: CheckIn? = null,
@@ -79,6 +83,10 @@ class MainViewModel(
 
   private val _uiState = MutableStateFlow(AppUiState())
   val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
+
+  // Reloj centralizado para pruebas controladas y fechas consistentes
+  var clock: java.time.Clock = java.time.Clock.systemDefaultZone()
+  fun getToday(): LocalDate = LocalDate.now(clock)
 
   // Track session identity strictly to protect against cross-session race conditions
   internal var currentSessionId: String = UUID.randomUUID().toString()
@@ -122,7 +130,44 @@ class MainViewModel(
 
   fun selectDate(date: LocalDate) {
     _uiState.value = _uiState.value.copy(selectedDate = date)
-    refreshCycleCalculations()
+    updateSelectedDayDetail()
+  }
+
+  fun updateSelectedDayDetail() {
+    val space = _uiState.value.space
+    val cycles = _uiState.value.pastCycles
+    val lastCycle = cycles.firstOrNull()
+    val lastPeriodStart = lastCycle?.let {
+      try { LocalDate.parse(it.startDate) } catch (e: Exception) { null }
+    }
+
+    val symptomDates = _uiState.value.allSymptoms.mapNotNull {
+      try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+    }.toSet()
+
+    val intimacyDates = _uiState.value.intimacyLogs.mapNotNull {
+      try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+    }.toSet()
+
+    val confirmedBleedingDates = _uiState.value.allSymptoms.filter {
+      it.flowLevel in listOf("LIGHT", "MEDIUM", "HEAVY")
+    }.mapNotNull {
+      try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+    }.toSet()
+
+    val detail = CycleCalculationEngine.getDayDetail(
+      date = _uiState.value.selectedDate,
+      lastPeriodStart = lastPeriodStart,
+      averagePeriodDays = space?.averagePeriodLength ?: 5,
+      pastCycles = cycles,
+      configuredAverageCycle = space?.averageCycleLength ?: 28,
+      today = getToday(),
+      symptomDates = symptomDates,
+      intimacyDates = intimacyDates,
+      confirmedBleedingDates = confirmedBleedingDates
+    )
+
+    _uiState.value = _uiState.value.copy(selectedDayDetail = detail)
   }
 
   fun clearMessages() {
@@ -234,9 +279,13 @@ class MainViewModel(
         shareMood = permissions.shareMood
       ).collectLatest { symptoms ->
         if (isSessionValid(sessionId, sessionUserId)) {
-          val todayStr = LocalDate.now().toString()
+          val todayStr = getToday().toString()
           val todayEntry = symptoms.firstOrNull { it.date == todayStr }
-          _uiState.value = _uiState.value.copy(todaySymptom = todayEntry)
+          _uiState.value = _uiState.value.copy(
+            allSymptoms = symptoms,
+            todaySymptom = todayEntry
+          )
+          updateSelectedDayDetail()
         }
       }
     }
@@ -250,6 +299,7 @@ class MainViewModel(
       ).collectLatest { logs ->
         if (isSessionValid(sessionId, sessionUserId)) {
           _uiState.value = _uiState.value.copy(intimacyLogs = logs)
+          updateSelectedDayDetail()
         }
       }
     }
@@ -281,11 +331,32 @@ class MainViewModel(
   fun refreshCycleCalculations() {
     val space = _uiState.value.space ?: return
     val cycles = _uiState.value.pastCycles
+    val today = getToday()
+
+    if (cycles.isEmpty()) {
+      // Estado sin registros reales: no rellenar silenciosamente con periodos ficticios
+      _uiState.value = _uiState.value.copy(
+        cycleStatus = null,
+        predictedCycles = emptyList(),
+        partnerCareTips = emptyList()
+      )
+      updateSelectedDayDetail()
+      return
+    }
+
     val lastCycle = cycles.firstOrNull()
-    val lastPeriodStart = if (lastCycle != null) {
-      try { LocalDate.parse(lastCycle.startDate) } catch (e: Exception) { LocalDate.now().minusDays(14) }
-    } else {
-      LocalDate.now().minusDays(14)
+    val lastPeriodStart = lastCycle?.let {
+      try { LocalDate.parse(it.startDate) } catch (e: Exception) { null }
+    }
+
+    if (lastPeriodStart == null) {
+      _uiState.value = _uiState.value.copy(
+        cycleStatus = null,
+        predictedCycles = emptyList(),
+        partnerCareTips = emptyList()
+      )
+      updateSelectedDayDetail()
+      return
     }
 
     val status = CycleCalculationEngine.calculateCycleStatus(
@@ -293,7 +364,7 @@ class MainViewModel(
       averagePeriodDays = space.averagePeriodLength,
       pastCycles = cycles,
       configuredAverageCycle = space.averageCycleLength,
-      today = _uiState.value.selectedDate
+      today = today
     )
 
     val futurePredictions = CycleCalculationEngine.predictFutureCycles(
@@ -311,21 +382,21 @@ class MainViewModel(
       predictedCycles = futurePredictions,
       partnerCareTips = tips
     )
+    updateSelectedDayDetail()
   }
 
-  fun createOwnerSpace() {
-    val user = _uiState.value.currentUser ?: return
+  fun createOwnerSpace(): Job {
+    val user = _uiState.value.currentUser ?: return Job().apply { complete() }
     val sessionId = currentSessionId
-    viewModelScope.launch {
+    return viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       try {
-        val spaceId = spaceRepo.createSpace(
+        spaceRepo.createSpace(
           ownerId = user.uid,
           averageCycleLength = 28,
           averagePeriodLength = 5
         )
-        val periodStart = LocalDate.now().minusDays(12).toString()
-        cycleRepo.addCycleEntry(spaceId, periodStart, 5)
+        // Corrección 2A.1: Crear espacio real NO crea menstruación ficticia
         if (isSessionValid(sessionId, user.uid)) {
           _uiState.value = _uiState.value.copy(
             isLoading = false,
@@ -588,6 +659,7 @@ class MainViewModel(
   }
 
   fun saveSymptom(
+    date: LocalDate = _uiState.value.selectedDate,
     flowLevel: FlowLevel,
     painLevel: Int,
     mood: Mood,
@@ -605,7 +677,13 @@ class MainViewModel(
     isPrivate: Boolean,
     onComplete: (Boolean, String?) -> Unit
   ): Job {
-    val dateStr = _uiState.value.selectedDate.toString()
+    val today = getToday()
+    if (date.isAfter(today)) {
+      onComplete(false, "No se pueden registrar síntomas en fechas futuras")
+      return Job().apply { complete() }
+    }
+
+    val dateStr = date.toString()
     val symptom = DailySymptom(
       spaceId = _uiState.value.space?.id ?: "demo_space",
       date = dateStr,
@@ -628,11 +706,14 @@ class MainViewModel(
     )
 
     if (_uiState.value.isGuestMode) {
+      val updatedSymptoms = listOf(symptom) + _uiState.value.allSymptoms.filter { it.date != dateStr }
+      val todayEntry = if (date == today) symptom else _uiState.value.todaySymptom
       _uiState.value = _uiState.value.copy(
-        todaySymptom = symptom,
+        todaySymptom = todayEntry,
+        allSymptoms = updatedSymptoms,
         successMessage = "Síntomas guardados correctamente"
       )
-      refreshCycleCalculations()
+      updateSelectedDayDetail()
       onComplete(true, null)
       return Job().apply { complete() }
     }
@@ -650,11 +731,14 @@ class MainViewModel(
       try {
         cycleRepo.saveDailySymptom(symptom)
         if (isSessionValid(sessionId, user?.uid)) {
+          val todayEntry = if (date == today) symptom else _uiState.value.todaySymptom
+          val updatedSymptoms = listOf(symptom) + _uiState.value.allSymptoms.filter { it.date != dateStr }
           _uiState.value = _uiState.value.copy(
-            todaySymptom = symptom,
+            todaySymptom = todayEntry,
+            allSymptoms = updatedSymptoms,
             successMessage = "Síntomas guardados correctamente"
           )
-          refreshCycleCalculations()
+          updateSelectedDayDetail()
           onComplete(true, null)
         } else {
           onComplete(false, "Sesión no válida")
@@ -671,6 +755,7 @@ class MainViewModel(
   }
 
   fun logIntimacy(
+    date: LocalDate = _uiState.value.selectedDate,
     encounterType: EncounterType,
     usedLubricant: Boolean = false,
     hadOrgasm: Boolean = false,
@@ -678,8 +763,14 @@ class MainViewModel(
     notes: String?,
     isPrivate: Boolean,
     onComplete: (Boolean, String?) -> Unit
-  ) {
-    val dateStr = _uiState.value.selectedDate.toString()
+  ): Job {
+    val today = getToday()
+    if (date.isAfter(today)) {
+      onComplete(false, "No se pueden registrar encuentros en fechas futuras")
+      return Job().apply { complete() }
+    }
+
+    val dateStr = date.toString()
     val log = IntimacyLog(
       id = "intimacy_${System.currentTimeMillis()}",
       spaceId = _uiState.value.space?.id ?: "demo_space",
@@ -695,23 +786,24 @@ class MainViewModel(
 
     if (_uiState.value.isGuestMode) {
       _uiState.value = _uiState.value.copy(
-        intimacyLogs = listOf(log) + _uiState.value.intimacyLogs,
+        intimacyLogs = listOf(log) + _uiState.value.intimacyLogs.filter { it.date != dateStr },
         successMessage = "Registro íntimo guardado"
       )
+      updateSelectedDayDetail()
       onComplete(true, null)
-      return
+      return Job().apply { complete() }
     }
 
     val space = _uiState.value.space
     val user = _uiState.value.currentUser
     if (space == null || user == null) {
       onComplete(false, "No hay usuario o espacio activo")
-      return
+      return Job().apply { complete() }
     }
 
     val sessionId = currentSessionId
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       try {
         intimacyRepo.saveIntimacyLog(
           spaceId = space.id,
@@ -725,7 +817,11 @@ class MainViewModel(
           userId = user.uid
         )
         if (isSessionValid(sessionId, user.uid)) {
-          _uiState.value = _uiState.value.copy(successMessage = "Registro íntimo guardado")
+          _uiState.value = _uiState.value.copy(
+            intimacyLogs = listOf(log) + _uiState.value.intimacyLogs.filter { it.date != dateStr },
+            successMessage = "Registro íntimo guardado"
+          )
+          updateSelectedDayDetail()
           onComplete(true, null)
         } else {
           onComplete(false, "Sesión no válida")
@@ -737,6 +833,227 @@ class MainViewModel(
           _uiState.value = _uiState.value.copy(errorMessage = err)
         }
         onComplete(false, err)
+      }
+    }
+  }
+
+  fun recordPeriodStart(
+    startDate: LocalDate,
+    endDate: LocalDate? = null,
+    onComplete: ((Boolean, String?) -> Unit)? = null
+  ): Job {
+    val today = getToday()
+    if (startDate.isAfter(today)) {
+      onComplete?.invoke(false, "No se puede registrar un inicio menstrual en el futuro")
+      return Job().apply { complete() }
+    }
+    if (endDate != null && endDate.isAfter(today)) {
+      onComplete?.invoke(false, "No se puede registrar un fin de sangrado en el futuro")
+      return Job().apply { complete() }
+    }
+    if (endDate != null && endDate.isBefore(startDate)) {
+      val msg = "La fecha de fin no puede ser anterior a la de inicio"
+      _uiState.value = _uiState.value.copy(errorMessage = msg)
+      onComplete?.invoke(false, msg)
+      return Job().apply { complete() }
+    }
+
+    if (_uiState.value.isGuestMode) {
+      val periodDuration = if (endDate != null) {
+        (ChronoUnit.DAYS.between(startDate, endDate) + 1).toInt().coerceIn(1, 15)
+      } else 5
+      val newCycle = CycleEntry(
+        id = "demo_cycle_${System.currentTimeMillis()}",
+        spaceId = "demo_space",
+        startDate = startDate.toString(),
+        endDate = endDate?.toString(),
+        cycleLength = null,
+        periodDuration = periodDuration,
+        isCalculated = endDate == null
+      )
+      val updatedCycles = (listOf(newCycle) + _uiState.value.pastCycles)
+        .sortedByDescending { it.startDate }
+      _uiState.value = _uiState.value.copy(
+        pastCycles = updatedCycles,
+        successMessage = "Inicio menstrual registrado (Modo Demo)"
+      )
+      refreshCycleCalculations()
+      onComplete?.invoke(true, null)
+      return Job().apply { complete() }
+    }
+
+    val space = _uiState.value.space
+    val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete?.invoke(false, "No hay espacio o usuario activo")
+      return Job().apply { complete() }
+    }
+
+    val sessionId = currentSessionId
+
+    return viewModelScope.launch {
+      _uiState.value = _uiState.value.copy(isLoading = true)
+      val res = cycleRepo.recordPeriodStart(
+        spaceId = space.id,
+        startDate = startDate.toString(),
+        endDate = endDate?.toString(),
+        periodDuration = space.averagePeriodLength
+      )
+      if (isSessionValid(sessionId, user.uid)) {
+        res.fold(
+          onSuccess = {
+            _uiState.value = _uiState.value.copy(
+              isLoading = false,
+              successMessage = "¡Inicio menstrual registrado con éxito!"
+            )
+            refreshCycleCalculations()
+            onComplete?.invoke(true, null)
+          },
+          onFailure = { error ->
+            val msg = error.localizedMessage ?: "Error al registrar inicio menstrual"
+            _uiState.value = _uiState.value.copy(
+              isLoading = false,
+              errorMessage = msg
+            )
+            onComplete?.invoke(false, msg)
+          }
+        )
+      }
+    }
+  }
+
+  fun updatePeriodEnd(
+    cycleId: String,
+    endDate: LocalDate,
+    onComplete: ((Boolean, String?) -> Unit)? = null
+  ): Job {
+    val today = getToday()
+    if (endDate.isAfter(today)) {
+      onComplete?.invoke(false, "No se puede registrar un fin de sangrado en el futuro")
+      return Job().apply { complete() }
+    }
+
+    val space = _uiState.value.space
+    val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete?.invoke(false, "No hay espacio o usuario activo")
+      return Job().apply { complete() }
+    }
+
+    val sessionId = currentSessionId
+
+    return viewModelScope.launch {
+      _uiState.value = _uiState.value.copy(isLoading = true)
+      val res = cycleRepo.updatePeriodEnd(
+        spaceId = space.id,
+        cycleId = cycleId,
+        endDate = endDate.toString()
+      )
+      if (isSessionValid(sessionId, user.uid)) {
+        res.fold(
+          onSuccess = {
+            _uiState.value = _uiState.value.copy(
+              isLoading = false,
+              successMessage = "Fin de sangrado confirmado"
+            )
+            refreshCycleCalculations()
+            onComplete?.invoke(true, null)
+          },
+          onFailure = { error ->
+            val msg = error.localizedMessage ?: "Error al actualizar fin de sangrado"
+            _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = msg)
+            onComplete?.invoke(false, msg)
+          }
+        )
+      }
+    }
+  }
+
+  fun updateCycleDates(
+    cycleId: String,
+    newStartDate: LocalDate,
+    newEndDate: LocalDate?,
+    onComplete: ((Boolean, String?) -> Unit)? = null
+  ): Job {
+    val today = getToday()
+    if (newStartDate.isAfter(today) || (newEndDate != null && newEndDate.isAfter(today))) {
+      onComplete?.invoke(false, "Las fechas no pueden ser futuras")
+      return Job().apply { complete() }
+    }
+    if (newEndDate != null && newEndDate.isBefore(newStartDate)) {
+      onComplete?.invoke(false, "La fecha de fin no puede ser anterior al inicio")
+      return Job().apply { complete() }
+    }
+
+    val space = _uiState.value.space
+    val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete?.invoke(false, "No hay espacio activo")
+      return Job().apply { complete() }
+    }
+
+    val sessionId = currentSessionId
+
+    return viewModelScope.launch {
+      _uiState.value = _uiState.value.copy(isLoading = true)
+      val res = cycleRepo.updateCycleDates(
+        spaceId = space.id,
+        cycleId = cycleId,
+        newStartDate = newStartDate.toString(),
+        newEndDate = newEndDate?.toString()
+      )
+      if (isSessionValid(sessionId, user.uid)) {
+        res.fold(
+          onSuccess = {
+            _uiState.value = _uiState.value.copy(
+              isLoading = false,
+              successMessage = "Fechas de ciclo actualizadas"
+            )
+            refreshCycleCalculations()
+            onComplete?.invoke(true, null)
+          },
+          onFailure = { error ->
+            val msg = error.localizedMessage ?: "Error al actualizar fechas"
+            _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = msg)
+            onComplete?.invoke(false, msg)
+          }
+        )
+      }
+    }
+  }
+
+  fun deleteCycle(
+    cycleId: String,
+    onComplete: ((Boolean, String?) -> Unit)? = null
+  ): Job {
+    val space = _uiState.value.space
+    val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete?.invoke(false, "No hay espacio activo")
+      return Job().apply { complete() }
+    }
+
+    val sessionId = currentSessionId
+
+    return viewModelScope.launch {
+      _uiState.value = _uiState.value.copy(isLoading = true)
+      val res = cycleRepo.deleteCycleEntry(space.id, cycleId)
+      if (isSessionValid(sessionId, user.uid)) {
+        res.fold(
+          onSuccess = {
+            _uiState.value = _uiState.value.copy(
+              isLoading = false,
+              successMessage = "Ciclo eliminado correctamente"
+            )
+            refreshCycleCalculations()
+            onComplete?.invoke(true, null)
+          },
+          onFailure = { error ->
+            val msg = error.localizedMessage ?: "Error al eliminar ciclo"
+            _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = msg)
+            onComplete?.invoke(false, msg)
+          }
+        )
       }
     }
   }

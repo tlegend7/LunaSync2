@@ -77,6 +77,7 @@ fun EllaDashboardView(
   partnerObservations: List<PartnerObservation>,
   latestCheckIn: CheckIn?,
   activeSpottingSuggestion: PartnerObservation?,
+  onOpenPeriodDialog: () -> Unit = {},
   onOpenSymptomDialog: () -> Unit,
   onOpenIntimacyDialog: () -> Unit,
   onNavigateToCalendar: () -> Unit,
@@ -104,6 +105,48 @@ fun EllaDashboardView(
 
     Spacer(modifier = Modifier.height(6.dp))
 
+    // If no cycle status registered yet, show dedicated Onboarding Period Card
+    if (cycleStatus == null) {
+      Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = PhaseMenstrualSubtle,
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(bottom = 12.dp)
+          .border(1.dp, PhaseMenstrualRose.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+      ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Spa, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "Bienvenida a tu seguimiento",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              color = PhaseMenstrualRose
+            )
+          }
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = "Registra el primer día de tu última menstruación para que LunaSync aprenda tus patrones reales y calcule tus fases.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Spacer(modifier = Modifier.height(12.dp))
+          Button(
+            onClick = onOpenPeriodDialog,
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PhaseMenstrualRose),
+            modifier = Modifier.fillMaxWidth().testTag("register_period_start_cta")
+          ) {
+            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Registrar inicio de mi periodo", fontWeight = FontWeight.SemiBold)
+          }
+        }
+      }
+    }
+
     // Interactive Check-In Banner from Partner (if active)
     if (latestCheckIn != null) {
       CheckInBannerComponent(
@@ -129,7 +172,7 @@ fun EllaDashboardView(
       modifier = Modifier.fillMaxWidth()
     ) {
       Button(
-        onClick = onOpenSymptomDialog,
+        onClick = { if (cycleStatus == null) onOpenPeriodDialog() else onOpenSymptomDialog() },
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier
@@ -137,9 +180,9 @@ fun EllaDashboardView(
           .height(48.dp)
           .testTag("log_symptoms_cta")
       ) {
-        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+        Icon(if (cycleStatus == null) Icons.Default.CalendarMonth else Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Registrar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (cycleStatus == null) "Periodo" else "Registrar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
       }
 
       OutlinedButton(
@@ -182,33 +225,43 @@ fun EllaDashboardView(
     Spacer(modifier = Modifier.height(14.dp))
 
     // Hormonal & Cycle Wisdom Card (Empathetic female health card)
+    val isNull = cycleStatus == null
     val phase = cycleStatus?.currentPhase ?: CyclePhase.FOLLICULAR
-    val dayNum = cycleStatus?.currentDay ?: 1
-    val (wisdomTitle, wisdomText, wisdomIconTint, wisdomBg) = when (phase) {
-      CyclePhase.MENSTRUAL -> Quad(
-        "Fase Menstrual • Renovación",
-        "El estrógeno y la progesterona están en su nivel basal. El cuerpo limpia y reinicia su ciclo. El magnesio, las bebidas tibias y las pausas te devolverán balance.",
-        PhaseMenstrualRose,
-        PhaseMenstrualSubtle
-      )
-      CyclePhase.FOLLICULAR -> Quad(
-        "Fase Folicular • Energía Creciente",
-        "Tu hormona folículo estimulante (FSH) y estrógeno van en aumento. Sentirás mayor lucidez mental, vitalidad física y apertura para proyectos creativos.",
-        PhaseFollicularPeach,
+    val dayNum = cycleStatus?.currentDay ?: 0
+    val (wisdomTitle, wisdomText, wisdomIconTint, wisdomBg) = if (isNull) {
+      Quad(
+        "Tu ciclo con base en datos reales",
+        "LunaSync no inventa datos menstruales. Una vez que ingreses la fecha de tu periodo, esta tarjeta te guiará con información hormonal precisa y recomendaciones adaptadas a tu biología.",
+        BrandTerracottaRose,
         PhaseFollicularSubtle
       )
-      CyclePhase.OVULATORY -> Quad(
-        "Fase Ovulatoria • Máximo Resplandor",
-        "Pico de LH y estrógeno. Estás en tus días de mayor magnetismo natural y apertura social. El moco cervical fértil nutre y protege los espermatozoides.",
-        PhaseFertileSage,
-        PhaseFertileSubtle
-      )
-      CyclePhase.LUTEAL -> Quad(
-        "Fase Lútea • Calma & Cuidado",
-        "La progesterona toma el mando para calmar el sistema nervioso. Puedes experimentar sensibilidad o antojos por la caída gradual de serotonina.",
-        PhaseLutealLavender,
-        PhaseLutealSubtle
-      )
+    } else {
+      when (phase) {
+        CyclePhase.MENSTRUAL -> Quad(
+          "Fase Menstrual • Renovación",
+          "El estrógeno y la progesterona están en su nivel basal. El cuerpo limpia y reinicia su ciclo. El magnesio, las bebidas tibias y las pausas te devolverán balance.",
+          PhaseMenstrualRose,
+          PhaseMenstrualSubtle
+        )
+        CyclePhase.FOLLICULAR -> Quad(
+          "Fase Folicular • Energía Creciente",
+          "Tu hormona folículo estimulante (FSH) y estrógeno van en aumento. Sentirás mayor lucidez mental, vitalidad física y apertura para proyectos creativos.",
+          PhaseFollicularPeach,
+          PhaseFollicularSubtle
+        )
+        CyclePhase.OVULATORY -> Quad(
+          "Fase Ovulatoria • Máximo Resplandor",
+          "Pico de LH y estrógeno. Estás en tus días de mayor magnetismo natural y apertura social. El moco cervical fértil nutre y protege los espermatozoides.",
+          PhaseFertileSage,
+          PhaseFertileSubtle
+        )
+        CyclePhase.LUTEAL -> Quad(
+          "Fase Lútea • Calma & Cuidado",
+          "La progesterona toma el mando para calmar el sistema nervioso. Puedes experimentar sensibilidad o antojos por la caída gradual de serotonina.",
+          PhaseLutealLavender,
+          PhaseLutealSubtle
+        )
+      }
     }
 
     Surface(
@@ -233,7 +286,7 @@ fun EllaDashboardView(
           Spacer(modifier = Modifier.width(10.dp))
           Column {
             Text(
-              text = "TU CUERPO HOY (DÍA $dayNum)",
+              text = if (isNull) "INFORMACIÓN HORMONAL" else "TU CUERPO HOY (DÍA $dayNum)",
               style = MaterialTheme.typography.labelSmall,
               fontWeight = FontWeight.Bold,
               color = wisdomIconTint,

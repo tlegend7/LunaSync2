@@ -47,23 +47,31 @@ fun CycleDialComponent(
   cycleStatus: CycleStatusData?,
   modifier: Modifier = Modifier
 ) {
-  val currentDay = cycleStatus?.currentDay ?: 1
+  val hasData = cycleStatus != null
+  val currentDay = cycleStatus?.currentDay ?: 0
   val totalDays = cycleStatus?.totalDays ?: 28
   val phase = cycleStatus?.currentPhase ?: CyclePhase.FOLLICULAR
-  val daysUntilPeriod = cycleStatus?.daysUntilNextPeriod ?: 14
+  val daysUntilPeriod = cycleStatus?.daysUntilNextPeriod ?: 0
+  val isDelayed = cycleStatus?.isDelayed == true || daysUntilPeriod < 0
 
-  val progress = (currentDay.toFloat() / totalDays.toFloat()).coerceIn(0f, 1f)
+  val progress = if (hasData) (currentDay.toFloat() / totalDays.toFloat()).coerceIn(0f, 1f) else 0f
   val animatedProgress by animateFloatAsState(
     targetValue = progress,
     animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
     label = "dial_progress"
   )
 
-  val (phaseName, phaseColor, phaseBg) = when (phase) {
-    CyclePhase.MENSTRUAL -> Triple("Menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.12f))
-    CyclePhase.FOLLICULAR -> Triple("Folicular", AppleHealthFollicular, AppleHealthFollicular.copy(alpha = 0.12f))
-    CyclePhase.OVULATORY -> Triple("Fértil • Ovulación", AppleHealthFertile, AppleHealthFertile.copy(alpha = 0.12f))
-    CyclePhase.LUTEAL -> Triple("Lútea", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.12f))
+  val (phaseName, phaseColor, phaseBg) = if (!hasData) {
+    Triple("Sin datos registrados", MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+  } else if (isDelayed) {
+    Triple("Retraso menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.15f))
+  } else {
+    when (phase) {
+      CyclePhase.MENSTRUAL -> Triple("Menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.12f))
+      CyclePhase.FOLLICULAR -> Triple("Folicular", AppleHealthFollicular, AppleHealthFollicular.copy(alpha = 0.12f))
+      CyclePhase.OVULATORY -> Triple("Fértil • Ovulación", AppleHealthFertile, AppleHealthFertile.copy(alpha = 0.12f))
+      CyclePhase.LUTEAL -> Triple("Lútea", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.12f))
+    }
   }
 
   Box(
@@ -174,14 +182,14 @@ fun CycleDialComponent(
       modifier = Modifier.padding(horizontal = 24.dp)
     ) {
       Text(
-        text = "DÍA DEL CICLO",
+        text = if (hasData) "DÍA DEL CICLO" else "SEGUIMIENTO",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         letterSpacing = 1.5.sp,
         fontWeight = FontWeight.SemiBold
       )
       Text(
-        text = "$currentDay",
+        text = if (hasData) "$currentDay" else "—",
         fontSize = 54.sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurface,
@@ -206,10 +214,22 @@ fun CycleDialComponent(
 
       Spacer(modifier = Modifier.height(4.dp))
 
+      val statusText = when {
+        !hasData -> "Registra tu periodo para comenzar"
+        isDelayed -> {
+          val delay = cycleStatus?.delayedDays?.coerceAtLeast(-daysUntilPeriod) ?: (-daysUntilPeriod)
+          "Retraso estimado: $delay ${if (delay == 1) "día" else "días"}"
+        }
+        daysUntilPeriod > 0 -> "Próximo periodo en $daysUntilPeriod días"
+        daysUntilPeriod == 0 -> "Periodo esperado hoy"
+        else -> "Periodo esperado hoy"
+      }
+
       Text(
-        text = if (daysUntilPeriod > 0) "Próximo periodo en $daysUntilPeriod días" else "Periodo esperado hoy",
+        text = statusText,
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        fontWeight = if (isDelayed) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (isDelayed) AppleHealthMenstrual else MaterialTheme.colorScheme.onSurfaceVariant
       )
     }
   }
