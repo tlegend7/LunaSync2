@@ -148,7 +148,8 @@ fun SymptomLogDialog(
           text = formattedDate,
           style = MaterialTheme.typography.labelMedium,
           fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.primary
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.testTag("symptom_dialog_date_text")
         )
       }
     },

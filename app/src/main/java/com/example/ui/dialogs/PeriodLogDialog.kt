@@ -252,7 +252,8 @@ fun PeriodLogDialog(
               Text(
                 text = startDate.format(dateFormatter),
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.testTag("period_dialog_start_date_text")
               )
               Text(
                 text = "Inicio del periodo menstrual",

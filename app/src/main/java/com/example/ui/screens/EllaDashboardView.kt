@@ -58,6 +58,7 @@ import com.example.ui.components.CheckInBannerComponent
 import com.example.ui.components.CycleDialComponent
 import com.example.ui.components.SpottingSuggestionCard
 import com.example.ui.theme.AppleHairlineBorder
+import com.example.ui.theme.AppleSystemGray5
 import com.example.ui.theme.BrandTerracottaRose
 import com.example.ui.theme.PhaseFertileSage
 import com.example.ui.theme.PhaseFertileSubtle
@@ -228,6 +229,7 @@ fun EllaDashboardView(
     val isNull = cycleStatus == null
     val phase = cycleStatus?.currentPhase ?: CyclePhase.FOLLICULAR
     val dayNum = cycleStatus?.currentDay ?: 0
+    val delayedDays = cycleStatus?.delayedDays ?: 0
     val (wisdomTitle, wisdomText, wisdomIconTint, wisdomBg) = if (isNull) {
       Quad(
         "Tu ciclo con base en datos reales",
@@ -235,8 +237,7 @@ fun EllaDashboardView(
         BrandTerracottaRose,
         PhaseFollicularSubtle
       )
-    } else if (cycleStatus?.isDelayed == true) {
-      val delayedDays = cycleStatus.delayedDays
+    } else if (cycleStatus?.isDelayed == true || phase == CyclePhase.DELAYED) {
       Quad(
         "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de retraso)",
         "Tu ciclo actual continúa abierto sin reinicios artificiales. Se ha superado la fecha estimada para el próximo periodo. Es natural que el ciclo varíe según descanso o cambios hormonales. Tu registro se mantendrá exacto hasta confirmar un nuevo sangrado.",
@@ -266,6 +267,12 @@ fun EllaDashboardView(
         CyclePhase.LUTEAL -> Quad(
           "Fase Lútea • Calma & Cuidado",
           "La progesterona toma el mando para calmar el sistema nervioso. Puedes experimentar sensibilidad o antojos por la caída gradual de serotonina.",
+          PhaseLutealLavender,
+          PhaseLutealSubtle
+        )
+        CyclePhase.DELAYED -> Quad(
+          "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de retraso)",
+          "Tu ciclo actual continúa abierto sin reinicios artificiales. Se ha superado la fecha estimada para el próximo periodo. Mantén la calma y escucha a tu cuerpo.",
           PhaseLutealLavender,
           PhaseLutealSubtle
         )
@@ -317,6 +324,21 @@ fun EllaDashboardView(
           color = MaterialTheme.colorScheme.onSurface,
           lineHeight = 18.sp
         )
+
+        if (cycleStatus?.isBasedOnHistory == false) {
+          Spacer(modifier = Modifier.height(8.dp))
+          Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = AppleSystemGray5.copy(alpha = 0.5f)
+          ) {
+            Text(
+              text = "Estimación basada en duración estándar (${cycleStatus.totalDays}d) • A la espera de historial regular",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+          }
+        }
       }
     }
 

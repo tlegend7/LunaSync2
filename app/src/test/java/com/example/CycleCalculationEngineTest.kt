@@ -6,6 +6,7 @@ import com.example.data.model.CyclePhase
 import com.example.data.model.DayHighlightType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,7 +21,7 @@ class CycleCalculationEngineTest {
     assertEquals(30.0, avg, 0.001)
 
     val sigma = CycleCalculationEngine.calculateStandardDeviation(emptyList(), 28.0)
-    assertEquals(1.5, sigma, 0.001) // default minimum expected deviation
+    assertNull("No observed variability when empty history", sigma)
   }
 
   @Test
@@ -65,7 +66,7 @@ class CycleCalculationEngineTest {
       CycleEntry(startDate = "2026-02-26", cycleLength = 28)
     )
     val sigmaZero = CycleCalculationEngine.calculateStandardDeviation(identicalCycles, 28.0)
-    assertEquals(0.0, sigmaZero, 0.001)
+    assertEquals(0.0, sigmaZero!!, 0.001)
 
     val varyingCycles = listOf(
       CycleEntry(startDate = "2026-01-01", cycleLength = 26),
@@ -73,7 +74,7 @@ class CycleCalculationEngineTest {
     )
     // mean = 28, variance = ((26-28)^2 + (30-28)^2)/(2-1) = (4+4)/1 = 8, stdDev = sqrt(8) ~ 2.8284
     val sigmaVarying = CycleCalculationEngine.calculateStandardDeviation(varyingCycles, 28.0)
-    assertEquals(2.8284, sigmaVarying, 0.01)
+    assertEquals(2.8284, sigmaVarying!!, 0.01)
   }
 
   @Test
@@ -136,7 +137,7 @@ class CycleCalculationEngineTest {
     assertEquals(-7, statusDelayed.daysUntilNextPeriod)
     assertTrue(statusDelayed.isDelayed)
     assertEquals(7, statusDelayed.delayedDays)
-    assertEquals(CyclePhase.LUTEAL, statusDelayed.currentPhase) // remains in extended luteal phase until new period is registered
+    assertEquals(CyclePhase.DELAYED, statusDelayed.currentPhase)
   }
 
   @Test
@@ -379,5 +380,176 @@ class CycleCalculationEngineTest {
     assertEquals(DayHighlightType.NONE, detailHistoricalLuteal.highlightType)
     assertFalse(detailHistoricalLuteal.isPeriodConfirmed)
     assertEquals(15, detailHistoricalLuteal.cycleDay)
+  }
+
+  @Test
+  fun testProjectedPeriodBoundaryIncludesProjectedStartDateExact() {
+    // Last start: 2026-11-01, average: 28 days, period duration: 5 days.
+    // Next period expected on 2026-11-29.
+    val lastStart = LocalDate.of(2026, 11, 1)
+    val today = LocalDate.of(2026, 11, 11)
+    val pastCycles = listOf(CycleEntry(id = "c1", startDate = "2026-11-01", cycleLength = null))
+
+    // 1. Day before projected start (2026-11-28): Luteal phase, Day 28
+    val dayBefore = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 11, 28),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      today = today
+    )
+    assertEquals(DayHighlightType.LUTEAL, dayBefore.highlightType)
+    assertEquals(28, dayBefore.cycleDay)
+    assertTrue(dayBefore.isPredicted)
+    assertFalse(dayBefore.isPeriodConfirmed)
+
+    // 2. EXACT day of projected start (2026-11-29): Must be PREDICTED_PERIOD!
+    val dayExact = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 11, 29),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      today = today
+    )
+    assertEquals(DayHighlightType.PREDICTED_PERIOD, dayExact.highlightType)
+    assertNull("Projected cycle must not replace active open cycle with fictitious cycleDay", dayExact.cycleDay)
+    assertTrue(dayExact.isPredicted)
+    assertFalse(dayExact.isPeriodConfirmed)
+    assertTrue(dayExact.phaseName.contains("Periodo Proyectado"))
+
+    // 3. Day after projected start (2026-11-30): PREDICTED_PERIOD
+    val dayAfter = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 11, 30),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      today = today
+    )
+    assertEquals(DayHighlightType.PREDICTED_PERIOD, dayAfter.highlightType)
+
+    // 4. Last day of 5-day projected period (2026-12-03): PREDICTED_PERIOD
+    val lastBleedDay = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 12, 3),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      today = today
+    )
+    assertEquals(DayHighlightType.PREDICTED_PERIOD, lastBleedDay.highlightType)
+
+    // 5. Day after projected period finishes (2026-12-04): FOLLICULAR
+    val dayAfterBleed = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 12, 4),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      today = today
+    )
+    assertEquals(DayHighlightType.FOLLICULAR, dayAfterBleed.highlightType)
+  }
+
+  @Test
+  fun testProjectedPeriodSingleDayBleedingBoundaries() {
+    val lastStart = LocalDate.of(2026, 11, 1)
+    val today = LocalDate.of(2026, 11, 11)
+    val pastCycles = listOf(CycleEntry(id = "c1", startDate = "2026-11-01", cycleLength = null))
+
+    // 1-day bleeding: only 2026-11-29 is PREDICTED_PERIOD, 2026-11-30 is FOLLICULAR
+    val dayExact = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 11, 29),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 1,
+      pastCycles = pastCycles,
+      today = today
+    )
+    assertEquals(DayHighlightType.PREDICTED_PERIOD, dayExact.highlightType)
+
+    val nextDay = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 11, 30),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 1,
+      pastCycles = pastCycles,
+      today = today
+    )
+    assertEquals(DayHighlightType.FOLLICULAR, nextDay.highlightType)
+  }
+
+  @Test
+  fun testDelayBoundariesWhenTodayIsAtOrPastExpectedPeriod() {
+    val lastStart = LocalDate.of(2026, 11, 1)
+    val pastCycles = listOf(CycleEntry(id = "c1", startDate = "2026-11-01", cycleLength = null))
+
+    // When today == 2026-11-29: it is Day 29 of active cycle, 0d delay
+    val todayExact = LocalDate.of(2026, 11, 29)
+    val detailTodayExact = CycleCalculationEngine.getDayDetail(
+      date = todayExact,
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      today = todayExact
+    )
+    assertEquals(29, detailTodayExact.cycleDay)
+    assertEquals(DayHighlightType.NONE, detailTodayExact.highlightType)
+    assertTrue(detailTodayExact.phaseName.contains("Retraso Estimado"))
+
+    // When today == 2026-12-02: Day 32 of active cycle, 3d delay
+    val todayDelayed = LocalDate.of(2026, 12, 2)
+    val detailTodayDelayed = CycleCalculationEngine.getDayDetail(
+      date = todayDelayed,
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      today = todayDelayed
+    )
+    assertEquals(32, detailTodayDelayed.cycleDay)
+    assertEquals(DayHighlightType.NONE, detailTodayDelayed.highlightType)
+    assertTrue(detailTodayDelayed.phaseName.contains("3d de retraso"))
+  }
+
+  @Test
+  fun testEstimatorLimitationAndUncertaintyRepresentation() {
+    // Case 1: Only 1 atypical cycle (60 days) -> excluded from estimator
+    val atypicalHistory = listOf(
+      CycleEntry(id = "c1", startDate = "2026-08-01", endDate = "2026-08-05", cycleLength = 60),
+      CycleEntry(id = "c2", startDate = "2026-09-30", cycleLength = null)
+    )
+    val statusFallback = CycleCalculationEngine.calculateCycleStatus(
+      lastPeriodStart = LocalDate.of(2026, 9, 30),
+      averagePeriodDays = 5,
+      pastCycles = atypicalHistory,
+      configuredAverageCycle = 28,
+      today = LocalDate.of(2026, 10, 10)
+    )
+    assertFalse("Must indicate estimation is NOT based on usable history", statusFallback.isBasedOnHistory)
+    assertEquals(0, statusFallback.historyCyclesUsed)
+    assertNull("Must NOT claim observed variability when history is unusable", statusFallback.confidenceIntervalDays)
+    assertNotNull("Must provide informative estimation note", statusFallback.estimationNote)
+    assertTrue(statusFallback.estimationNote?.contains("configuración de respaldo") == true)
+
+    // Case 2: History with 3 usable cycles (26, 28, 30) -> based on history with real std dev
+    val usableHistory = listOf(
+      CycleEntry(id = "c1", startDate = "2026-01-01", cycleLength = 26),
+      CycleEntry(id = "c2", startDate = "2026-01-27", cycleLength = 28),
+      CycleEntry(id = "c3", startDate = "2026-02-24", cycleLength = 30),
+      CycleEntry(id = "c4", startDate = "2026-03-26", cycleLength = null)
+    )
+    val statusRealHistory = CycleCalculationEngine.calculateCycleStatus(
+      lastPeriodStart = LocalDate.of(2026, 3, 26),
+      averagePeriodDays = 5,
+      pastCycles = usableHistory,
+      configuredAverageCycle = 28,
+      today = LocalDate.of(2026, 4, 5)
+    )
+    assertTrue("Must indicate estimation IS based on history", statusRealHistory.isBasedOnHistory)
+    assertEquals(3, statusRealHistory.historyCyclesUsed)
+    assertNotNull("Must calculate real confidence interval", statusRealHistory.confidenceIntervalDays)
+    assertNull("No fallback note when history is usable", statusRealHistory.estimationNote)
+  }
+
+  @Test
+  fun testDelayCareTipsAreEmpatheticWithoutMedicalDogmatism() {
+    val tips = CycleCalculationEngine.getPartnerCareTips(CyclePhase.DELAYED, 32)
+    assertTrue(tips.isNotEmpty())
+    assertTrue(tips.any { it.title.contains("Paciencia") || it.description.contains("estrés") })
   }
 }

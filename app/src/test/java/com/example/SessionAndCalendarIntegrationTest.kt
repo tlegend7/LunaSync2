@@ -389,7 +389,7 @@ class SessionAndCalendarIntegrationTest {
   }
 
   @Test
-  fun testOpeningFromHoyAlwaysTargetsTodayEvenIfCalendarNavigated() = runWithLooper {
+  fun testViewModelSaveSymptomWithExplicitDateSavesToThatDate() = runWithLooper {
     val email = "ella_hoy_${UUID.randomUUID()}@test.com"
     val authResult = auth.createUserWithEmailAndPassword(email, "password123").await()
     val user = authResult.user!!
@@ -437,7 +437,7 @@ class SessionAndCalendarIntegrationTest {
   }
 
   @Test
-  fun testCapturedFormDateDecoupledFromSubsequentCalendarMutation() = runWithLooper {
+  fun testViewModelLogIntimacyWithExplicitDateDecoupledFromStateSelectedDate() = runWithLooper {
     val email = "ella_decouple_${UUID.randomUUID()}@test.com"
     val authResult = auth.createUserWithEmailAndPassword(email, "password123").await()
     val user = authResult.user!!

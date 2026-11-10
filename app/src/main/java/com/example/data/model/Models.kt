@@ -22,7 +22,8 @@ enum class CyclePhase {
   MENSTRUAL,
   FOLLICULAR,
   OVULATORY,
-  LUTEAL
+  LUTEAL,
+  DELAYED
 }
 
 enum class FlowLevel {
@@ -291,10 +292,15 @@ data class CycleStatusData(
   val daysUntilNextPeriod: Int,
   val fertileWindow: FertileWindow,
   val nextPeriodDate: LocalDate,
-  val confidenceIntervalDays: Double,
+  val confidenceIntervalDays: Double? = null,
   val isDelayed: Boolean = daysUntilNextPeriod < 0,
-  val delayedDays: Int = if (daysUntilNextPeriod < 0) -daysUntilNextPeriod else 0
+  val delayedDays: Int = if (daysUntilNextPeriod < 0) -daysUntilNextPeriod else 0,
+  val isBasedOnHistory: Boolean = true,
+  val historyCyclesUsed: Int = 0,
+  val estimationNote: String? = null
 )
+
+fun DailySymptom.isConfirmedBleeding(): Boolean = flowLevel in listOf("LIGHT", "MEDIUM", "HEAVY")
 
 data class PredictedCycle(
   val cycleNumber: Int,

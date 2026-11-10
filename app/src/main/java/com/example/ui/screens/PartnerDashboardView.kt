@@ -172,15 +172,12 @@ fun PartnerDashboardView(
         CyclePhase.MENSTRUAL -> Triple("Fase Menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.10f))
         CyclePhase.FOLLICULAR -> Triple("Fase Folicular", AppleHealthFollicular, AppleHealthFollicular.copy(alpha = 0.10f))
         CyclePhase.OVULATORY -> Triple("Fase Ovulatoria • Ventana Fértil", AppleHealthFertile, AppleHealthFertile.copy(alpha = 0.10f))
-        CyclePhase.LUTEAL -> if (isDelayed) {
-          Triple("Fase Lútea Tardía (Retraso Estimado)", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.10f))
-        } else {
-          Triple("Fase Lútea • Fase de Cuidado", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.10f))
-        }
+        CyclePhase.LUTEAL -> Triple("Fase Lútea • Fase de Cuidado", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.10f))
+        CyclePhase.DELAYED -> Triple("Retraso Estimado", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.10f))
       }
 
       val phaseDescription = when {
-        isDelayed -> "Se ha superado la fecha estimada para el próximo periodo. Es común que el ciclo varíe por estrés o cambios hormonales. Bríndale empatía y apoyo sin presionarla."
+        isDelayed || phase == CyclePhase.DELAYED -> "Se ha superado la fecha estimada para el próximo periodo (Día $currentDay, ${cycleStatus.delayedDays}d de retraso). Cada ciclo presenta variaciones normales por descanso o estrés. Bríndale empatía y apoyo sin presiones."
         phase == CyclePhase.MENSTRUAL -> "Niveles bajos de energía y sensibilidad física. Tu mejor apoyo es calidez, té caliente y descanso."
         phase == CyclePhase.FOLLICULAR -> "El estrógeno sube. Su energía y creatividad aumentan. Gran momento para salidas y proyectos juntos."
         phase == CyclePhase.OVULATORY -> "Pico de fertilidad y mayor vitalidad social y emocional. Máxima conexión en pareja."
@@ -249,6 +246,21 @@ fun PartnerDashboardView(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 21.sp
           )
+
+          if (!cycleStatus.isBasedOnHistory) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = AppleSystemGray5.copy(alpha = 0.5f)
+            ) {
+              Text(
+                text = "Duración estándar configurada (${cycleStatus.totalDays}d) • A la espera de historial regular",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+              )
+            }
+          }
         }
       }
     }

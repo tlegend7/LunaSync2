@@ -11,6 +11,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.junit.Assert.assertEquals
@@ -119,15 +120,16 @@ class CycleRepositoryRealExecutionTest {
     assertTrue("Cycle 2 should be recorded", res2.isSuccess)
     val id2 = res2.getOrThrow()
 
-    // Verify Cycle 1 cycleLength is now atomically derived as 28 days (from Jan 1 to Jan 29)
-    val doc1 = db.collection("couple_spaces").document(spaceId).collection("cycles").document(id1).get().await()
-    assertEquals(28L, doc1.getLong("cycleLength"))
-    assertEquals(5L, doc1.getLong("periodDuration"))
-    assertFalse(doc1.getBoolean("isCalculated") ?: true)
+    // Verify Cycle 1 cycleLength is now derived canonically as 28 days (from Jan 1 to Jan 29)
+    val cycles = cycleRepo.observeCycles(spaceId).first()
+    val c1 = cycles.first { it.startDate == "2026-01-01" }
+    val c2 = cycles.first { it.startDate == "2026-01-29" }
+    assertEquals(28, c1.cycleLength)
+    assertEquals(5, c1.periodDuration)
+    assertFalse(c1.isCalculated)
 
     // Verify Cycle 2 is the latest cycle, so cycleLength is null (active cycle)
-    val doc2 = db.collection("couple_spaces").document(spaceId).collection("cycles").document(id2).get().await()
-    assertNull(doc2.get("cycleLength"))
+    assertNull(c2.cycleLength)
   }
 
   @Test
@@ -187,8 +189,8 @@ class CycleRepositoryRealExecutionTest {
     val id2 = cycleRepo.recordPeriodStart(spaceId, LocalDate.of(2026, 1, 29), null).getOrThrow()
 
     // Initially, cycle 1 length is 28 days
-    var doc1 = db.collection("couple_spaces").document(spaceId).collection("cycles").document(id1).get().await()
-    assertEquals(28L, doc1.getLong("cycleLength"))
+    var cycles = cycleRepo.observeCycles(spaceId).first()
+    assertEquals(28, cycles.first { it.startDate == "2026-01-01" }.cycleLength)
 
     // Shift Cycle 2 start date from Jan 29 to Jan 31
     val updateRes = cycleRepo.updateCycleDates(
@@ -197,11 +199,16 @@ class CycleRepositoryRealExecutionTest {
       newStartDate = LocalDate.of(2026, 1, 31),
       newEndDate = LocalDate.of(2026, 2, 4)
     )
-    assertTrue(updateRes.isSuccess)
+    assertTrue("Update must succeed: ${updateRes.exceptionOrNull()?.message}", updateRes.isSuccess)
+
+    val docOld = db.collection("couple_spaces").document(spaceId).collection("cycles").document(id2).get().await()
+    assertFalse("Old date doc must be removed", docOld.exists())
+    val docNew = db.collection("couple_spaces").document(spaceId).collection("cycles").document("2026-01-31").get().await()
+    assertTrue("New date doc must exist", docNew.exists())
 
     // Now Cycle 1 length must recalibrate to 30 days (Jan 1 to Jan 31)
-    doc1 = db.collection("couple_spaces").document(spaceId).collection("cycles").document(id1).get().await()
-    assertEquals(30L, doc1.getLong("cycleLength"))
+    cycles = cycleRepo.observeCycles(spaceId).first()
+    assertEquals(30, cycles.first { it.startDate == "2026-01-01" }.cycleLength)
   }
 
   @Test
@@ -222,8 +229,8 @@ class CycleRepositoryRealExecutionTest {
     assertFalse(doc2.exists())
 
     // Cycle 1 length must now be derived directly from Cycle 1 to Cycle 3: Jan 1 to Feb 26 = 56 days
-    val doc1 = db.collection("couple_spaces").document(spaceId).collection("cycles").document(id1).get().await()
-    assertEquals(56L, doc1.getLong("cycleLength"))
+    val cycles = cycleRepo.observeCycles(spaceId).first()
+    assertEquals(56, cycles.first { it.startDate == "2026-01-01" }.cycleLength)
   }
 
   @Test
@@ -330,4 +337,131 @@ class CycleRepositoryRealExecutionTest {
     assertTrue("Moving to already occupied startDate must fail", updateRes.isFailure)
     assertTrue(updateRes.exceptionOrNull()?.message?.contains("Ya existe") == true)
   }
+
+  @Test
+  fun testTwoLegacyRecordsMovedConcurrentlyToSameDate() = runWithLooper {
+    val spaceId = "space_${UUID.randomUUID()}"
+    createSpaceWithElla(spaceId)
+
+    // Seed two legacy records with random UUIDs directly into Firestore
+    val legacyId1 = "legacy_${UUID.randomUUID()}"
+    val legacyId2 = "legacy_${UUID.randomUUID()}"
+    val cyclesCol = db.collection("couple_spaces").document(spaceId).collection("cycles")
+
+    cyclesCol.document(legacyId1).set(mapOf(
+      "spaceId" to spaceId,
+      "startDate" to "2026-10-01",
+      "periodDuration" to 5,
+      "isCalculated" to true
+    )).await()
+
+    cyclesCol.document(legacyId2).set(mapOf(
+      "spaceId" to spaceId,
+      "startDate" to "2026-10-15",
+      "periodDuration" to 5,
+      "isCalculated" to true
+    )).await()
+
+    val targetDate = LocalDate.of(2026, 11, 1)
+    var secondCallResult: Result<Unit>? = null
+
+    // Interleave execution: before the first update commits, trigger the second update to the same target date
+    cycleRepo.onBeforeUpdateCycleDatesHook = { _, _, _ ->
+      cycleRepo.onBeforeUpdateCycleDatesHook = null
+      secondCallResult = cycleRepo.updateCycleDates(
+        spaceId = spaceId,
+        cycleId = legacyId2,
+        newStartDate = targetDate,
+        newEndDate = null
+      )
+    }
+
+    val firstCallResult = cycleRepo.updateCycleDates(
+      spaceId = spaceId,
+      cycleId = legacyId1,
+      newStartDate = targetDate,
+      newEndDate = null
+    )
+
+    assertNotNull("Second update call must have executed", secondCallResult)
+    val oneSucceeded = firstCallResult.isSuccess xor secondCallResult!!.isSuccess
+    assertTrue("Exactly one concurrent move to target date must succeed, the other must fail", oneSucceeded)
+
+    // Exactly one cycle document must exist for the target date
+    val docsTarget = cyclesCol.whereEqualTo("startDate", "2026-11-01").get().await()
+    assertEquals("Exactly one document must exist for target date", 1, docsTarget.size())
+
+    // The losing legacy document must still exist with valid data (not corrupted or orphaned)
+    val loserId = if (firstCallResult.isSuccess) legacyId2 else legacyId1
+    val loserDoc = cyclesCol.document(loserId).get().await()
+    assertTrue("Losing legacy document must retain its valid state", loserDoc.exists())
+  }
+
+  @Test
+  fun testConcurrentCreationAndLegacyEditToSameDate() = runWithLooper {
+    val spaceId = "space_${UUID.randomUUID()}"
+    createSpaceWithElla(spaceId)
+
+    val legacyId = "legacy_${UUID.randomUUID()}"
+    val cyclesCol = db.collection("couple_spaces").document(spaceId).collection("cycles")
+    cyclesCol.document(legacyId).set(mapOf(
+      "spaceId" to spaceId,
+      "startDate" to "2026-10-01",
+      "periodDuration" to 5,
+      "isCalculated" to true
+    )).await()
+
+    val targetDateStr = "2026-12-01"
+    val targetDate = LocalDate.of(2026, 12, 1)
+    var legacyEditResult: Result<Unit>? = null
+
+    // When recordPeriodStart is about to commit, interleave legacy edit moving to the exact same date
+    cycleRepo.onBeforeRecordPeriodStartHook = {
+      cycleRepo.onBeforeRecordPeriodStartHook = null
+      legacyEditResult = cycleRepo.updateCycleDates(
+        spaceId = spaceId,
+        cycleId = legacyId,
+        newStartDate = targetDate,
+        newEndDate = null
+      )
+    }
+
+    val createResult = cycleRepo.recordPeriodStart(spaceId, targetDateStr, null)
+
+    assertNotNull("Legacy edit must have executed", legacyEditResult)
+    val oneSucceeded = createResult.isSuccess xor legacyEditResult!!.isSuccess
+    assertTrue("Exactly one of creation or legacy move must succeed and the other fail", oneSucceeded)
+
+    val docs = cyclesCol.whereEqualTo("startDate", targetDateStr).get().await()
+    assertEquals("Exactly one document must exist for target date", 1, docs.size())
+  }
+
+  @Test
+  fun testDateReleasedAndReusedAfterMoveOrDelete() = runWithLooper {
+    val spaceId = "space_${UUID.randomUUID()}"
+    createSpaceWithElla(spaceId)
+
+    val date1 = LocalDate.of(2026, 5, 10)
+    val date2 = LocalDate.of(2026, 5, 20)
+
+    // 1. Create a cycle at date1
+    val id1 = cycleRepo.recordPeriodStart(spaceId, date1, null).getOrThrow()
+
+    // 2. Move id1 from date1 to date2
+    val moveRes = cycleRepo.updateCycleDates(spaceId, id1, date2, null)
+    assertTrue("Move must succeed", moveRes.isSuccess)
+
+    // 3. Now date1 is released. We should be able to create a new cycle at date1!
+    val reuseRes = cycleRepo.recordPeriodStart(spaceId, date1, null)
+    assertTrue("Date1 should be reusable after being moved", reuseRes.isSuccess)
+
+    // 4. Delete the reused cycle at date1
+    val delRes = cycleRepo.deleteCycleEntry(spaceId, reuseRes.getOrThrow())
+    assertTrue("Delete must succeed", delRes.isSuccess)
+
+    // 5. date1 is released again after deletion. We can record period start at date1 again!
+    val reuseRes2 = cycleRepo.recordPeriodStart(spaceId, date1, null)
+    assertTrue("Date1 should be reusable after deletion", reuseRes2.isSuccess)
+  }
 }
+

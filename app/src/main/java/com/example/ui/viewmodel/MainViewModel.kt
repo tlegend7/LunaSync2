@@ -287,7 +287,7 @@ class MainViewModel(
             allSymptoms = symptoms,
             todaySymptom = todayEntry
           )
-          updateSelectedDayDetail()
+          refreshCycleCalculations()
         }
       }
     }
@@ -361,7 +361,9 @@ class MainViewModel(
       return
     }
 
-    val confirmedBleedingDates = _uiState.value.allSymptoms.filter { it.flowLevel != FlowLevel.NONE.name }.mapNotNull {
+    val confirmedBleedingDates = _uiState.value.allSymptoms.filter {
+      it.flowLevel in listOf("LIGHT", "MEDIUM", "HEAVY")
+    }.mapNotNull {
       try { LocalDate.parse(it.date) } catch (e: Exception) { null }
     }.toSet()
 
@@ -731,7 +733,7 @@ class MainViewModel(
         allSymptoms = updatedSymptoms,
         successMessage = "Síntomas guardados correctamente"
       )
-      updateSelectedDayDetail()
+      refreshCycleCalculations()
       onComplete(true, null)
       return Job().apply { complete() }
     }
@@ -756,7 +758,7 @@ class MainViewModel(
             allSymptoms = updatedSymptoms,
             successMessage = "Síntomas guardados correctamente"
           )
-          updateSelectedDayDetail()
+          refreshCycleCalculations()
           onComplete(true, null)
         } else {
           onComplete(false, "Sesión no válida")

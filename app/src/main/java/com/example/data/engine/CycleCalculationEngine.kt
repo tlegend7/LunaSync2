@@ -80,15 +80,15 @@ object CycleCalculationEngine {
   /**
    * Calcula la desviación estándar de la longitud de los ciclos completos válidos respecto a la media.
    * Utiliza la misma población de ciclos válidos que el promedio.
-   * Si hay menos de 2 ciclos utilizables, asume una variabilidad fisiológica basal típica de 1.5 días.
+   * Si hay menos de 2 ciclos utilizables, retorna null para no inventar variabilidad no observada.
    */
-  fun calculateStandardDeviation(cycles: List<CycleEntry>, mean: Double): Double {
+  fun calculateStandardDeviation(cycles: List<CycleEntry>, mean: Double): Double? {
     val usableCycles = cycles.filter { entry ->
       val len = entry.cycleLength
       len != null && len in MIN_CYCLE_DAYS..MAX_CYCLE_DAYS
     }
 
-    if (usableCycles.size < 2) return 1.5
+    if (usableCycles.size < 2) return null
 
     val sumSquaredDiffs = usableCycles.sumOf {
       val diff = it.cycleLength!! - mean
@@ -114,6 +114,11 @@ object CycleCalculationEngine {
     today: LocalDate = LocalDate.now(),
     confirmedBleedingDates: Set<LocalDate> = emptySet()
   ): CycleStatusData {
+    val usableCycles = pastCycles.filter { entry ->
+      val len = entry.cycleLength
+      len != null && len in MIN_CYCLE_DAYS..MAX_CYCLE_DAYS
+    }
+    val hasUsableHistory = usableCycles.isNotEmpty()
     val meanCycle = calculateWeightedAverage(pastCycles, configuredAverageCycle)
     val roundedCycle = meanCycle.roundToInt().coerceIn(MIN_CYCLE_DAYS, MAX_CYCLE_DAYS)
     val sigma = calculateStandardDeviation(pastCycles, meanCycle)
@@ -153,12 +158,16 @@ object CycleCalculationEngine {
     val isEstimatedBleed = activeConfirmedEnd == null && currentDay in 1..averagePeriodDays
 
     val currentPhase = when {
-      isDelayed -> CyclePhase.LUTEAL // Al superarse la fecha estimada, permanece en fase lútea tardía hasta nuevo sangrado
+      isDelayed -> CyclePhase.DELAYED // Al superarse la fecha estimada, estado de retraso sin atribuir fase fisiológica arbitraria
       isBleedingToday || isEstimatedBleed -> CyclePhase.MENSTRUAL
       currentDay in 1..(estimatedOvulationDay - 2) -> CyclePhase.FOLLICULAR
       currentDay in (estimatedOvulationDay - 1)..(estimatedOvulationDay + 1) -> CyclePhase.OVULATORY
       else -> CyclePhase.LUTEAL
     }
+
+    val estimationNote = if (!hasUsableHistory) {
+      "Estimación basada en configuración de respaldo ($roundedCycle días). El historial no contiene ciclos completos en el rango típico ($MIN_CYCLE_DAYS-$MAX_CYCLE_DAYS días)."
+    } else null
 
     return CycleStatusData(
       currentDay = currentDay,
@@ -167,7 +176,10 @@ object CycleCalculationEngine {
       daysUntilNextPeriod = daysUntilNext,
       fertileWindow = fertileWindow,
       nextPeriodDate = nextPeriodDate,
-      confidenceIntervalDays = sigma
+      confidenceIntervalDays = sigma,
+      isBasedOnHistory = hasUsableHistory,
+      historyCyclesUsed = usableCycles.size,
+      estimationNote = estimationNote
     )
   }
 
@@ -247,6 +259,24 @@ object CycleCalculationEngine {
           categoryIcon = "massage"
         )
       )
+
+      CyclePhase.DELAYED -> listOf(
+        CareTip(
+          title = "Paciencia y Cero Presión",
+          description = "La fecha estimada se ha superado. Evita preguntar insistentemente si ya comenzó el periodo para no generar estrés.",
+          categoryIcon = "heart"
+        ),
+        CareTip(
+          title = "Ambiente de Calma y Confort",
+          description = "Prepara un espacio cálido y relajado con infusiones o planes tranquilos en casa.",
+          categoryIcon = "tea"
+        ),
+        CareTip(
+          title = "Comprensión sin Diagnósticos",
+          description = "El cuerpo tiene variaciones naturales por descanso o estrés. Brinda afecto y escucha activa sin alarmar.",
+          categoryIcon = "massage"
+        )
+      )
     }
   }
 
@@ -263,7 +293,7 @@ object CycleCalculationEngine {
   ): List<PredictedCycle> {
     val meanCycle = calculateWeightedAverage(pastCycles, configuredAverageCycle)
     val roundedCycle = meanCycle.roundToInt().coerceIn(MIN_CYCLE_DAYS, MAX_CYCLE_DAYS)
-    val sigma = calculateStandardDeviation(pastCycles, meanCycle)
+    val sigma = calculateStandardDeviation(pastCycles, meanCycle) ?: 0.0
 
     val predictions = mutableListOf<PredictedCycle>()
     var currentPeriodStart = lastPeriodStart
@@ -507,7 +537,7 @@ object CycleCalculationEngine {
       return DayCycleDetail(
         date = date,
         cycleDay = activeDayNum,
-        highlightType = DayHighlightType.LUTEAL,
+        highlightType = DayHighlightType.NONE,
         phaseName = "Retraso Estimado (Día $activeDayNum)$delayLabel",
         hormoneInsight = "Se ha superado la fecha estimada para el próximo periodo$delayLabel. El ciclo actual continúa abierto hasta registrar un nuevo sangrado real.",
         hasSymptomLogged = hasSymptom,
@@ -517,8 +547,8 @@ object CycleCalculationEngine {
       )
     }
 
-    // 5. Proyecciones futuras para fechas posteriores a la fecha esperada cuando hoy NO está en retraso
-    if (date.isAfter(currentNextPeriod) && today < currentNextPeriod) {
+    // 5. Proyecciones futuras para fechas posteriores o iguales a la fecha esperada cuando hoy NO está en retraso
+    if (!date.isBefore(currentNextPeriod) && today < currentNextPeriod) {
       val futurePredictions = predictFutureCycles(
         lastPeriodStart = lastPeriodStart,
         averagePeriodDays = averagePeriodDays,
@@ -529,12 +559,13 @@ object CycleCalculationEngine {
 
       for (pred in futurePredictions) {
         if (!date.isBefore(pred.expectedStartDate) && !date.isAfter(pred.expectedEndDate)) {
+          val varText = if (pred.confidenceDays > 0.0) " (variabilidad ±${String.format(java.util.Locale.US, "%.1f", pred.confidenceDays)}d)" else ""
           return DayCycleDetail(
             date = date,
             cycleDay = null, // La proyección no debe sustituir el conteo del ciclo real abierto ni inventar día
             highlightType = DayHighlightType.PREDICTED_PERIOD,
             phaseName = "Periodo Proyectado (Ciclo #${pred.cycleNumber})",
-            hormoneInsight = "Inicio estimado del sangrado menstrual proyectado con tu ciclo de $roundedCycle días (variabilidad ±${String.format(java.util.Locale.US, "%.1f", pred.confidenceDays)}d).",
+            hormoneInsight = "Inicio estimado del sangrado menstrual proyectado con tu ciclo de $roundedCycle días$varText.",
             hasSymptomLogged = hasSymptom,
             hasIntimacyLogged = hasIntimacy,
             isPredicted = true,
@@ -563,6 +594,35 @@ object CycleCalculationEngine {
             highlightType = DayHighlightType.FERTILE_WINDOW,
             phaseName = "Ventana Fértil Estimada (Ciclo #${pred.cycleNumber})",
             hormoneInsight = "Días de mayor probabilidad biológica calculados para tu ciclo proyectado #${pred.cycleNumber}.",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = true,
+            isPeriodConfirmed = false
+          )
+        }
+
+        val nextCycleStart = pred.expectedStartDate.plusDays(roundedCycle.toLong())
+        if (date.isAfter(pred.expectedEndDate) && date.isBefore(pred.fertileWindowStart)) {
+          return DayCycleDetail(
+            date = date,
+            cycleDay = null,
+            highlightType = DayHighlightType.FOLLICULAR,
+            phaseName = "Fase Folicular Proyectada (Ciclo #${pred.cycleNumber})",
+            hormoneInsight = "Fase folicular estimada para el ciclo proyectado #${pred.cycleNumber}.",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = true,
+            isPeriodConfirmed = false
+          )
+        }
+
+        if (date.isAfter(pred.fertileWindowEnd) && date.isBefore(nextCycleStart)) {
+          return DayCycleDetail(
+            date = date,
+            cycleDay = null,
+            highlightType = DayHighlightType.LUTEAL,
+            phaseName = "Fase Lútea Proyectada (Ciclo #${pred.cycleNumber})",
+            hormoneInsight = "Fase lútea estimada para el ciclo proyectado #${pred.cycleNumber}.",
             hasSymptomLogged = hasSymptom,
             hasIntimacyLogged = hasIntimacy,
             isPredicted = true,

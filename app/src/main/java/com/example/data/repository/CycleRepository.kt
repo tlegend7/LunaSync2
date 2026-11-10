@@ -48,6 +48,7 @@ open class CycleRepository(
 ) {
 
   internal var onBeforeRecordPeriodStartHook: (suspend (startDate: String) -> Unit)? = null
+  internal var onBeforeUpdateCycleDatesHook: (suspend (spaceId: String, cycleId: String, newStartDate: String) -> Unit)? = null
 
   /**
    * Deriva de forma canónica y consistente las duraciones de ciclo (cycleLength)
@@ -145,7 +146,6 @@ open class CycleRepository(
         transaction.set(docRef, payload)
       }.await()
 
-      syncCycleLengths(spaceId)
       Result.success(docRef.id)
     } catch (e: Exception) {
       val unwrapped = if (e is com.google.firebase.firestore.FirebaseFirestoreException && e.cause is IllegalArgumentException) {
@@ -246,16 +246,19 @@ open class CycleRepository(
       val oldDocRef = db.collection("couple_spaces").document(spaceId)
         .collection("cycles").document(cycleId)
 
+      // Hook de concurrencia para pruebas controladas
+      onBeforeUpdateCycleDatesHook?.invoke(spaceId, cycleId, newStartDate)
+
       db.runTransaction { transaction ->
         val oldSnap = transaction.get(oldDocRef)
         if (!oldSnap.exists()) {
           throw IllegalArgumentException("El ciclo a modificar no existe")
         }
 
-        val oldStartDate = oldSnap.getString("startDate") ?: cycleId
-
-        // Si el cycleId correspondía exactamente a oldStartDate y la fecha cambia, movemos al nuevo document
-        if (cycleId == oldStartDate && cycleId != newStartDate) {
+        // Siempre garantizamos la unicidad canónica utilizando newStartDate como clave del documento.
+        // Si cycleId != newStartDate (incluye documentos legacy con ID aleatorio que se migran de forma atómica),
+        // verificamos si newStartDate ya está ocupado dentro de la transacción OCC.
+        if (cycleId != newStartDate) {
           val newDocRef = db.collection("couple_spaces").document(spaceId)
             .collection("cycles").document(newStartDate)
           val targetSnap = transaction.get(newDocRef)
@@ -267,6 +270,7 @@ open class CycleRepository(
             "spaceId" to spaceId,
             "startDate" to newStartDate,
             "endDate" to newEndDate,
+            "cycleLength" to null,
             "periodDuration" to actualDuration,
             "isCalculated" to (parsedEnd == null),
             "createdAt" to (oldSnap.get("createdAt") ?: FieldValue.serverTimestamp()),
@@ -275,11 +279,10 @@ open class CycleRepository(
           transaction.delete(oldDocRef)
           transaction.set(newDocRef, payload)
         } else {
-          // Documento legacy con ID aleatorio o cuya clave no colisiona
+          // cycleId coincide exactamente con newStartDate (solo se actualiza endDate o duración)
           transaction.update(
             oldDocRef,
             mapOf(
-              "startDate" to newStartDate,
               "endDate" to newEndDate,
               "periodDuration" to actualDuration,
               "isCalculated" to (parsedEnd == null),
@@ -289,7 +292,6 @@ open class CycleRepository(
         }
       }.await()
 
-      syncCycleLengths(spaceId)
       Result.success(Unit)
     } catch (e: Exception) {
       val unwrapped = if (e is com.google.firebase.firestore.FirebaseFirestoreException && e.cause is IllegalArgumentException) {
@@ -313,7 +315,8 @@ open class CycleRepository(
   ): Result<Unit> = updateCycleDates(spaceId, cycleId, newStartDate.toString(), newEndDate?.toString())
 
   /**
-   * Elimina un registro de inicio de ciclo y recalcula de forma atómica los ciclos vecinos.
+   * Elimina un registro de inicio de ciclo.
+   * La secuencia de duraciones entre ciclos restantes se calcula de forma derivada y canónica al observar.
    */
   open suspend fun deleteCycleEntry(spaceId: String, cycleId: String): Result<Unit> {
     return try {
@@ -322,61 +325,9 @@ open class CycleRepository(
         .delete()
         .await()
 
-      syncCycleLengths(spaceId)
       Result.success(Unit)
     } catch (e: Exception) {
       Result.failure(e)
-    }
-  }
-
-  /**
-   * Recalcula de forma atómica y consistente la duración del ciclo (cycleLength)
-   * entre inicios consecutivos ordenados cronológicamente por startDate.
-   * El ciclo más reciente siempre queda con cycleLength = null (ciclo incompleto).
-   */
-  open suspend fun syncCycleLengths(spaceId: String) {
-    val snapshot = db.collection("couple_spaces").document(spaceId)
-      .collection("cycles")
-      .get()
-      .await()
-
-    val entries = snapshot.documents.mapNotNull { doc ->
-      val startDate = doc.getString("startDate")
-      if (startDate != null) {
-        Triple(doc.id, startDate, doc.getLong("cycleLength")?.toInt())
-      } else null
-    }.sortedBy { it.second } // Orden ascendente por startDate
-
-    val batch = db.batch()
-    var modified = false
-
-    for (i in entries.indices) {
-      val (docId, startDate, currentLen) = entries[i]
-      val docRef = db.collection("couple_spaces").document(spaceId)
-        .collection("cycles").document(docId)
-
-      if (i < entries.size - 1) {
-        val nextStartDate = entries[i + 1].second
-        val derivedLen = ChronoUnit.DAYS.between(
-          LocalDate.parse(startDate),
-          LocalDate.parse(nextStartDate)
-        ).toInt()
-
-        if (currentLen != derivedLen) {
-          batch.update(docRef, mapOf("cycleLength" to derivedLen, "updatedAt" to FieldValue.serverTimestamp()))
-          modified = true
-        }
-      } else {
-        // El ciclo más reciente queda incompleto
-        if (currentLen != null) {
-          batch.update(docRef, mapOf("cycleLength" to null, "updatedAt" to FieldValue.serverTimestamp()))
-          modified = true
-        }
-      }
-    }
-
-    if (modified) {
-      batch.commit().await()
     }
   }
 

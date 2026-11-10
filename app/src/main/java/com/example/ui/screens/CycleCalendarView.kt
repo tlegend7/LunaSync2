@@ -115,6 +115,12 @@ fun CycleCalendarView(
     }.toSet()
   }
 
+  val confirmedBleedingDates = remember(symptoms) {
+    symptoms.filter { it.flowLevel in listOf("LIGHT", "MEDIUM", "HEAVY") }.mapNotNull {
+      try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+    }.toSet()
+  }
+
   // Pre-calculate day details for the selected date
   val selectedDayDetail by remember(selectedDate, lastPeriodStart, pastCycles, symptoms, intimacyLogs) {
     derivedStateOf {
@@ -126,7 +132,8 @@ fun CycleCalendarView(
         configuredAverageCycle = averageCycleLength,
         today = today,
         symptomDates = symptomDates,
-        intimacyDates = intimacyDates
+        intimacyDates = intimacyDates,
+        confirmedBleedingDates = confirmedBleedingDates
       )
     }
   }
@@ -274,7 +281,8 @@ fun CycleCalendarView(
                   configuredAverageCycle = averageCycleLength,
                   today = today,
                   symptomDates = symptomDates,
-                  intimacyDates = intimacyDates
+                  intimacyDates = intimacyDates,
+                  confirmedBleedingDates = confirmedBleedingDates
                 )
 
                 CalendarDayCell(

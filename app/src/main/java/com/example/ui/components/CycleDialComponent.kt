@@ -71,6 +71,7 @@ fun CycleDialComponent(
       CyclePhase.FOLLICULAR -> Triple("Folicular", AppleHealthFollicular, AppleHealthFollicular.copy(alpha = 0.12f))
       CyclePhase.OVULATORY -> Triple("Fértil • Ovulación", AppleHealthFertile, AppleHealthFertile.copy(alpha = 0.12f))
       CyclePhase.LUTEAL -> Triple("Lútea", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.12f))
+      CyclePhase.DELAYED -> Triple("Retraso menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.15f))
     }
   }
 
