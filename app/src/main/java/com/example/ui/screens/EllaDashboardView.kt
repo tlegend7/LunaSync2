@@ -170,9 +170,10 @@ fun EllaDashboardView(
       )
     }
 
-    // Fast Action Bar (3 balanced actions)
-    Row(
+    // Fast Action Bar (3 acciones adaptativas con escalado fluido para texto ampliado)
+    FlowRow(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
       modifier = Modifier.fillMaxWidth()
     ) {
       Button(
@@ -180,7 +181,7 @@ fun EllaDashboardView(
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier
-          .weight(1.3f)
+          .weight(1f)
           .heightIn(min = 48.dp)
           .testTag("log_symptoms_cta")
       ) {
@@ -198,7 +199,7 @@ fun EllaDashboardView(
           contentColor = MaterialTheme.colorScheme.onSurface
         ),
         modifier = Modifier
-          .weight(1.2f)
+          .weight(1f)
           .heightIn(min = 48.dp)
           .testTag("open_calendar_cta")
       ) {
@@ -215,7 +216,7 @@ fun EllaDashboardView(
           contentColor = PhaseMenstrualRose
         ),
         modifier = Modifier
-          .weight(1.1f)
+          .weight(1f)
           .heightIn(min = 48.dp)
           .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
           .testTag("log_intimacy_cta")
@@ -250,8 +251,8 @@ fun EllaDashboardView(
     } else {
       when (phase) {
         CyclePhase.MENSTRUAL -> Quad(
-          "Fase Menstrual • Renovación",
-          "El estrógeno y la progesterona están en su nivel basal. El cuerpo limpia y reinicia su ciclo. El magnesio, las bebidas tibias y las pausas te devolverán balance.",
+          "Fase Menstrual • Renovación y Pausa",
+          "Durante el sangrado muchas personas experimentan menor energía física o mayor sensibilidad. Las bebidas tibias, las pausas y el descanso pueden resultar reconfortantes según lo que tu cuerpo pida hoy.",
           PhaseMenstrualRose,
           PhaseMenstrualSubtle
         )

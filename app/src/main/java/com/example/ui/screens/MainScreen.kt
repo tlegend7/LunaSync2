@@ -104,6 +104,16 @@ fun MainScreen(
   var showCheckInDialog by remember { mutableStateOf(false) }
   var showPrivacyDialog by remember { mutableStateOf(false) }
 
+  // Descartar de forma segura formularios abiertos cuando cambia o termina la sesión
+  LaunchedEffect(uiState.currentUser?.uid, uiState.isGuestMode) {
+    periodDialogTargetDate = null
+    symptomDialogTargetDate = null
+    intimacyDialogTargetDate = null
+    showObservationDialog = false
+    showCheckInDialog = false
+    showPrivacyDialog = false
+  }
+
   LaunchedEffect(uiState.errorMessage, uiState.successMessage) {
     uiState.errorMessage?.let {
       snackbarHostState.showSnackbar(it)

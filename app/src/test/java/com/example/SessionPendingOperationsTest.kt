@@ -3,11 +3,13 @@ package com.example
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.model.CheckInPromptType
 import com.example.data.model.CoupleSpace
 import com.example.data.model.DailySymptom
 import com.example.data.model.FlowLevel
 import com.example.data.model.Mood
 import com.example.data.model.PartnerObservation
+import com.example.data.model.PerceivedMood
 import com.example.data.model.SharingPermissions
 import com.example.data.model.SpaceStatus
 import com.example.data.model.SpottingSuggestionStatus
@@ -15,6 +17,7 @@ import com.example.data.model.UserRole
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.CoupleSpaceRepository
 import com.example.data.repository.CycleRepository
+import com.example.data.repository.PartnerSupportRepository
 import com.example.data.repository.SpaceObservationResult
 import com.example.ui.viewmodel.MainViewModel
 import com.google.firebase.FirebaseApp
@@ -126,6 +129,51 @@ class ControllableCoupleSpaceRepository(app: Application) : CoupleSpaceRepositor
   }
 }
 
+/**
+ * Doble de prueba controlable para PartnerSupportRepository con registro determinista de llamadas.
+ */
+class ControllablePartnerSupportRepository(context: Context) : PartnerSupportRepository(context) {
+  var logObservationCalled = CompletableDeferred<PartnerObservation>()
+  var sendCheckInCalled = CompletableDeferred<Pair<CheckInPromptType, String?>>()
+
+  var logObservationDeferred = CompletableDeferred<Unit>()
+  var sendCheckInDeferred = CompletableDeferred<Unit>()
+
+  override suspend fun logObservation(
+    spaceId: String,
+    date: String,
+    perceivedMood: PerceivedMood,
+    apparentPainLevel: Int,
+    unloggedSpottingReported: Boolean,
+    careActionTaken: String?,
+    sweetMessage: String?,
+    userId: String
+  ) {
+    val obs = PartnerObservation(
+      spaceId = spaceId,
+      date = date,
+      perceivedMood = perceivedMood.name,
+      apparentPainLevel = apparentPainLevel,
+      unloggedSpottingReported = unloggedSpottingReported,
+      careActionTaken = careActionTaken,
+      sweetMessage = sweetMessage,
+      loggedBy = userId
+    )
+    logObservationCalled.complete(obs)
+    logObservationDeferred.await()
+  }
+
+  override suspend fun sendCheckIn(
+    spaceId: String,
+    senderUid: String,
+    promptType: CheckInPromptType,
+    customNote: String?
+  ) {
+    sendCheckInCalled.complete(Pair(promptType, customNote))
+    sendCheckInDeferred.await()
+  }
+}
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SessionPendingOperationsTest {
@@ -135,6 +183,7 @@ class SessionPendingOperationsTest {
   private lateinit var controllableAuthRepo: ControllableAuthRepository
   private lateinit var controllableCycleRepo: ControllableCycleRepository
   private lateinit var controllableSpaceRepo: ControllableCoupleSpaceRepository
+  private lateinit var controllablePartnerRepo: ControllablePartnerSupportRepository
   private lateinit var viewModel: MainViewModel
 
   @Before
@@ -157,12 +206,14 @@ class SessionPendingOperationsTest {
     controllableAuthRepo = ControllableAuthRepository(application)
     controllableCycleRepo = ControllableCycleRepository(application)
     controllableSpaceRepo = ControllableCoupleSpaceRepository(application)
+    controllablePartnerRepo = ControllablePartnerSupportRepository(application)
 
     viewModel = MainViewModel(
       application = application,
       authRepo = controllableAuthRepo,
       cycleRepo = controllableCycleRepo,
-      spaceRepo = controllableSpaceRepo
+      spaceRepo = controllableSpaceRepo,
+      partnerRepo = controllablePartnerRepo
     )
   }
 
@@ -267,14 +318,12 @@ class SessionPendingOperationsTest {
       // 5. Completar la operación de A
       controllableCycleRepo.saveSymptomDeferred.complete(Unit)
 
-      // Señal 2: Sincronización determinista sin Thread.sleep
-      val (callbackSuccess, callbackError) = withTimeout(5000) { callbackDeferred.await() }
+      // Sincronización determinista sin Thread.sleep
       withTimeout(5000) { operationJob.join() }
       assertTrue("ViewModel job must be completed", operationJob.isCompleted)
 
-      // 6. Verificación de blindaje
-      assertFalse("Late response must be rejected for invalidated session", callbackSuccess)
-      assertEquals("Sesión no válida", callbackError)
+      // 6. Verificación de blindaje: callback NO debe ser entregado para evitar contaminación de formulario en sesión invalidada
+      assertFalse("Late response must not deliver callback to invalidated session", callbackDeferred.isCompleted)
 
       val stateC = viewModel.uiState.value
       assertNull("User C must NOT receive User A symptom", stateC.todaySymptom)
@@ -326,13 +375,11 @@ class SessionPendingOperationsTest {
       val networkEx = RuntimeException("Error fatal en la red de A")
       controllableCycleRepo.saveSymptomDeferred.completeExceptionally(networkEx)
 
-      // Señal 2: Sincronización determinista sin Thread.sleep
-      val (callbackSuccess, callbackError) = withTimeout(5000) { callbackDeferred.await() }
+      // Sincronización determinista sin Thread.sleep
       withTimeout(5000) { operationJob.join() }
       assertTrue("ViewModel job must be completed", operationJob.isCompleted)
 
-      assertFalse("Failure callback must report failure", callbackSuccess)
-      assertEquals("Error fatal en la red de A", callbackError)
+      assertFalse("Failure callback must not be delivered to invalidated session", callbackDeferred.isCompleted)
       assertNull("User C errorMessage must NOT be contaminated with User A error", viewModel.uiState.value.errorMessage)
     }
   }
@@ -498,15 +545,160 @@ class SessionPendingOperationsTest {
       // 4. Se completa la operación pendiente de la sesión 1
       controllableCycleRepo.saveSymptomDeferred.complete(Unit)
 
-      // Señal 2: Sincronización determinista sin Thread.sleep
-      val (callbackSuccess, callbackError) = withTimeout(5000) { callbackDeferred.await() }
       withTimeout(5000) { operationJob.join() }
       assertTrue("Operation job must be completed", operationJob.isCompleted)
 
-      // 5. La continuación debe descartarse por sessionId obsoleto
-      assertFalse("Stale operation from prior session must be rejected even for same user", callbackSuccess)
-      assertEquals("Sesión no válida", callbackError)
+      // 5. La continuación debe descartarse por sessionId obsoleto: no entregar callback a nueva sesión
+      assertFalse("Stale operation from prior session must NOT deliver callback even for same user", callbackDeferred.isCompleted)
       assertNull("Session 2 todaySymptom must remain null without stale overwrite", viewModel.uiState.value.todaySymptom)
+    }
+  }
+
+  // --- PRUEBA 7: logPartnerObservation éxito en sesión original ---
+  @Test
+  fun `logPartnerObservation original session success delivers callback and updates state`() {
+    runWithLooper {
+      val userPartner = createRealTestUser("partner_ok")
+      val space = "space_partner_1"
+      setupCoherentSession(userPartner, space)
+
+      val callbackDeferred = CompletableDeferred<Pair<Boolean, String?>>()
+
+      val job = viewModel.logPartnerObservation(
+        perceivedMood = PerceivedMood.CALM,
+        apparentPainLevel = 2,
+        unloggedSpottingReported = true,
+        careActionTaken = "Té de manzanilla",
+        sweetMessage = "Te amo",
+        onComplete = { success, err ->
+          callbackDeferred.complete(Pair(success, err))
+        }
+      )
+
+      val obsCalled = withTimeout(5000) { controllablePartnerRepo.logObservationCalled.await() }
+      assertNotNull(obsCalled)
+      assertEquals("CALM", obsCalled.perceivedMood)
+
+      controllablePartnerRepo.logObservationDeferred.complete(Unit)
+      val (success, err) = withTimeout(5000) { callbackDeferred.await() }
+      job.join()
+
+      assertTrue("Must report success in valid session", success)
+      assertNull("No error on success", err)
+      assertEquals("¡Observación y cuidado registrados!", viewModel.uiState.value.successMessage)
+    }
+  }
+
+  // --- PRUEBA 8: logPartnerObservation error sanitizado en sesión original ---
+  @Test
+  fun `logPartnerObservation original session error delivers friendly sanitized error`() {
+    runWithLooper {
+      val userPartner = createRealTestUser("partner_err")
+      val space = "space_partner_2"
+      setupCoherentSession(userPartner, space)
+
+      val callbackDeferred = CompletableDeferred<Pair<Boolean, String?>>()
+
+      val job = viewModel.logPartnerObservation(
+        perceivedMood = PerceivedMood.TIRED,
+        apparentPainLevel = 3,
+        unloggedSpottingReported = false,
+        careActionTaken = null,
+        sweetMessage = null,
+        onComplete = { success, err ->
+          callbackDeferred.complete(Pair(success, err))
+        }
+      )
+
+      withTimeout(5000) { controllablePartnerRepo.logObservationCalled.await() }
+
+      val rawFirebaseEx = RuntimeException("PERMISSION_DENIED: Missing rules permission on Firestore collection")
+      controllablePartnerRepo.logObservationDeferred.completeExceptionally(rawFirebaseEx)
+
+      val (success, err) = withTimeout(5000) { callbackDeferred.await() }
+      job.join()
+
+      assertFalse("Must report failure", success)
+      assertNotNull(err)
+      assertFalse("Must NOT leak raw Firebase exception to user", err!!.contains("Firestore"))
+      assertEquals("No tienes permisos suficientes para realizar esta acción.", err)
+      assertEquals(err, viewModel.uiState.value.errorMessage)
+    }
+  }
+
+  // --- PRUEBA 9: logPartnerObservation cambio de sesión antes de error NO entrega callback ---
+  @Test
+  fun `logPartnerObservation session switch before error does NOT deliver callback to new session`() {
+    runWithLooper {
+      val userA = createRealTestUser("partner_A")
+      val spaceA = "space_A"
+      setupCoherentSession(userA, spaceA)
+
+      val callbackDeferred = CompletableDeferred<Pair<Boolean, String?>>()
+
+      val job = viewModel.logPartnerObservation(
+        perceivedMood = PerceivedMood.SAD,
+        apparentPainLevel = 1,
+        unloggedSpottingReported = false,
+        careActionTaken = null,
+        sweetMessage = null,
+        onComplete = { success, err ->
+          callbackDeferred.complete(Pair(success, err))
+        }
+      )
+
+      withTimeout(5000) { controllablePartnerRepo.logObservationCalled.await() }
+
+      // Usuario B inicia sesión antes de que A termine
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
+
+      val userB = createRealTestUser("partner_B")
+      setupCoherentSession(userB, "space_B")
+
+      // Falla la operación de A
+      controllablePartnerRepo.logObservationDeferred.completeExceptionally(RuntimeException("UNAVAILABLE: network offline"))
+
+      job.join()
+      assertTrue(job.isCompleted)
+
+      assertFalse("Callback from invalidated session must NOT be delivered to new session", callbackDeferred.isCompleted)
+      assertNull("User B errorMessage must not be contaminated", viewModel.uiState.value.errorMessage)
+    }
+  }
+
+  // --- PRUEBA 10: sendCheckIn cambio de sesión antes de éxito NO entrega callback ---
+  @Test
+  fun `sendCheckIn session switch before success does NOT deliver callback to new session`() {
+    runWithLooper {
+      val userA = createRealTestUser("checkin_A")
+      setupCoherentSession(userA, "space_checkin_A")
+
+      val callbackDeferred = CompletableDeferred<Pair<Boolean, String?>>()
+
+      val job = viewModel.sendCheckIn(
+        promptType = CheckInPromptType.HOW_ARE_YOU_FEELING,
+        customNote = "Nota A",
+        onComplete = { success, err ->
+          callbackDeferred.complete(Pair(success, err))
+        }
+      )
+
+      withTimeout(5000) { controllablePartnerRepo.sendCheckInCalled.await() }
+
+      val testScope = CoroutineScope(Dispatchers.Unconfined)
+      viewModel.signOut(testScope)
+
+      val userB = createRealTestUser("checkin_B")
+      setupCoherentSession(userB, "space_checkin_B")
+
+      controllablePartnerRepo.sendCheckInDeferred.complete(Unit)
+
+      job.join()
+      assertTrue(job.isCompleted)
+
+      assertFalse("Callback from stale session must NOT be delivered to new session", callbackDeferred.isCompleted)
+      assertNull("User B must NOT receive User A successMessage", viewModel.uiState.value.successMessage)
     }
   }
 }

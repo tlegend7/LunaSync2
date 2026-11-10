@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,7 +62,12 @@ fun SendCheckInDialog(
       )
     },
     text = {
-      Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+          .padding(vertical = 4.dp)
+      ) {
         if (dialogError != null) {
           Surface(
             color = StatusErrorSubtle,
@@ -123,7 +130,7 @@ fun SendCheckInDialog(
           onValueChange = { customNote = it },
           label = { Text("Nota personalizada (opcional)") },
           placeholder = { Text("Ej. Te pienso mucho hoy, avísame si necesitas algo...") },
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier.fillMaxWidth().testTag("checkin_custom_note_input"),
           shape = RoundedCornerShape(14.dp)
         )
       }

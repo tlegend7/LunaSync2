@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,6 +74,7 @@ import com.example.ui.theme.PhaseMenstrualRose
 import com.example.ui.theme.PhaseMenstrualSubtle
 import com.example.ui.theme.StatusError
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PartnerDashboardView(
   space: CoupleSpace?,
@@ -242,9 +245,10 @@ fun PartnerDashboardView(
       )
     }
 
-    // Action Buttons
-    Row(
+    // Action Buttons (adaptativos con distribución fluida para texto ampliado)
+    FlowRow(
       horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
       modifier = Modifier.fillMaxWidth()
     ) {
       Button(

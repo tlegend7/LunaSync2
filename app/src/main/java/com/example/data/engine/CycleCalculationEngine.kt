@@ -191,17 +191,17 @@ object CycleCalculationEngine {
       CyclePhase.MENSTRUAL -> listOf(
         CareTip(
           title = "Confort e Hidratación",
-          description = "Prepara infusiones calientes (manzanilla, jengibre) o ten lista una bolsa de agua tibia para calmar cólicos.",
+          description = "Puedes preguntarle si le apetece una infusión caliente (manzanilla, jengibre) o una compresa tibia para mayor confort.",
           categoryIcon = "tea"
         ),
         CareTip(
           title = "Alivio Físico y Tensión",
-          description = "Ofrece un suave masaje en la espalda baja o los pies sin que tenga que pedírtelo.",
+          description = "Puedes ofrecerle un suave masaje en la espalda baja o los pies si nota tensión acumulada.",
           categoryIcon = "massage"
         ),
         CareTip(
           title = "Baja Demanda y Espacio",
-          description = "Sus niveles de energía están en el punto más bajo. Prioriza planes tranquilos en casa y descanso.",
+          description = "Durante el sangrado muchas personas experimentan menor energía física. Pregúntale con empatía si prefiere planes tranquilos en casa o cambiar la rutina.",
           categoryIcon = "heart"
         )
       )
@@ -209,17 +209,17 @@ object CycleCalculationEngine {
       CyclePhase.FOLLICULAR -> listOf(
         CareTip(
           title = "Energía y Entusiasmo",
-          description = "El estrógeno va en aumento. Es un momento ideal para proponer citas, proyectos creativos o ejercicio juntos.",
+          description = "El estrógeno suele comenzar su ascenso en esta fase. Pregúntale cómo se siente para coordinar salidas o proyectos si tiene disposición activa.",
           categoryIcon = "activity"
         ),
         CareTip(
           title = "Apoyo Proactivo",
-          description = "Se siente con mayor claridad mental y motivación. Sé su fan número uno en sus metas de la semana.",
+          description = "Muchas personas perciben mayor dinamismo en esta etapa. Puedes interesarte por sus proyectos de la semana y ofrecer apoyo práctico.",
           categoryIcon = "heart"
         ),
         CareTip(
-          title = "Nutrición Ligera",
-          description = "Prefiere comidas frescas, ricas en vegetales y proteínas magras que acompañen su vitalidad.",
+          title = "Opciones Compartidas",
+          description = "Pregúntale qué tipo de comida le apetece compartir, como opciones frescas o lo que prefiera para sus comidas.",
           categoryIcon = "food"
         )
       )
@@ -231,13 +231,13 @@ object CycleCalculationEngine {
           categoryIcon = "star"
         ),
         CareTip(
-          title = "Cuidado del pH y Flora",
-          description = "Manos siempre muy limpias antes de caricias íntimas. Si usan lubricante, elijan uno con pH balanceado.",
+          title = "Cuidado y Bienestar",
+          description = "La higiene mutua es clave para el confort íntimo. Si utilizan lubricantes o productos, elijan opciones con pH adecuado.",
           categoryIcon = "heart"
         ),
         CareTip(
           title = "Comunicación Abierta",
-          description = "Conversen con empatía sobre sus planes compartidos y expectativas íntimas con confianza mutua.",
+          description = "Conversen con empatía y sin presiones sobre sus planes y cómo desea vivir su bienestar íntimo.",
           categoryIcon = "chat"
         )
       )
@@ -245,17 +245,17 @@ object CycleCalculationEngine {
       CyclePhase.LUTEAL -> listOf(
         CareTip(
           title = "Sensibilidad de Tejidos y Cuello",
-          description = "El cuello uterino desciende y está más sensible. Tras intimidad puede haber ligero manchado por roce; sé muy suave.",
+          description = "En esta etapa puede haber mayor sensibilidad física en la zona pélvica. La delicadeza y la comunicación son fundamentales.",
           categoryIcon = "heart"
         ),
         CareTip(
-          title = "Antojos y Magnesio",
-          description = "Los antojos de chocolate negro o frutos secos son normales por la caída de serotonina. ¡Sorpréndela con su snack favorito!",
+          title = "Detalles Reconfortantes",
+          description = "Algunas personas experimentan cambios en el apetito o apetencia por ciertos alimentos. Pregúntale si se le antoja algún snack o detalle reconfortante.",
           categoryIcon = "food"
         ),
         CareTip(
-          title = "Paciencia y Aligerar su Carga",
-          description = "Toma la iniciativa con tareas domésticas o prepara la cena para que pueda desconectar y descansar.",
+          title = "Aligerar la Carga Diaria",
+          description = "Si le resulta cómodo, puedes ofrecer ayuda con tareas del hogar o preparar la cena para facilitar su descanso.",
           categoryIcon = "massage"
         )
       )
@@ -263,17 +263,17 @@ object CycleCalculationEngine {
       CyclePhase.DELAYED -> listOf(
         CareTip(
           title = "Paciencia y Cero Presión",
-          description = "La fecha estimada se ha superado. Evita preguntar insistentemente si ya comenzó el periodo para no generar estrés.",
+          description = "La fecha estimada se ha superado. Cada ciclo puede presentar variaciones normales; evita insistir con preguntas para no añadir tensión.",
           categoryIcon = "heart"
         ),
         CareTip(
           title = "Ambiente de Calma y Confort",
-          description = "Prepara un espacio cálido y relajado con infusiones o planes tranquilos en casa.",
+          description = "Ofrecer un espacio tranquilo con bebidas tibias o momentos de pausa en casa puede ser de gran apoyo.",
           categoryIcon = "tea"
         ),
         CareTip(
           title = "Comprensión sin Diagnósticos",
-          description = "El cuerpo tiene variaciones naturales por descanso o estrés. Brinda afecto y escucha activa sin alarmar.",
+          description = "Las fechas del ciclo son estimaciones estadísticas y el cuerpo varía según múltiples factores. Brinda escucha y acompañamiento sin emitir juicios ni diagnósticos.",
           categoryIcon = "massage"
         )
       )
@@ -463,7 +463,7 @@ object CycleCalculationEngine {
         cycleDay = activeDayNum,
         highlightType = DayHighlightType.ACTUAL_PERIOD,
         phaseName = if (isStartDay) "Menstruación registrada (Día 1)" else "Menstruación confirmada (Día $activeDayNum)",
-        hormoneInsight = "Fase menstrual activa confirmada. El endometrio se renueva. Prioriza descanso, hidratación y confort.",
+        hormoneInsight = "Fase menstrual registrada. Días en los que suele priorizarse descanso e hidratación según necesidades individuales.",
         hasSymptomLogged = hasSymptom,
         hasIntimacyLogged = hasIntimacy,
         isPredicted = false,
@@ -636,9 +636,9 @@ object CycleCalculationEngine {
     val isFollicular = activeDayNum < (roundedCycle - (LUTEAL_PHASE_DAYS - 1))
     val phaseName = if (isFollicular) "Fase Folicular (Día $activeDayNum)" else "Fase Lútea (Día $activeDayNum)"
     val insight = if (isFollicular) {
-      "Fase de ascenso de estrógeno. Suele acompañarse de energía creciente y motivación."
+      "Fase de ascenso estimado de estrógeno. En muchas personas suele acompañarse de paulatina reactivación física."
     } else {
-      "Fase dominada por progesterona. Invita a un ritmo más pausado y autocuidado."
+      "Fase en la que suele predominar la progesterona. Muchas personas prefieren un ritmo más pausado según su día a día."
     }
 
     return DayCycleDetail(

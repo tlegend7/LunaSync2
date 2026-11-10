@@ -55,7 +55,7 @@ fun DailyCareCheatSheetCard(
     )
     Spacer(modifier = Modifier.height(2.dp))
     Text(
-      text = "Sugerencias de apoyo para hoy",
+      text = "Opciones de apoyo sugeridas para hoy",
       style = MaterialTheme.typography.titleMedium,
       fontWeight = FontWeight.Bold,
       color = MaterialTheme.colorScheme.onSurface

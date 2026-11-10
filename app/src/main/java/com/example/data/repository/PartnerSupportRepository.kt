@@ -16,12 +16,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
-class PartnerSupportRepository(
+open class PartnerSupportRepository(
   context: Context,
   private val db: FirebaseFirestore = FirestoreProvider.getDb(context)
 ) {
 
-  fun observeObservations(spaceId: String): Flow<List<PartnerObservation>> {
+  open fun observeObservations(spaceId: String): Flow<List<PartnerObservation>> {
     return db.collection("couple_spaces").document(spaceId)
       .collection("observations")
       .orderBy("createdAt", Query.Direction.DESCENDING)
@@ -29,7 +29,7 @@ class PartnerSupportRepository(
       .map { snapshot -> snapshot.toObjects(PartnerObservation::class.java) }
   }
 
-  suspend fun logObservation(
+  open suspend fun logObservation(
     spaceId: String,
     date: String,
     perceivedMood: PerceivedMood,
@@ -57,7 +57,7 @@ class PartnerSupportRepository(
     docRef.set(payload).await()
   }
 
-  fun observeLatestCheckIn(spaceId: String): Flow<CheckIn?> {
+  open fun observeLatestCheckIn(spaceId: String): Flow<CheckIn?> {
     return db.collection("couple_spaces").document(spaceId)
       .collection("check_ins")
       .orderBy("createdAt", Query.Direction.DESCENDING)
@@ -68,7 +68,7 @@ class PartnerSupportRepository(
       }
   }
 
-  suspend fun sendCheckIn(
+  open suspend fun sendCheckIn(
     spaceId: String,
     senderUid: String,
     promptType: CheckInPromptType,

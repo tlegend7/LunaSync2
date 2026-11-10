@@ -145,7 +145,8 @@ fun PartnerObservationDialog(
                 selected = perceivedMood == pm,
                 borderColor = AppleHairlineBorder,
                 selectedBorderColor = BrandTerracottaRose
-              )
+              ),
+              modifier = Modifier.testTag("mood_chip_${pm.name}")
             )
           }
         }
@@ -213,7 +214,7 @@ fun PartnerObservationDialog(
           onValueChange = { careAction = it },
           label = { Text("Acción de cuidado realizada") },
           placeholder = { Text("Ej. Le preparé una infusión caliente...") },
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier.fillMaxWidth().testTag("observation_care_action_input"),
           shape = RoundedCornerShape(14.dp)
         )
 
@@ -224,7 +225,7 @@ fun PartnerObservationDialog(
           onValueChange = { sweetMessage = it },
           label = { Text("Mensaje cariñoso de apoyo") },
           placeholder = { Text("Ej. Aquí estoy si me necesitas...") },
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier.fillMaxWidth().testTag("observation_sweet_message_input"),
           shape = RoundedCornerShape(14.dp)
         )
       }

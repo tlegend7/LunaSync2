@@ -180,6 +180,23 @@ class MainViewModel @JvmOverloads constructor(
     return true
   }
 
+  internal fun sanitizeUserErrorMessage(e: Throwable, defaultFallback: String): String {
+    val msg = e.message ?: return defaultFallback
+    return when {
+      msg.contains("PERMISSION_DENIED", ignoreCase = true) || msg.contains("permiso", ignoreCase = true) ->
+        "No tienes permisos suficientes para realizar esta acción."
+      msg.contains("UNAVAILABLE", ignoreCase = true) || msg.contains("network", ignoreCase = true) || msg.contains("conexión", ignoreCase = true) ->
+        "Problema de conexión con el servidor. Verifica tu internet e intenta nuevamente."
+      msg.contains("DEADLINE_EXCEEDED", ignoreCase = true) || msg.contains("timeout", ignoreCase = true) ->
+        "La operación tardó demasiado tiempo. Por favor, reintenta."
+      msg.contains("NOT_FOUND", ignoreCase = true) ->
+        "El registro no fue encontrado o ya no está disponible."
+      msg.contains("ALREADY_EXISTS", ignoreCase = true) ->
+        "Ya existe un registro para esta fecha."
+      else -> defaultFallback
+    }
+  }
+
   internal fun setUiStateForTesting(update: (AppUiState) -> AppUiState) {
     _uiState.value = update(_uiState.value)
   }
@@ -745,6 +762,15 @@ class MainViewModel @JvmOverloads constructor(
 
     val sessionId = currentSessionId
     val user = _uiState.value.currentUser
+    var callbackDelivered = false
+    val safeComplete: (Boolean, String?) -> Unit = { success, errorMsg ->
+      if (!callbackDelivered) {
+        callbackDelivered = true
+        if (isSessionValid(sessionId, user?.uid)) {
+          onComplete(success, errorMsg)
+        }
+      }
+    }
 
     return viewModelScope.launch {
       try {
@@ -758,17 +784,15 @@ class MainViewModel @JvmOverloads constructor(
             successMessage = "Síntomas guardados correctamente"
           )
           refreshCycleCalculations()
-          onComplete(true, null)
-        } else {
-          onComplete(false, "Sesión no válida")
+          safeComplete(true, null)
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
-        val err = e.localizedMessage ?: "Error al guardar síntomas"
+        val userFriendlyErr = sanitizeUserErrorMessage(e, "Error al guardar síntomas. Intenta nuevamente.")
         if (isSessionValid(sessionId, user?.uid)) {
-          _uiState.value = _uiState.value.copy(errorMessage = err)
+          _uiState.value = _uiState.value.copy(errorMessage = userFriendlyErr)
+          safeComplete(false, userFriendlyErr)
         }
-        onComplete(false, err)
       }
     }
   }
@@ -821,6 +845,15 @@ class MainViewModel @JvmOverloads constructor(
     }
 
     val sessionId = currentSessionId
+    var callbackDelivered = false
+    val safeComplete: (Boolean, String?) -> Unit = { success, errorMsg ->
+      if (!callbackDelivered) {
+        callbackDelivered = true
+        if (isSessionValid(sessionId, user.uid)) {
+          onComplete(success, errorMsg)
+        }
+      }
+    }
 
     return viewModelScope.launch {
       try {
@@ -841,17 +874,15 @@ class MainViewModel @JvmOverloads constructor(
             successMessage = "Registro íntimo guardado"
           )
           updateSelectedDayDetail()
-          onComplete(true, null)
-        } else {
-          onComplete(false, "Sesión no válida")
+          safeComplete(true, null)
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
-        val err = e.localizedMessage ?: "Error al guardar intimidad"
+        val userFriendlyErr = sanitizeUserErrorMessage(e, "Error al guardar intimidad. Intenta nuevamente.")
         if (isSessionValid(sessionId, user.uid)) {
-          _uiState.value = _uiState.value.copy(errorMessage = err)
+          _uiState.value = _uiState.value.copy(errorMessage = userFriendlyErr)
+          safeComplete(false, userFriendlyErr)
         }
-        onComplete(false, err)
       }
     }
   }
@@ -929,7 +960,7 @@ class MainViewModel @JvmOverloads constructor(
             onComplete?.invoke(true, null)
           },
           onFailure = { error ->
-            val msg = error.localizedMessage ?: "Error al registrar inicio menstrual"
+            val msg = sanitizeUserErrorMessage(error, "Error al registrar inicio menstrual. Intenta nuevamente.")
             _uiState.value = _uiState.value.copy(
               isLoading = false,
               errorMessage = msg
@@ -979,7 +1010,7 @@ class MainViewModel @JvmOverloads constructor(
             onComplete?.invoke(true, null)
           },
           onFailure = { error ->
-            val msg = error.localizedMessage ?: "Error al actualizar fin de sangrado"
+            val msg = sanitizeUserErrorMessage(error, "Error al actualizar fin de sangrado. Intenta nuevamente.")
             _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = msg)
             onComplete?.invoke(false, msg)
           }
@@ -1032,7 +1063,7 @@ class MainViewModel @JvmOverloads constructor(
             onComplete?.invoke(true, null)
           },
           onFailure = { error ->
-            val msg = error.localizedMessage ?: "Error al actualizar fechas"
+            val msg = sanitizeUserErrorMessage(error, "Error al actualizar fechas. Intenta nuevamente.")
             _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = msg)
             onComplete?.invoke(false, msg)
           }
@@ -1068,7 +1099,7 @@ class MainViewModel @JvmOverloads constructor(
             onComplete?.invoke(true, null)
           },
           onFailure = { error ->
-            val msg = error.localizedMessage ?: "Error al eliminar ciclo"
+            val msg = sanitizeUserErrorMessage(error, "Error al eliminar ciclo. Intenta nuevamente.")
             _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = msg)
             onComplete?.invoke(false, msg)
           }
@@ -1116,6 +1147,15 @@ class MainViewModel @JvmOverloads constructor(
       return Job().apply { complete() }
     }
     val sessionId = currentSessionId
+    var callbackDelivered = false
+    val safeComplete: (Boolean, String?) -> Unit = { success, errorMsg ->
+      if (!callbackDelivered) {
+        callbackDelivered = true
+        if (isSessionValid(sessionId, user.uid)) {
+          onComplete?.invoke(success, errorMsg)
+        }
+      }
+    }
 
     return viewModelScope.launch {
       try {
@@ -1131,17 +1171,15 @@ class MainViewModel @JvmOverloads constructor(
         )
         if (isSessionValid(sessionId, user.uid)) {
           _uiState.value = _uiState.value.copy(successMessage = "¡Observación y cuidado registrados!")
-          onComplete?.invoke(true, null)
-        } else {
-          onComplete?.invoke(false, "Sesión no válida")
+          safeComplete(true, null)
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
-        val err = e.localizedMessage ?: "Error al registrar observación"
+        val userFriendlyErr = sanitizeUserErrorMessage(e, "Error al registrar la observación. Intenta nuevamente.")
         if (isSessionValid(sessionId, user.uid)) {
-          _uiState.value = _uiState.value.copy(errorMessage = err)
+          _uiState.value = _uiState.value.copy(errorMessage = userFriendlyErr)
+          safeComplete(false, userFriendlyErr)
         }
-        onComplete?.invoke(false, err)
       }
     }
   }
@@ -1176,6 +1214,15 @@ class MainViewModel @JvmOverloads constructor(
       return Job().apply { complete() }
     }
     val sessionId = currentSessionId
+    var callbackDelivered = false
+    val safeComplete: (Boolean, String?) -> Unit = { success, errorMsg ->
+      if (!callbackDelivered) {
+        callbackDelivered = true
+        if (isSessionValid(sessionId, user.uid)) {
+          onComplete?.invoke(success, errorMsg)
+        }
+      }
+    }
 
     return viewModelScope.launch {
       try {
@@ -1187,17 +1234,15 @@ class MainViewModel @JvmOverloads constructor(
         )
         if (isSessionValid(sessionId, user.uid)) {
           _uiState.value = _uiState.value.copy(successMessage = "¡Check-in afectivo enviado a tu pareja!")
-          onComplete?.invoke(true, null)
-        } else {
-          onComplete?.invoke(false, "Sesión no válida")
+          safeComplete(true, null)
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
-        val err = e.localizedMessage ?: "Error al enviar check-in"
+        val userFriendlyErr = sanitizeUserErrorMessage(e, "Error al enviar el check-in. Intenta nuevamente.")
         if (isSessionValid(sessionId, user.uid)) {
-          _uiState.value = _uiState.value.copy(errorMessage = err)
+          _uiState.value = _uiState.value.copy(errorMessage = userFriendlyErr)
+          safeComplete(false, userFriendlyErr)
         }
-        onComplete?.invoke(false, err)
       }
     }
   }
