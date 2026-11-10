@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -180,7 +181,7 @@ fun EllaDashboardView(
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier
           .weight(1.3f)
-          .height(48.dp)
+          .heightIn(min = 48.dp)
           .testTag("log_symptoms_cta")
       ) {
         Icon(if (cycleStatus == null) Icons.Default.CalendarMonth else Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -198,7 +199,7 @@ fun EllaDashboardView(
         ),
         modifier = Modifier
           .weight(1.2f)
-          .height(48.dp)
+          .heightIn(min = 48.dp)
           .testTag("open_calendar_cta")
       ) {
         Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = PhaseFertileSage, modifier = Modifier.size(16.dp))
@@ -215,7 +216,7 @@ fun EllaDashboardView(
         ),
         modifier = Modifier
           .weight(1.1f)
-          .height(48.dp)
+          .heightIn(min = 48.dp)
           .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
           .testTag("log_intimacy_cta")
       ) {
@@ -235,13 +236,13 @@ fun EllaDashboardView(
     val (wisdomTitle, wisdomText, wisdomIconTint, wisdomBg) = if (isNull) {
       Quad(
         "Tu ciclo con base en datos reales",
-        "LunaSync no inventa datos menstruales. Una vez que ingreses la fecha de tu periodo, esta tarjeta te guiará con información hormonal precisa y recomendaciones adaptadas a tu biología.",
+        "Registra la fecha de inicio de tu periodo para activar estimaciones orientativas de tus fases y sugerencias de autocuidado.",
         BrandTerracottaRose,
         PhaseFollicularSubtle
       )
     } else if (cycleStatus?.isDelayed == true || phase == CyclePhase.DELAYED) {
       Quad(
-        "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de retraso)",
+        "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de variación)",
         "Tu ciclo actual continúa abierto sin reinicios artificiales. Se ha superado la fecha estimada para el próximo periodo. Es natural que el ciclo varíe según descanso o cambios hormonales. Tu registro se mantendrá exacto hasta confirmar un nuevo sangrado.",
         PhaseLutealLavender,
         PhaseLutealSubtle
@@ -255,25 +256,25 @@ fun EllaDashboardView(
           PhaseMenstrualSubtle
         )
         CyclePhase.FOLLICULAR -> Quad(
-          "Fase Folicular • Energía Creciente",
-          "Tu hormona folículo estimulante (FSH) y estrógeno van en aumento. Sentirás mayor lucidez mental, vitalidad física y apertura para proyectos creativos.",
+          "Fase Folicular • Transición y Actividad",
+          "El estrógeno suele aumentar en esta fase, lo que en muchas personas se acompaña de mayor energía física o disposición para retomar proyectos.",
           PhaseFollicularPeach,
           PhaseFollicularSubtle
         )
         CyclePhase.OVULATORY -> Quad(
-          "Fase Ovulatoria • Máximo Resplandor",
-          "Pico de LH y estrógeno. Estás en tus días de mayor magnetismo natural y apertura social. El moco cervical fértil nutre y protege los espermatozoides.",
+          "Fase Ovulatoria • Ventana Fértil Estimada",
+          "Ventana fértil estimada del ciclo. Alrededor de la ovulación suele observarse moco cervical más elástico y fluido. Cada cuerpo experimenta esta etapa de forma particular.",
           PhaseFertileSage,
           PhaseFertileSubtle
         )
         CyclePhase.LUTEAL -> Quad(
-          "Fase Lútea • Calma & Cuidado",
-          "La progesterona toma el mando para calmar el sistema nervioso. Puedes experimentar sensibilidad o antojos por la caída gradual de serotonina.",
+          "Fase Lútea • Calma & Escucha",
+          "La progesterona suele predominar en esta etapa. Algunas personas sienten mayor necesidad de descanso, comidas reconfortantes o pausas en su rutina.",
           PhaseLutealLavender,
           PhaseLutealSubtle
         )
         CyclePhase.DELAYED -> Quad(
-          "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de retraso)",
+          "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de variación)",
           "Tu ciclo actual continúa abierto sin reinicios artificiales. Se ha superado la fecha estimada para el próximo periodo. Mantén la calma y escucha a tu cuerpo.",
           PhaseLutealLavender,
           PhaseLutealSubtle
@@ -297,7 +298,7 @@ fun EllaDashboardView(
         Spacer(modifier = Modifier.width(10.dp))
         Column {
           Text(
-            text = if (isNull) "INFORMACIÓN BIOLÓGICA" else "TU CUERPO HOY (DÍA $dayNum)",
+            text = if (isNull) "INFORMACIÓN BIOLÓGICA ORIENTATIVA" else "ORIENTACIÓN BIOLÓGICA (DÍA $dayNum)",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color = wisdomIconTint,
@@ -324,8 +325,8 @@ fun EllaDashboardView(
       if (cycleStatus != null) {
         Spacer(modifier = Modifier.height(10.dp))
         LunaBadge(
-          text = if (cycleStatus.isBasedOnHistory) "Basado en tu historial confirmado" else "Estimación preliminar (estándar ${cycleStatus.totalDays}d)",
-          style = if (cycleStatus.isBasedOnHistory) LunaBadgeStyle.FACT else LunaBadgeStyle.ESTIMATE
+          text = if (cycleStatus.isBasedOnHistory) "Estimación basada en tu historial" else "Estimación basada en configuración estándar (${cycleStatus.totalDays}d)",
+          style = LunaBadgeStyle.ESTIMATE
         )
       }
     }

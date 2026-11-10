@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -186,7 +187,7 @@ fun LunaPrimaryButton(
     ),
     modifier = modifier
       .fillMaxWidth()
-      .height(48.dp)
+      .heightIn(min = 48.dp)
   ) {
     if (loading) {
       CircularProgressIndicator(
@@ -229,7 +230,7 @@ fun LunaSecondaryButton(
     ),
     modifier = modifier
       .fillMaxWidth()
-      .height(48.dp)
+      .heightIn(min = 48.dp)
   ) {
     if (icon != null) {
       Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = contentColor)
@@ -261,7 +262,7 @@ fun LunaDestructiveButton(
     ),
     modifier = modifier
       .fillMaxWidth()
-      .height(46.dp)
+      .heightIn(min = 48.dp)
   ) {
     if (icon != null) {
       Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = StatusError)

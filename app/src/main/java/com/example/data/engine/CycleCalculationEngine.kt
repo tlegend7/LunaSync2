@@ -226,8 +226,8 @@ object CycleCalculationEngine {
 
       CyclePhase.OVULATORY -> listOf(
         CareTip(
-          title = "Pico de Fertilidad y Conexión",
-          description = "Ventana de máxima fertilidad estimada. Mayor lubricación natural. Ideal para conectar con amor y calma.",
+          title = "Ventana Fértil Estimada",
+          description = "Ventana estimada de mayor probabilidad biológica en el ciclo. Buen momento para conectar y conversar con calma.",
           categoryIcon = "star"
         ),
         CareTip(

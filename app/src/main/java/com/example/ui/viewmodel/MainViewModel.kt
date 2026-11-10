@@ -1082,8 +1082,9 @@ class MainViewModel @JvmOverloads constructor(
     apparentPainLevel: Int,
     unloggedSpottingReported: Boolean,
     careActionTaken: String?,
-    sweetMessage: String?
-  ) {
+    sweetMessage: String?,
+    onComplete: ((Boolean, String?) -> Unit)? = null
+  ): Job {
     val dateStr = getToday().toString()
     val obs = PartnerObservation(
       id = "obs_${System.currentTimeMillis()}",
@@ -1104,14 +1105,19 @@ class MainViewModel @JvmOverloads constructor(
         activeSpottingSuggestion = if (unloggedSpottingReported) obs else null,
         successMessage = if (unloggedSpottingReported) "¡Observación guardada! (Sugerencia de manchado enviada a Ella)" else "¡Observación y cuidado registrados!"
       )
-      return
+      onComplete?.invoke(true, null)
+      return Job().apply { complete() }
     }
 
-    val space = _uiState.value.space ?: return
-    val user = _uiState.value.currentUser ?: return
+    val space = _uiState.value.space
+    val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete?.invoke(false, "No hay un espacio o usuario activo para guardar")
+      return Job().apply { complete() }
+    }
     val sessionId = currentSessionId
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       try {
         partnerRepo.logObservation(
           spaceId = space.id,
@@ -1125,17 +1131,26 @@ class MainViewModel @JvmOverloads constructor(
         )
         if (isSessionValid(sessionId, user.uid)) {
           _uiState.value = _uiState.value.copy(successMessage = "¡Observación y cuidado registrados!")
+          onComplete?.invoke(true, null)
+        } else {
+          onComplete?.invoke(false, "Sesión no válida")
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
+        val err = e.localizedMessage ?: "Error al registrar observación"
         if (isSessionValid(sessionId, user.uid)) {
-          _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al registrar observación")
+          _uiState.value = _uiState.value.copy(errorMessage = err)
         }
+        onComplete?.invoke(false, err)
       }
     }
   }
 
-  fun sendCheckIn(promptType: CheckInPromptType, customNote: String?) {
+  fun sendCheckIn(
+    promptType: CheckInPromptType,
+    customNote: String?,
+    onComplete: ((Boolean, String?) -> Unit)? = null
+  ): Job {
     if (_uiState.value.isGuestMode) {
       val checkIn = CheckIn(
         id = "checkin_${System.currentTimeMillis()}",
@@ -1150,14 +1165,19 @@ class MainViewModel @JvmOverloads constructor(
         latestCheckIn = checkIn,
         successMessage = "¡Check-in enviado! Cambia a 'Ella 🌙' arriba para responderlo con 1 toque."
       )
-      return
+      onComplete?.invoke(true, null)
+      return Job().apply { complete() }
     }
 
-    val space = _uiState.value.space ?: return
-    val user = _uiState.value.currentUser ?: return
+    val space = _uiState.value.space
+    val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete?.invoke(false, "No hay un espacio o usuario activo para enviar check-in")
+      return Job().apply { complete() }
+    }
     val sessionId = currentSessionId
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       try {
         partnerRepo.sendCheckIn(
           spaceId = space.id,
@@ -1167,12 +1187,17 @@ class MainViewModel @JvmOverloads constructor(
         )
         if (isSessionValid(sessionId, user.uid)) {
           _uiState.value = _uiState.value.copy(successMessage = "¡Check-in afectivo enviado a tu pareja!")
+          onComplete?.invoke(true, null)
+        } else {
+          onComplete?.invoke(false, "Sesión no válida")
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
+        val err = e.localizedMessage ?: "Error al enviar check-in"
         if (isSessionValid(sessionId, user.uid)) {
-          _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al enviar check-in")
+          _uiState.value = _uiState.value.copy(errorMessage = err)
         }
+        onComplete?.invoke(false, err)
       }
     }
   }

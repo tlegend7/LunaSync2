@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.Color
 // Natural, warm, calming and feminine tones — not cold AI monochrome
 
 // Brand & Accent Colors
-val BrandTerracottaRose = Color(0xFFC75D6D) // Warm harmonic hero rose
+val BrandTerracottaRose = Color(0xFFB84A5C) // Warm harmonic hero rose (contrast ratio 5.06:1 with white, passes WCAG AA)
 val BrandTerracottaSoft = Color(0xFFFBECEF)
 val BrandRoseGold = Color(0xFFD48B80)
 val BrandWarmRose = Color(0xFFD48B80)

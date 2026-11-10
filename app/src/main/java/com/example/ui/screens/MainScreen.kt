@@ -399,13 +399,14 @@ fun MainScreen(
   if (showObservationDialog) {
     PartnerObservationDialog(
       onDismiss = { showObservationDialog = false },
-      onSave = { perceivedMood, pain, spotting, action, msg ->
+      onSave = { perceivedMood, pain, spotting, action, msg, onComplete ->
         viewModel.logPartnerObservation(
           perceivedMood = perceivedMood,
           apparentPainLevel = pain,
           unloggedSpottingReported = spotting,
           careActionTaken = action,
-          sweetMessage = msg
+          sweetMessage = msg,
+          onComplete = onComplete
         )
       }
     )
@@ -414,8 +415,8 @@ fun MainScreen(
   if (showCheckInDialog) {
     SendCheckInDialog(
       onDismiss = { showCheckInDialog = false },
-      onSend = { prompt, note ->
-        viewModel.sendCheckIn(prompt, note)
+      onSend = { prompt, note, onComplete ->
+        viewModel.sendCheckIn(prompt, note, onComplete = onComplete)
       }
     )
   }

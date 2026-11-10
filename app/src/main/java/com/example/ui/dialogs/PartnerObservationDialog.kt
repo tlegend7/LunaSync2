@@ -1,5 +1,6 @@
 package com.example.ui.dialogs
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -8,17 +9,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -26,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -38,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +51,8 @@ import com.example.data.model.PerceivedMood
 import com.example.ui.theme.AppleHairlineBorder
 import com.example.ui.theme.BrandTerracottaRose
 import com.example.ui.theme.PhaseFertileSage
+import com.example.ui.theme.StatusError
+import com.example.ui.theme.StatusErrorSubtle
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -57,7 +64,8 @@ fun PartnerObservationDialog(
     apparentPainLevel: Int,
     unloggedSpottingReported: Boolean,
     careActionTaken: String?,
-    sweetMessage: String?
+    sweetMessage: String?,
+    onComplete: (Boolean, String?) -> Unit
   ) -> Unit
 ) {
   var perceivedMood by remember { mutableStateOf(PerceivedMood.TIRED) }
@@ -65,9 +73,11 @@ fun PartnerObservationDialog(
   var unloggedSpotting by remember { mutableStateOf(false) }
   var careAction by remember { mutableStateOf("") }
   var sweetMessage by remember { mutableStateOf("") }
+  var isSubmitting by remember { mutableStateOf(false) }
+  var dialogError by remember { mutableStateOf<String?>(null) }
 
   AlertDialog(
-    onDismissRequest = onDismiss,
+    onDismissRequest = { if (!isSubmitting) onDismiss() },
     shape = RoundedCornerShape(24.dp),
     title = {
       Text(
@@ -84,6 +94,24 @@ fun PartnerObservationDialog(
           .verticalScroll(rememberScrollState())
           .padding(vertical = 4.dp)
       ) {
+        if (dialogError != null) {
+          Surface(
+            color = StatusErrorSubtle,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(bottom = 12.dp)
+              .border(0.5.dp, StatusError.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+          ) {
+            Text(
+              text = dialogError ?: "",
+              color = StatusError,
+              style = MaterialTheme.typography.bodySmall,
+              fontWeight = FontWeight.Medium,
+              modifier = Modifier.padding(12.dp)
+            )
+          }
+        }
         Text(
           text = "Ánimo que percibes en tu pareja:",
           style = MaterialTheme.typography.labelLarge,
@@ -204,24 +232,45 @@ fun PartnerObservationDialog(
     confirmButton = {
       Button(
         onClick = {
-          onSave(
-            perceivedMood,
-            painFloat.roundToInt(),
-            unloggedSpotting,
-            careAction.ifBlank { null },
-            sweetMessage.ifBlank { null }
-          )
-          onDismiss()
+          if (!isSubmitting) {
+            isSubmitting = true
+            dialogError = null
+            onSave(
+              perceivedMood,
+              painFloat.roundToInt(),
+              unloggedSpotting,
+              careAction.ifBlank { null },
+              sweetMessage.ifBlank { null }
+            ) { success, err ->
+              isSubmitting = false
+              if (success) {
+                onDismiss()
+              } else {
+                dialogError = err ?: "Error al registrar la observación. Intenta nuevamente."
+              }
+            }
+          }
         },
+        enabled = !isSubmitting,
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
-        modifier = Modifier.height(44.dp).testTag("save_observation_button")
+        modifier = Modifier
+          .heightIn(min = 48.dp)
+          .testTag("save_observation_button")
       ) {
-        Text("Guardar Observación", fontWeight = FontWeight.SemiBold)
+        if (isSubmitting) {
+          CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            color = Color.White,
+            strokeWidth = 2.dp
+          )
+        } else {
+          Text("Guardar Observación", fontWeight = FontWeight.SemiBold)
+        }
       }
     },
     dismissButton = {
-      TextButton(onClick = onDismiss) {
+      TextButton(onClick = onDismiss, enabled = !isSubmitting) {
         Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }

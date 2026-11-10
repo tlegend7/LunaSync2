@@ -10,8 +10,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.example.data.model.CheckInPromptType
+import com.example.data.model.PerceivedMood
 import com.example.ui.dialogs.IntimacyLogDialog
+import com.example.ui.dialogs.PartnerObservationDialog
 import com.example.ui.dialogs.PeriodLogDialog
+import com.example.ui.dialogs.SendCheckInDialog
 import com.example.ui.dialogs.SymptomLogDialog
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
@@ -256,5 +260,122 @@ class DialogFormComposeTest {
 
     // 9. Verificar que se cerró el diálogo mediante onDismiss
     assertTrue("Dialog must be dismissed after successful retry", onDismissCalled)
+  }
+
+  // ==========================================
+  // PRUEBAS DE PartnerObservationDialog
+  // ==========================================
+
+  @Test
+  fun `PartnerObservationDialog - flujo completo de guardado asincrono, preservacion en error y cierre en exito`() {
+    var onDismissCalled = false
+    var onSaveCallbackHolder: ((Boolean, String?) -> Unit)? = null
+    var capturedMood: PerceivedMood? = null
+    var capturedPain: Int? = null
+
+    composeTestRule.setContent {
+      PartnerObservationDialog(
+        onDismiss = { onDismissCalled = true },
+        onSave = { mood, pain, _, _, _, onComplete ->
+          capturedMood = mood
+          capturedPain = pain
+          onSaveCallbackHolder = onComplete
+        }
+      )
+    }
+
+    // 1. Verificar renderizado
+    composeTestRule.onNodeWithText("Registrar Observación y Apoyo").assertIsDisplayed()
+
+    // 2. Pulsar botón de guardar observación
+    composeTestRule.onNodeWithTag("save_observation_button")
+      .assertIsEnabled()
+      .performClick()
+
+    // 3. Verificar que durante el guardado no se cerró y el botón se deshabilitó
+    assertFalse("Dialog must not dismiss while operation is in flight", onDismissCalled)
+    composeTestRule.onNodeWithTag("save_observation_button").assertIsNotEnabled()
+
+    // 4. Simular error de guardado
+    val errorMsg = "Error de red al registrar observación"
+    composeTestRule.runOnUiThread {
+      onSaveCallbackHolder?.invoke(false, errorMsg)
+    }
+    composeTestRule.waitForIdle()
+
+    // 5. Verificar que el diálogo sigue abierto y muestra el error
+    assertFalse("Dialog must remain open on failure", onDismissCalled)
+    composeTestRule.onNodeWithText(errorMsg).assertIsDisplayed()
+    composeTestRule.onNodeWithTag("save_observation_button").assertIsEnabled()
+
+    // 6. Reintentar y simular éxito
+    composeTestRule.onNodeWithTag("save_observation_button").performClick()
+    composeTestRule.runOnUiThread {
+      onSaveCallbackHolder?.invoke(true, null)
+    }
+    composeTestRule.waitForIdle()
+
+    // 7. Verificar cierre exitoso
+    assertTrue("Dialog must dismiss after successful completion", onDismissCalled)
+  }
+
+  // ==========================================
+  // PRUEBAS DE SendCheckInDialog
+  // ==========================================
+
+  @Test
+  fun `SendCheckInDialog - flujo completo de envio, persistencia en error y cierre en exito`() {
+    var onDismissCalled = false
+    var onSendCallbackHolder: ((Boolean, String?) -> Unit)? = null
+    var capturedPrompt: CheckInPromptType? = null
+
+    composeTestRule.setContent {
+      SendCheckInDialog(
+        onDismiss = { onDismissCalled = true },
+        onSend = { prompt, _, onComplete ->
+          capturedPrompt = prompt
+          onSendCallbackHolder = onComplete
+        }
+      )
+    }
+
+    // 1. Verificar renderizado
+    composeTestRule.onNodeWithText("Enviar Check-in Afectivo").assertIsDisplayed()
+
+    // 2. Seleccionar un prompt específico
+    composeTestRule.onNodeWithTag("prompt_${CheckInPromptType.NEED_SPACE_OR_CUDDLES.name}")
+      .performClick()
+
+    // 3. Pulsar enviar pregunta
+    composeTestRule.onNodeWithTag("send_check_in_button")
+      .assertIsEnabled()
+      .performClick()
+
+    // 4. Verificar que no se cerró de inmediato
+    assertFalse("Dialog must not dismiss immediately", onDismissCalled)
+    assertEquals(CheckInPromptType.NEED_SPACE_OR_CUDDLES, capturedPrompt)
+    composeTestRule.onNodeWithTag("send_check_in_button").assertIsNotEnabled()
+
+    // 5. Simular error
+    val checkInError = "Error al conectar con la pareja"
+    composeTestRule.runOnUiThread {
+      onSendCallbackHolder?.invoke(false, checkInError)
+    }
+    composeTestRule.waitForIdle()
+
+    // 6. Verificar que permanece abierto con el error
+    assertFalse("Dialog must remain open on error", onDismissCalled)
+    composeTestRule.onNodeWithText(checkInError).assertIsDisplayed()
+    composeTestRule.onNodeWithTag("send_check_in_button").assertIsEnabled()
+
+    // 7. Reintentar con éxito
+    composeTestRule.onNodeWithTag("send_check_in_button").performClick()
+    composeTestRule.runOnUiThread {
+      onSendCallbackHolder?.invoke(true, null)
+    }
+    composeTestRule.waitForIdle()
+
+    // 8. Verificar cierre
+    assertTrue("Dialog must dismiss on success", onDismissCalled)
   }
 }

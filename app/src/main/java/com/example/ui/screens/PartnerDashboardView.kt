@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -160,10 +161,10 @@ fun PartnerDashboardView(
 
       val phaseDescription = when {
         isDelayed || phase == CyclePhase.DELAYED -> "Se ha superado la fecha estimada para el próximo periodo (Día $currentDay, ${cycleStatus.delayedDays}d de retraso). Cada ciclo presenta variaciones normales por descanso o estrés. Bríndale empatía y apoyo sin presiones."
-        phase == CyclePhase.MENSTRUAL -> "Niveles basales de energía y sensibilidad física. El mejor apoyo es calidez, bebidas tibias y espacio para descansar."
-        phase == CyclePhase.FOLLICULAR -> "El estrógeno aumenta gradualmente. Su vitalidad y claridad mental suben. Excelente momento para salidas y proyectos compartidos."
-        phase == CyclePhase.OVULATORY -> "Ventana de máxima fertilidad y conexión socioemocional."
-        else -> "La progesterona acompaña esta etapa. Puede experimentar mayor necesidad de calma o sensibilidad. Escúchala con paciencia."
+        phase == CyclePhase.MENSTRUAL -> "Suele ser una etapa de mayor sensibilidad física y requerimiento de descanso. El mejor apoyo es calidez, bebidas tibias y preguntarle qué necesita."
+        phase == CyclePhase.FOLLICULAR -> "El estrógeno suele subir en esta fase y muchas personas experimentan mayor dinamismo. Buen momento para consultar cómo se siente y proponer planes compartidos."
+        phase == CyclePhase.OVULATORY -> "Ventana estimada de mayor fertilidad en el ciclo. La comunicación abierta y el afecto son ideales en estos días."
+        else -> "Fase dominada habitualmente por la progesterona. Puede presentarse mayor necesidad de calma o pausas. Pregúntale con empatía cómo puedes apoyarla."
       }
 
       val periodStatusText = when {
@@ -223,8 +224,8 @@ fun PartnerDashboardView(
 
         Spacer(modifier = Modifier.height(10.dp))
         LunaBadge(
-          text = if (cycleStatus.isBasedOnHistory) "Basado en historial confirmado" else "Estimación preliminar (estándar ${cycleStatus.totalDays}d)",
-          style = if (cycleStatus.isBasedOnHistory) LunaBadgeStyle.FACT else LunaBadgeStyle.ESTIMATE
+          text = if (cycleStatus.isBasedOnHistory) "Estimación basada en historial" else "Estimación basada en configuración estándar (${cycleStatus.totalDays}d)",
+          style = LunaBadgeStyle.ESTIMATE
         )
       }
     }
@@ -252,7 +253,7 @@ fun PartnerDashboardView(
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier
           .weight(1f)
-          .height(48.dp)
+          .heightIn(min = 48.dp)
           .testTag("partner_send_checkin_cta")
       ) {
         Icon(Icons.Default.QuestionAnswer, contentDescription = null, modifier = Modifier.size(17.dp))
@@ -269,7 +270,7 @@ fun PartnerDashboardView(
         ),
         modifier = Modifier
           .weight(1f)
-          .height(48.dp)
+          .heightIn(min = 48.dp)
           .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
           .testTag("partner_log_observation_cta")
       ) {
