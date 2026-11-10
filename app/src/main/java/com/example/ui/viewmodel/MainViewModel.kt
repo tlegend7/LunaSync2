@@ -72,7 +72,7 @@ data class AppUiState(
   val successMessage: String? = null
 )
 
-class MainViewModel(
+class MainViewModel @JvmOverloads constructor(
   application: Application,
   val authRepo: AuthRepository = AuthRepository(application),
   val spaceRepo: CoupleSpaceRepository = CoupleSpaceRepository(application),
