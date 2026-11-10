@@ -495,6 +495,9 @@ object CycleCalculationEngine {
     // 4. Si la fecha supera o iguala la fecha estimada de próximo periodo (currentNextPeriod):
     // REGLA FUNDAMENTAL: La proyección nunca debe sustituir el conteo del ciclo real abierto.
     // Si la fecha es <= today (o si hoy ya se encuentra en retraso), esta fecha pertenece al ciclo actual abierto.
+    // 4. Si la fecha supera o iguala la fecha estimada de próximo periodo (currentNextPeriod):
+    // REGLA FUNDAMENTAL: La proyección nunca debe sustituir el conteo del ciclo real abierto.
+    // Si la fecha es <= today (o si hoy ya se encuentra en retraso), esta fecha pertenece al ciclo actual abierto.
     val isAfterOrAtExpectedPeriod = !date.isBefore(currentNextPeriod)
     val isOpenCycleDelay = isAfterOrAtExpectedPeriod && (date <= today || today >= currentNextPeriod)
 
@@ -505,7 +508,7 @@ object CycleCalculationEngine {
         date = date,
         cycleDay = activeDayNum,
         highlightType = DayHighlightType.LUTEAL,
-        phaseName = "Retraso Estimado (Día $activeDayNum)",
+        phaseName = "Retraso Estimado (Día $activeDayNum)$delayLabel",
         hormoneInsight = "Se ha superado la fecha estimada para el próximo periodo$delayLabel. El ciclo actual continúa abierto hasta registrar un nuevo sangrado real.",
         hasSymptomLogged = hasSymptom,
         hasIntimacyLogged = hasIntimacy,
@@ -526,10 +529,9 @@ object CycleCalculationEngine {
 
       for (pred in futurePredictions) {
         if (!date.isBefore(pred.expectedStartDate) && !date.isAfter(pred.expectedEndDate)) {
-          val dayNum = ChronoUnit.DAYS.between(pred.expectedStartDate, date).toInt() + 1
           return DayCycleDetail(
             date = date,
-            cycleDay = dayNum,
+            cycleDay = null, // La proyección no debe sustituir el conteo del ciclo real abierto ni inventar día
             highlightType = DayHighlightType.PREDICTED_PERIOD,
             phaseName = "Periodo Proyectado (Ciclo #${pred.cycleNumber})",
             hormoneInsight = "Inicio estimado del sangrado menstrual proyectado con tu ciclo de $roundedCycle días (variabilidad ±${String.format(java.util.Locale.US, "%.1f", pred.confidenceDays)}d).",
@@ -543,7 +545,7 @@ object CycleCalculationEngine {
         if (date.isEqual(pred.expectedOvulationDate)) {
           return DayCycleDetail(
             date = date,
-            cycleDay = roundedCycle - (LUTEAL_PHASE_DAYS - 1),
+            cycleDay = null,
             highlightType = DayHighlightType.OVULATION_DAY,
             phaseName = "Ovulación Estimada (Ciclo #${pred.cycleNumber})",
             hormoneInsight = "Fecha estimada para la ovulación en el ciclo proyectado #${pred.cycleNumber}.",

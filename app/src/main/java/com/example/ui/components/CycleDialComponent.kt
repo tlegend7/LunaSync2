@@ -222,7 +222,10 @@ fun CycleDialComponent(
         }
         daysUntilPeriod > 0 -> "Próximo periodo en $daysUntilPeriod días"
         daysUntilPeriod == 0 -> "Periodo esperado hoy"
-        else -> "Periodo esperado hoy"
+        else -> {
+          val delay = -daysUntilPeriod
+          "Retraso estimado: $delay ${if (delay == 1) "día" else "días"}"
+        }
       }
 
       Text(

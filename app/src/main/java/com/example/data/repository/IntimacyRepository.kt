@@ -12,8 +12,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
-class IntimacyRepository(context: Context) {
+class IntimacyRepository(
+  context: Context,
   private val db: FirebaseFirestore = FirestoreProvider.getDb(context)
+) {
 
   /**
    * Observes intimacy logs ensuring:

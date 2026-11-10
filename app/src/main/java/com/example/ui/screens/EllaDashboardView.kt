@@ -235,6 +235,14 @@ fun EllaDashboardView(
         BrandTerracottaRose,
         PhaseFollicularSubtle
       )
+    } else if (cycleStatus?.isDelayed == true) {
+      val delayedDays = cycleStatus.delayedDays
+      Quad(
+        "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de retraso)",
+        "Tu ciclo actual continúa abierto sin reinicios artificiales. Se ha superado la fecha estimada para el próximo periodo. Es natural que el ciclo varíe según descanso o cambios hormonales. Tu registro se mantendrá exacto hasta confirmar un nuevo sangrado.",
+        PhaseLutealLavender,
+        PhaseLutealSubtle
+      )
     } else {
       when (phase) {
         CyclePhase.MENSTRUAL -> Quad(

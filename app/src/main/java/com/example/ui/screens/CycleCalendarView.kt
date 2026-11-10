@@ -97,6 +97,7 @@ fun CycleCalendarView(
   onDateSelected: (LocalDate) -> Unit,
   onOpenSymptomDialogForDate: (LocalDate) -> Unit,
   onOpenPeriodDialog: (() -> Unit)? = null,
+  onOpenPeriodDialogForDate: ((LocalDate) -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val today = remember { LocalDate.now() }
@@ -305,7 +306,7 @@ fun CycleCalendarView(
           modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
         ) {
           LegendItem(color = PhaseMenstrualRose, label = "Periodo confirmado")
-          LegendItem(color = PhaseMenstrualRose, isOutlined = true, label = "Periodo proyectado")
+          LegendItem(color = PhaseMenstrualRose, isOutlined = true, label = "Periodo estimado / proyectado")
           LegendItem(color = PhaseFertileSage, label = "Ventana fértil")
           LegendItem(color = PhaseOvulationGold, isStar = true, label = "Ovulación")
           LegendItem(color = PhaseLutealLavender, label = "Síntoma")
@@ -325,7 +326,15 @@ fun CycleCalendarView(
       isToday = selectedDate.isEqual(today),
       canLogSymptoms = canLogSymptoms,
       onLogSymptoms = { onOpenSymptomDialogForDate(selectedDate) },
-      onOpenPeriodDialog = onOpenPeriodDialog
+      onOpenPeriodDialog = if (onOpenPeriodDialogForDate != null || onOpenPeriodDialog != null) {
+        {
+          if (onOpenPeriodDialogForDate != null) {
+            onOpenPeriodDialogForDate(selectedDate)
+          } else {
+            onOpenPeriodDialog?.invoke()
+          }
+        }
+      } else null
     )
   }
 }
@@ -515,16 +524,20 @@ private fun DayDetailCard(
         }
 
         if (detail.isPredicted) {
+          val isFuture = detail.date.isAfter(LocalDate.now())
+          val badgeText = if (isFuture) "Proyección Futura" else "Estimación no confirmada"
+          val badgeColor = if (detail.highlightType == DayHighlightType.PREDICTED_PERIOD) PhaseMenstrualRose else PhaseFertileSage
+          val badgeBg = if (detail.highlightType == DayHighlightType.PREDICTED_PERIOD) PhaseMenstrualSubtle else PhaseFertileSubtle
           Surface(
             shape = RoundedCornerShape(10.dp),
-            color = PhaseFertileSubtle,
-            modifier = Modifier.border(0.5.dp, PhaseFertileSage.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+            color = badgeBg,
+            modifier = Modifier.border(0.5.dp, badgeColor.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
           ) {
             Text(
-              text = "Proyección Futura",
+              text = badgeText,
               fontSize = 11.sp,
               fontWeight = FontWeight.SemiBold,
-              color = PhaseFertileSage,
+              color = badgeColor,
               modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
             )
           }

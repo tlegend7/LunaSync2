@@ -278,9 +278,9 @@ fun MainScreen(
                     symptomDialogTargetDate = date
                   }
                 },
-                onOpenPeriodDialog = {
+                onOpenPeriodDialogForDate = { date ->
                   if (uiState.currentRole == UserRole.PRIMARY_ELLA) {
-                    periodDialogTargetDate = uiState.selectedDate
+                    periodDialogTargetDate = date
                   }
                 }
               )

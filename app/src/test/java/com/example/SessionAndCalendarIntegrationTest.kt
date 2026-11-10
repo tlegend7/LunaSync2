@@ -93,8 +93,8 @@ class SessionAndCalendarIntegrationTest {
 
     cycleRepo = CycleRepository(application, db)
     coupleRepo = CoupleSpaceRepository(application, db)
-    partnerRepo = PartnerSupportRepository(application)
-    intimacyRepo = IntimacyRepository(application)
+    partnerRepo = PartnerSupportRepository(application, db)
+    intimacyRepo = IntimacyRepository(application, db)
     testAuthRepo = TestControlledAuthRepository(application)
   }
 

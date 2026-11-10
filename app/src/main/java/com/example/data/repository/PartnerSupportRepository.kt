@@ -16,8 +16,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
-class PartnerSupportRepository(context: Context) {
+class PartnerSupportRepository(
+  context: Context,
   private val db: FirebaseFirestore = FirestoreProvider.getDb(context)
+) {
 
   fun observeObservations(spaceId: String): Flow<List<PartnerObservation>> {
     return db.collection("couple_spaces").document(spaceId)
