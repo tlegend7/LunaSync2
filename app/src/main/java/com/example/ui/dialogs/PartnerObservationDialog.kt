@@ -42,8 +42,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.PerceivedMood
-import com.example.ui.theme.DeepOceanBlue
-import com.example.ui.theme.SoftCerulean
+import com.example.ui.theme.AppleHairlineBorder
+import com.example.ui.theme.BrandTerracottaRose
+import com.example.ui.theme.PhaseFertileSage
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -66,13 +67,13 @@ fun PartnerObservationDialog(
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    shape = RoundedCornerShape(28.dp),
+    shape = RoundedCornerShape(24.dp),
     title = {
       Text(
         text = "Registrar Observación y Apoyo",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
-        color = DeepOceanBlue
+        color = MaterialTheme.colorScheme.onSurface
       )
     },
     text = {
@@ -83,9 +84,10 @@ fun PartnerObservationDialog(
           .padding(vertical = 4.dp)
       ) {
         Text(
-          text = "Ánimo que percibes en tu novia:",
+          text = "Ánimo que percibes en tu pareja:",
           style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         FlowRow(
           horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -106,7 +108,14 @@ fun PartnerObservationDialog(
                 Text(text, fontSize = 12.sp)
               },
               colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = SoftCerulean.copy(alpha = 0.35f)
+                selectedContainerColor = BrandTerracottaRose.copy(alpha = 0.15f),
+                selectedLabelColor = BrandTerracottaRose
+              ),
+              border = FilterChipDefaults.filterChipBorder(
+                enabled = true,
+                selected = perceivedMood == pm,
+                borderColor = AppleHairlineBorder,
+                selectedBorderColor = BrandTerracottaRose
               )
             )
           }
@@ -115,9 +124,10 @@ fun PartnerObservationDialog(
         Spacer(modifier = Modifier.height(10.dp))
 
         Text(
-          text = "Nivel de dolor aparente observado: ${painFloat.roundToInt()} / 5",
+          text = "Nivel de molestia o cansancio percibido: ${painFloat.roundToInt()} / 5",
           style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Slider(
           value = painFloat,
@@ -125,8 +135,8 @@ fun PartnerObservationDialog(
           valueRange = 0f..5f,
           steps = 4,
           colors = SliderDefaults.colors(
-            thumbColor = DeepOceanBlue,
-            activeTrackColor = DeepOceanBlue
+            thumbColor = BrandTerracottaRose,
+            activeTrackColor = BrandTerracottaRose
           ),
           modifier = Modifier.testTag("partner_pain_slider")
         )
@@ -141,17 +151,17 @@ fun PartnerObservationDialog(
           Icon(
             imageVector = Icons.Default.Info,
             contentDescription = null,
-            tint = DeepOceanBlue
+            tint = BrandTerracottaRose
           )
           Spacer(modifier = Modifier.width(10.dp))
           Column(modifier = Modifier.weight(1f)) {
             Text(
-              text = "Mencionó haber manchado",
+              text = "Mencionó haber tenido manchado",
               style = MaterialTheme.typography.bodyMedium,
               fontWeight = FontWeight.Medium
             )
             Text(
-              text = "Le mostrará una sugerencia sutil para añadirlo a su registro",
+              text = "Le mostrará una sugerencia sutil para si desea agregarlo",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -159,7 +169,10 @@ fun PartnerObservationDialog(
           Switch(
             checked = unloggedSpotting,
             onCheckedChange = { unloggedSpotting = it },
-            colors = SwitchDefaults.colors(checkedThumbColor = DeepOceanBlue),
+            colors = SwitchDefaults.colors(
+              checkedThumbColor = Color.White,
+              checkedTrackColor = BrandTerracottaRose
+            ),
             modifier = Modifier.testTag("spotting_switch")
           )
         }
@@ -170,7 +183,7 @@ fun PartnerObservationDialog(
           value = careAction,
           onValueChange = { careAction = it },
           label = { Text("Acción de cuidado realizada") },
-          placeholder = { Text("Ej. Le preparé té de manzanilla caliente...") },
+          placeholder = { Text("Ej. Le preparé una infusión caliente...") },
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(14.dp)
         )
@@ -180,8 +193,8 @@ fun PartnerObservationDialog(
         OutlinedTextField(
           value = sweetMessage,
           onValueChange = { sweetMessage = it },
-          label = { Text("Mensaje cariñoso para su pantalla") },
-          placeholder = { Text("Ej. Recuerda que te amo y estoy aquí...") },
+          label = { Text("Mensaje cariñoso de apoyo") },
+          placeholder = { Text("Ej. Aquí estoy si me necesitas...") },
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(14.dp)
         )
@@ -199,16 +212,16 @@ fun PartnerObservationDialog(
           )
           onDismiss()
         },
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = DeepOceanBlue),
-        modifier = Modifier.testTag("save_observation_button")
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
+        modifier = Modifier.height(44.dp).testTag("save_observation_button")
       ) {
-        Text("Guardar Observación")
+        Text("Guardar Observación", fontWeight = FontWeight.SemiBold)
       }
     },
     dismissButton = {
       TextButton(onClick = onDismiss) {
-        Text("Cancelar")
+        Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
   )

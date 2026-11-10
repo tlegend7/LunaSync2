@@ -77,6 +77,9 @@ import com.example.ui.theme.AppleHealthFollicularSubtle
 import com.example.ui.theme.AppleSystemBlue
 import com.example.ui.theme.AppleSystemGray5
 import com.example.ui.theme.AppleSystemIndigo
+import com.example.ui.theme.BrandTerracottaRose
+import com.example.ui.theme.BrandWarmRose
+import com.example.ui.theme.StatusSuccess
 import com.example.ui.viewmodel.MainViewModel
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -139,7 +142,7 @@ fun MainScreen(
           tonalElevation = 0.dp,
           modifier = Modifier
             .navigationBarsPadding()
-            .border(0.5.dp, AppleHairlineBorder)
+            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
           NavigationBarItem(
             selected = currentNavTab == 0,
@@ -147,8 +150,8 @@ fun MainScreen(
             icon = { Icon(Icons.Default.Spa, contentDescription = "Hoy", modifier = Modifier.size(22.dp)) },
             label = { Text("Hoy", fontWeight = if (currentNavTab == 0) FontWeight.SemiBold else FontWeight.Normal) },
             colors = NavigationBarItemDefaults.colors(
-              selectedIconColor = AppleSystemBlue,
-              selectedTextColor = AppleSystemBlue,
+              selectedIconColor = BrandTerracottaRose,
+              selectedTextColor = BrandTerracottaRose,
               unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
               unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
               indicatorColor = Color.Transparent
@@ -161,8 +164,8 @@ fun MainScreen(
             icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Calendario", modifier = Modifier.size(22.dp)) },
             label = { Text("Calendario", fontWeight = if (currentNavTab == 1) FontWeight.SemiBold else FontWeight.Normal) },
             colors = NavigationBarItemDefaults.colors(
-              selectedIconColor = AppleSystemBlue,
-              selectedTextColor = AppleSystemBlue,
+              selectedIconColor = BrandTerracottaRose,
+              selectedTextColor = BrandTerracottaRose,
               unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
               unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
               indicatorColor = Color.Transparent
@@ -175,8 +178,8 @@ fun MainScreen(
             icon = { Icon(Icons.Default.Favorite, contentDescription = "Pareja", modifier = Modifier.size(22.dp)) },
             label = { Text("Pareja", fontWeight = if (currentNavTab == 2) FontWeight.SemiBold else FontWeight.Normal) },
             colors = NavigationBarItemDefaults.colors(
-              selectedIconColor = AppleSystemBlue,
-              selectedTextColor = AppleSystemBlue,
+              selectedIconColor = BrandTerracottaRose,
+              selectedTextColor = BrandTerracottaRose,
               unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
               unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
               indicatorColor = Color.Transparent
@@ -582,7 +585,7 @@ private fun AppleTopBar(
     modifier = Modifier
       .fillMaxWidth()
       .statusBarsPadding()
-      .border(0.5.dp, AppleHairlineBorder)
+      .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
@@ -593,12 +596,12 @@ private fun AppleTopBar(
         modifier = Modifier
           .size(32.dp)
           .clip(RoundedCornerShape(8.dp))
-          .background(AppleHealthFollicularSubtle)
+          .background(BrandTerracottaRose.copy(alpha = 0.12f))
       ) {
         Icon(
           imageVector = Icons.Default.NightsStay,
           contentDescription = null,
-          tint = AppleSystemBlue,
+          tint = BrandTerracottaRose,
           modifier = Modifier.size(18.dp)
         )
       }
@@ -749,7 +752,7 @@ fun PrivacySettingsDialog(
     shape = RoundedCornerShape(24.dp),
     title = {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Default.Security, contentDescription = null, tint = AppleSystemBlue)
+        Icon(Icons.Default.Security, contentDescription = null, tint = BrandTerracottaRose)
         Spacer(modifier = Modifier.width(10.dp))
         Text(
           text = if (isElla) "Permisos de Privacidad" else "Privacidad de la Pareja",
@@ -781,14 +784,14 @@ fun PrivacySettingsDialog(
               checked = shareSymptoms,
               onCheckedChange = { shareSymptoms = it },
               enabled = !isSaving,
-              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AppleHealthFertile)
+              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = StatusSuccess)
             )
           } else {
             Text(
               text = if (shareSymptoms) "Activo" else "Desactivado",
               fontWeight = FontWeight.Bold,
               fontSize = 12.sp,
-              color = if (shareSymptoms) AppleHealthFertile else MaterialTheme.colorScheme.onSurfaceVariant
+              color = if (shareSymptoms) StatusSuccess else MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         }
@@ -803,14 +806,14 @@ fun PrivacySettingsDialog(
               checked = shareMood,
               onCheckedChange = { shareMood = it },
               enabled = !isSaving,
-              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AppleHealthFertile)
+              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = StatusSuccess)
             )
           } else {
             Text(
               text = if (shareMood) "Activo" else "Desactivado",
               fontWeight = FontWeight.Bold,
               fontSize = 12.sp,
-              color = if (shareMood) AppleHealthFertile else MaterialTheme.colorScheme.onSurfaceVariant
+              color = if (shareMood) StatusSuccess else MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         }
@@ -825,14 +828,14 @@ fun PrivacySettingsDialog(
               checked = shareIntimacy,
               onCheckedChange = { shareIntimacy = it },
               enabled = !isSaving,
-              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AppleHealthFertile)
+              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = StatusSuccess)
             )
           } else {
             Text(
               text = if (shareIntimacy) "Activo" else "Desactivado",
               fontWeight = FontWeight.Bold,
               fontSize = 12.sp,
-              color = if (shareIntimacy) AppleHealthFertile else MaterialTheme.colorScheme.onSurfaceVariant
+              color = if (shareIntimacy) StatusSuccess else MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         }
@@ -867,7 +870,7 @@ fun PrivacySettingsDialog(
           },
           enabled = !isSaving,
           shape = RoundedCornerShape(12.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = AppleSystemBlue)
+          colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose)
         ) {
           if (isSaving) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
@@ -891,10 +894,10 @@ private fun DemoModeBanner(
   modifier: Modifier = Modifier
 ) {
   Surface(
-    color = AppleHealthFollicularSubtle,
+    color = BrandTerracottaRose.copy(alpha = 0.08f),
     modifier = modifier
       .fillMaxWidth()
-      .border(0.5.dp, AppleHairlineBorder)
+      .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
@@ -903,7 +906,7 @@ private fun DemoModeBanner(
       Icon(
         imageVector = Icons.Default.PlayArrow,
         contentDescription = null,
-        tint = AppleSystemBlue,
+        tint = BrandTerracottaRose,
         modifier = Modifier.size(16.dp)
       )
       Spacer(modifier = Modifier.width(8.dp))
@@ -911,7 +914,7 @@ private fun DemoModeBanner(
         text = "Modo Demo Activo — Alterna arriba entre Ella 🌙 y Novio 🤝 para probar ambos roles",
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Medium,
-        color = AppleSystemBlue,
+        color = BrandTerracottaRose,
         modifier = Modifier.weight(1f)
       )
       Spacer(modifier = Modifier.width(6.dp))

@@ -42,6 +42,14 @@ val AppleDarkTextPrimary = Color(0xFFFDFBF7)
 val AppleDarkTextSecondary = Color(0xFFA89F9B)
 val AppleDarkTextTertiary = Color(0xFF6B6360)
 
+// Status & Semantic Colors
+val StatusSuccess = Color(0xFF2E7D32)
+val StatusSuccessSubtle = Color(0xFFE8F5E9)
+val StatusWarning = Color(0xFFD97706)
+val StatusWarningSubtle = Color(0xFFFEF3C7)
+val StatusError = Color(0xFFC62828)
+val StatusErrorSubtle = Color(0xFFFFEBEE)
+
 // System & Component Compatibilities
 val AppleSystemBlue = BrandTerracottaRose
 val AppleSystemIndigo = PhaseLutealLavender

@@ -56,8 +56,8 @@ fun CheckInBannerComponent(
 
   val promptTitle = when (checkIn.promptType) {
     CheckInPromptType.HOW_ARE_YOU_FEELING.name -> "¿Cómo te sientes en este momento?"
-    CheckInPromptType.NEED_SPACE_OR_CUDDLES.name -> "¿Necesitas espacio a solas o mimos?"
-    CheckInPromptType.ARE_YOU_UPSET_WITH_ME.name -> "¿Estás molesta conmigo o es el bajón hormonal?"
+    CheckInPromptType.NEED_SPACE_OR_CUDDLES.name -> "¿Necesitas espacio a solas o compañía?"
+    CheckInPromptType.ARE_YOU_UPSET_WITH_ME.name -> "¿Hay algo en lo que te pueda ayudar o prefieres un momento?"
     CheckInPromptType.CAN_I_BRING_YOU_SOMETHING.name -> "¿Puedo llevarte algo rico o caliente?"
     else -> "¿Cómo estás hoy?"
   }

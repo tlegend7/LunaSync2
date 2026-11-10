@@ -60,11 +60,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.SpaceStatus
 import com.example.data.model.UserRole
-import com.example.ui.theme.DeepOceanBlue
-import com.example.ui.theme.IceBlue
-import com.example.ui.theme.IceBlueSubtle
-import com.example.ui.theme.SlateNavy
-import com.example.ui.theme.SoftCerulean
+import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaBadgeStyle
+import com.example.ui.components.LunaCard
+import com.example.ui.components.LunaDestructiveButton
+import com.example.ui.components.LunaPrimaryButton
+import com.example.ui.theme.BrandTerracottaRose
+import com.example.ui.theme.BrandWarmRose
+import com.example.ui.theme.StatusError
+import com.example.ui.theme.StatusSuccess
 
 @Composable
 fun PairingScreen(
@@ -92,16 +96,17 @@ fun PairingScreen(
   ) {
     // Header adaptado al rol activo
     Text(
-      text = if (currentRole == UserRole.SUPPORT_PARTNER) "Vincular con mi Novia" else "Invitar a mi Pareja",
+      text = if (currentRole == UserRole.SUPPORT_PARTNER) "Vincular con mi Pareja" else "Invitar a mi Pareja",
       style = MaterialTheme.typography.headlineMedium,
       fontWeight = FontWeight.Bold,
-      color = SlateNavy
+      color = MaterialTheme.colorScheme.onSurface
     )
+    Spacer(modifier = Modifier.height(4.dp))
     Text(
       text = if (currentRole == UserRole.SUPPORT_PARTNER) {
-        "Ingresa el código que te compartió tu novia para sincronizar su ciclo y acceder al dashboard de cuidados"
+        "Ingresa el código compartido para sincronizar el ciclo y acceder al espacio de apoyo y cuidados."
       } else {
-        "Genera un código único para que tu novio pueda acompañarte y apoyarte de forma empática y consensuada"
+        "Genera un código único para que tu pareja pueda acompañarte con información de apoyo consensuada."
       },
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -110,188 +115,75 @@ fun PairingScreen(
     Spacer(modifier = Modifier.height(24.dp))
 
     if (currentRole == UserRole.SUPPORT_PARTNER) {
-      // VISTA EXCLUSIVA DEL NOVIO
+      // VISTA EXCLUSIVA DE LA PAREJA
       if (isPaired) {
-        // Novio YA vinculado exitosamente
-        Surface(
-          shape = RoundedCornerShape(26.dp),
-          color = MaterialTheme.colorScheme.surface,
-          modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, SoftCerulean.copy(alpha = 0.4f), RoundedCornerShape(26.dp))
-        ) {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp)
-          ) {
-            Box(
-              contentAlignment = Alignment.Center,
-              modifier = Modifier
-                .size(70.dp)
-                .clip(CircleShape)
-                .background(Color(0xFFE8F5E9))
-            ) {
-              Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = null,
-                tint = Color(0xFF2E7D32),
-                modifier = Modifier.size(40.dp)
-              )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-              text = "¡Espacio Sincronizado!",
-              style = MaterialTheme.typography.titleLarge,
-              fontWeight = FontWeight.Bold,
-              color = SlateNavy
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-              text = "Estás vinculado con tu novia. Desde el Dashboard puedes ver su fase hormonal actual, recibir recomendaciones de apoyo ('Cheat Sheet') y enviarle Check-ins afectivos.",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              textAlign = TextAlign.Center,
-              lineHeight = 22.sp
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Surface(
-              shape = RoundedCornerShape(14.dp),
-              color = IceBlueSubtle,
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(14.dp)
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Favorite,
-                  contentDescription = null,
-                  tint = DeepOceanBlue,
-                  modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                  text = "Estado: Conexión Activa y Segura",
-                  style = MaterialTheme.typography.bodySmall,
-                  fontWeight = FontWeight.SemiBold,
-                  color = DeepOceanBlue
-                )
-              }
-            }
-          }
-        }
-      } else {
-        // Novio NO vinculado: Formulario directo para ingresar código de su novia
-        Surface(
-          shape = RoundedCornerShape(26.dp),
-          color = MaterialTheme.colorScheme.surface,
-          modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, SoftCerulean.copy(alpha = 0.4f), RoundedCornerShape(26.dp))
-        ) {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp)
-          ) {
-            Box(
-              contentAlignment = Alignment.Center,
-              modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(IceBlue)
-            ) {
-              Icon(
-                imageVector = Icons.Default.Key,
-                contentDescription = null,
-                tint = DeepOceanBlue,
-                modifier = Modifier.size(32.dp)
-              )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-              text = "Ingresar Código de Pareja",
-              style = MaterialTheme.typography.titleLarge,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Text(
-              text = "Pídele a tu novia que abra LunaSync en la pestaña 'Vincular' y te comparta su código de 8 caracteres (ej. LUNA-8X4K):",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              textAlign = TextAlign.Center,
-              modifier = Modifier.padding(vertical = 8.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-              value = inputCode,
-              onValueChange = { inputCode = it.uppercase() },
-              label = { Text("Código de tu novia") },
-              placeholder = { Text("LUNA-XXXX") },
-              singleLine = true,
-              shape = RoundedCornerShape(14.dp),
-              modifier = Modifier
-                .fillMaxWidth()
-                .testTag("pairing_code_input")
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Button(
-              onClick = { onJoinCode(inputCode) },
-              enabled = inputCode.isNotBlank() && !isLoading,
-              shape = RoundedCornerShape(14.dp),
-              colors = ButtonDefaults.buttonColors(containerColor = DeepOceanBlue),
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .testTag("submit_join_code_button")
-            ) {
-              if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-              } else {
-                Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Vincularme con mi Novia", fontWeight = FontWeight.Bold)
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // VISTA EXCLUSIVA DE ELLA (ADMINISTRADORA DEL ESPACIO)
-      Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(1.dp, SoftCerulean.copy(alpha = 0.4f), RoundedCornerShape(26.dp))
-      ) {
-        Column(
-          horizontalAlignment = Alignment.CenterHorizontally,
-          modifier = Modifier.padding(24.dp)
+        // Pareja YA vinculada exitosamente
+        LunaCard(
+          modifier = Modifier.fillMaxWidth()
         ) {
           Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-              .size(64.dp)
+              .align(Alignment.CenterHorizontally)
+              .size(68.dp)
               .clip(CircleShape)
-              .background(IceBlue)
+              .background(StatusSuccess.copy(alpha = 0.12f))
           ) {
             Icon(
-              imageVector = Icons.Default.QrCode,
+              imageVector = Icons.Default.CheckCircle,
               contentDescription = null,
-              tint = DeepOceanBlue,
+              tint = StatusSuccess,
+              modifier = Modifier.size(38.dp)
+            )
+          }
+
+          Spacer(modifier = Modifier.height(16.dp))
+
+          Text(
+            text = "¡Espacio Sincronizado!",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+          )
+
+          Spacer(modifier = Modifier.height(8.dp))
+
+          Text(
+            text = "Estás vinculado al espacio compartido. Desde el Dashboard puedes ver la fase actual estimada, consultar la guía de cuidados diarios y enviar Check-ins de apoyo.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+          )
+
+          Spacer(modifier = Modifier.height(20.dp))
+
+          LunaBadge(
+            text = "Conexión Activa y Segura",
+            style = LunaBadgeStyle.FACT,
+            icon = Icons.Default.Favorite,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+          )
+        }
+      } else {
+        // Pareja NO vinculada: Formulario directo para ingresar código
+        LunaCard(
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+              .align(Alignment.CenterHorizontally)
+              .size(64.dp)
+              .clip(CircleShape)
+              .background(BrandTerracottaRose.copy(alpha = 0.12f))
+          ) {
+            Icon(
+              imageVector = Icons.Default.Key,
+              contentDescription = null,
+              tint = BrandTerracottaRose,
               modifier = Modifier.size(32.dp)
             )
           }
@@ -299,135 +191,161 @@ fun PairingScreen(
           Spacer(modifier = Modifier.height(16.dp))
 
           Text(
-            text = "Tu Código de Invitación",
+            text = "Ingresar Código de Pareja",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
           )
+
           Text(
-            text = "Tu novio debe ingresar este código en su app para conectarse a tu espacio:",
+            text = "Pídele a tu pareja que abra LunaSync en la pestaña 'Vincular' y te comparta su código de 8 caracteres (ej. LUNA-8X4K):",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(vertical = 6.dp)
+            modifier = Modifier
+              .padding(vertical = 8.dp)
+              .align(Alignment.CenterHorizontally)
           )
 
           Spacer(modifier = Modifier.height(16.dp))
 
-          if (!activeCode.isNullOrBlank()) {
-            Surface(
-              shape = RoundedCornerShape(16.dp),
-              color = IceBlue,
-              modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, SoftCerulean, RoundedCornerShape(16.dp))
-            ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp)
-              ) {
-                Text(
-                  text = activeCode,
-                  fontSize = 28.sp,
-                  fontWeight = FontWeight.Bold,
-                  fontFamily = FontFamily.Monospace,
-                  letterSpacing = 4.sp,
-                  color = DeepOceanBlue
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                OutlinedButton(
-                  onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("LunaSync Code", activeCode))
-                    Toast.makeText(context, "Código copiado al portapapeles", Toast.LENGTH_SHORT).show()
-                  },
-                  shape = RoundedCornerShape(10.dp),
-                  modifier = Modifier.testTag("copy_code_button")
-                ) {
-                  Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", modifier = Modifier.size(16.dp))
-                }
-              }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-              text = "Válido por 48 horas • Puedes revocar o cambiar permisos cuando quieras",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          } else {
-            Button(
-              onClick = onGenerateCode,
-              enabled = !isLoading,
-              shape = RoundedCornerShape(14.dp),
-              colors = ButtonDefaults.buttonColors(containerColor = DeepOceanBlue),
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .testTag("generate_pairing_code_button")
-            ) {
-              if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-              } else {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Generar Código para mi Novio", fontWeight = FontWeight.Bold)
-              }
-            }
-          }
+          OutlinedTextField(
+            value = inputCode,
+            onValueChange = { inputCode = it.uppercase() },
+            label = { Text("Código de invitación") },
+            placeholder = { Text("LUNA-XXXX") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("pairing_code_input")
+          )
 
           Spacer(modifier = Modifier.height(20.dp))
 
-          // Badge de Estado de Conexión
+          LunaPrimaryButton(
+            text = "Vincularme al Espacio",
+            onClick = { onJoinCode(inputCode) },
+            enabled = inputCode.isNotBlank(),
+            loading = isLoading,
+            icon = Icons.Default.Favorite,
+            modifier = Modifier.testTag("submit_join_code_button")
+          )
+        }
+      }
+    } else {
+      // VISTA EXCLUSIVA DE ELLA (ADMINISTRADORA DEL ESPACIO)
+      LunaCard(
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Box(
+          contentAlignment = Alignment.Center,
+          modifier = Modifier
+            .align(Alignment.CenterHorizontally)
+            .size(64.dp)
+            .clip(CircleShape)
+            .background(BrandTerracottaRose.copy(alpha = 0.12f))
+        ) {
+          Icon(
+            imageVector = Icons.Default.QrCode,
+            contentDescription = null,
+            tint = BrandTerracottaRose,
+            modifier = Modifier.size(32.dp)
+          )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+          text = "Tu Código de Invitación",
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Text(
+          text = "Tu pareja debe ingresar este código en su app para conectarse a tu espacio compartido:",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = TextAlign.Center,
+          modifier = Modifier
+            .padding(vertical = 6.dp)
+            .align(Alignment.CenterHorizontally)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (!activeCode.isNullOrBlank()) {
           Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = if (isPaired) Color(0xFFE8F5E9) else IceBlueSubtle,
-            modifier = Modifier.fillMaxWidth()
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier
+              .fillMaxWidth()
+              .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
           ) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+              horizontalArrangement = Arrangement.Center,
+              modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp)
             ) {
-              Icon(
-                imageVector = if (isPaired) Icons.Default.CheckCircle else Icons.Default.Shield,
-                contentDescription = null,
-                tint = if (isPaired) Color(0xFF2E7D32) else DeepOceanBlue,
-                modifier = Modifier.size(18.dp)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = if (isPaired) "¡Tu novio está conectado a tu espacio!" else "Esperando a que tu novio ingrese el código...",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = if (isPaired) Color(0xFF2E7D32) else SlateNavy
+                text = activeCode,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 4.sp,
+                color = BrandTerracottaRose
               )
+              Spacer(modifier = Modifier.width(16.dp))
+              OutlinedButton(
+                onClick = {
+                  val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                  clipboard.setPrimaryClip(ClipData.newPlainText("LunaSync Code", activeCode))
+                  Toast.makeText(context, "Código copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                },
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.testTag("copy_code_button")
+              ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", modifier = Modifier.size(16.dp))
+              }
             }
           }
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(
+            text = "Válido por 48 horas • Puedes revocar el acceso cuando quieras",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+          )
+        } else {
+          LunaPrimaryButton(
+            text = "Generar Código de Invitación",
+            onClick = onGenerateCode,
+            loading = isLoading,
+            icon = Icons.Default.Share,
+            modifier = Modifier.testTag("generate_pairing_code_button")
+          )
+        }
 
-          if (isPaired) {
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedButton(
-              onClick = { showRevokeConfirmDialog = true },
-              border = BorderStroke(1.dp, Color(0xFFEF9A9A)),
-              shape = RoundedCornerShape(12.dp),
-              modifier = Modifier
-                .fillMaxWidth()
-                .testTag("revoke_partner_button")
-            ) {
-              Icon(
-                imageVector = Icons.Default.PersonOff,
-                contentDescription = null,
-                tint = Color(0xFFC62828),
-                modifier = Modifier.size(18.dp)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = "Desvincular a mi Pareja",
-                color = Color(0xFFC62828),
-                fontWeight = FontWeight.SemiBold
-              )
-            }
-          }
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Badge de Estado de Conexión
+        LunaBadge(
+          text = if (isPaired) "Tu pareja está conectada a tu espacio" else "Esperando a que tu pareja ingrese el código...",
+          style = if (isPaired) LunaBadgeStyle.FACT else LunaBadgeStyle.NEUTRAL,
+          icon = if (isPaired) Icons.Default.CheckCircle else Icons.Default.Shield,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        if (isPaired) {
+          Spacer(modifier = Modifier.height(16.dp))
+          LunaDestructiveButton(
+            text = "Desvincular a mi Pareja",
+            onClick = { showRevokeConfirmDialog = true },
+            icon = Icons.Default.PersonOff,
+            modifier = Modifier.testTag("revoke_partner_button")
+          )
         }
       }
     }
@@ -439,7 +357,7 @@ fun PairingScreen(
           Icon(
             imageVector = Icons.Default.PersonOff,
             contentDescription = null,
-            tint = Color(0xFFC62828)
+            tint = StatusError
           )
         },
         title = { Text("¿Desvincular a tu pareja?", fontWeight = FontWeight.Bold) },
@@ -454,11 +372,11 @@ fun PairingScreen(
               showRevokeConfirmDialog = false
               onRevokePairing()
             },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+            colors = ButtonDefaults.buttonColors(containerColor = StatusError),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.testTag("confirm_revoke_partner_button")
           ) {
-            Text("Sí, desvincular", fontWeight = FontWeight.Bold)
+            Text("Sí, desvincular", fontWeight = FontWeight.Bold, color = Color.White)
           }
         },
         dismissButton = {

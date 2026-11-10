@@ -56,10 +56,14 @@ import com.example.data.model.PartnerObservation
 import com.example.data.model.QuickResponseOption
 import com.example.ui.components.CheckInBannerComponent
 import com.example.ui.components.CycleDialComponent
+import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaBadgeStyle
+import com.example.ui.components.LunaCard
 import com.example.ui.components.SpottingSuggestionCard
 import com.example.ui.theme.AppleHairlineBorder
 import com.example.ui.theme.AppleSystemGray5
 import com.example.ui.theme.BrandTerracottaRose
+import com.example.ui.theme.BrandWarmRose
 import com.example.ui.theme.PhaseFertileSage
 import com.example.ui.theme.PhaseFertileSubtle
 import com.example.ui.theme.PhaseFollicularPeach
@@ -99,51 +103,49 @@ fun EllaDashboardView(
       contentAlignment = Alignment.Center,
       modifier = Modifier
         .fillMaxWidth()
-        .padding(vertical = 6.dp)
+        .padding(vertical = 4.dp)
     ) {
       CycleDialComponent(cycleStatus = cycleStatus)
     }
 
-    Spacer(modifier = Modifier.height(6.dp))
+    Spacer(modifier = Modifier.height(4.dp))
 
     // If no cycle status registered yet, show dedicated Onboarding Period Card
     if (cycleStatus == null) {
-      Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = PhaseMenstrualSubtle,
+      LunaCard(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(bottom = 12.dp)
-          .border(1.dp, PhaseMenstrualRose.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+          .padding(bottom = 12.dp),
+        borderColor = PhaseMenstrualRose.copy(alpha = 0.4f)
       ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Spa, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = "Bienvenida a tu seguimiento",
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.Bold,
-              color = PhaseMenstrualRose
-            )
-          }
-          Spacer(modifier = Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(Icons.Default.Spa, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(20.dp))
+          Spacer(modifier = Modifier.width(8.dp))
           Text(
-            text = "Registra el primer día de tu última menstruación para que LunaSync aprenda tus patrones reales y calcule tus fases.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
+            text = "Bienvenida a tu seguimiento",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = PhaseMenstrualRose
           )
-          Spacer(modifier = Modifier.height(12.dp))
-          Button(
-            onClick = onOpenPeriodDialog,
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = PhaseMenstrualRose),
-            modifier = Modifier.fillMaxWidth().testTag("register_period_start_cta")
-          ) {
-            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Registrar inicio de mi periodo", fontWeight = FontWeight.SemiBold)
-          }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+          text = "Registra el primer día de tu última menstruación para que LunaSync aprenda tus patrones reales y calcule tus fases biológicas.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+          onClick = onOpenPeriodDialog,
+          shape = RoundedCornerShape(14.dp),
+          colors = ButtonDefaults.buttonColors(containerColor = PhaseMenstrualRose),
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("register_period_start_cta")
+        ) {
+          Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(6.dp))
+          Text("Registrar inicio de mi periodo", fontWeight = FontWeight.SemiBold)
         }
       }
     }
@@ -174,7 +176,7 @@ fun EllaDashboardView(
     ) {
       Button(
         onClick = { if (cycleStatus == null) onOpenPeriodDialog() else onOpenSymptomDialog() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier
           .weight(1.3f)
@@ -183,13 +185,13 @@ fun EllaDashboardView(
       ) {
         Icon(if (cycleStatus == null) Icons.Default.CalendarMonth else Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(6.dp))
-        Text(if (cycleStatus == null) "Periodo" else "Registrar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (cycleStatus == null) "Periodo" else "Registrar", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
       }
 
       OutlinedButton(
         onClick = onNavigateToCalendar,
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, AppleHairlineBorder),
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = ButtonDefaults.outlinedButtonColors(
           containerColor = MaterialTheme.colorScheme.surface,
           contentColor = MaterialTheme.colorScheme.onSurface
@@ -201,12 +203,12 @@ fun EllaDashboardView(
       ) {
         Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = PhaseFertileSage, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(4.dp))
-        Text("Calendario", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text("Calendario", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
       }
 
       FilledTonalButton(
         onClick = onOpenIntimacyDialog,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
           containerColor = MaterialTheme.colorScheme.surface,
           contentColor = PhaseMenstrualRose
@@ -214,12 +216,12 @@ fun EllaDashboardView(
         modifier = Modifier
           .weight(1.1f)
           .height(48.dp)
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(16.dp))
+          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
           .testTag("log_intimacy_cta")
       ) {
         Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp), tint = PhaseMenstrualRose)
         Spacer(modifier = Modifier.width(4.dp))
-        Text("Intimidad", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text("Intimidad", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
       }
     }
 
@@ -279,66 +281,52 @@ fun EllaDashboardView(
       }
     }
 
-    Surface(
-      shape = RoundedCornerShape(20.dp),
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 1.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+    LunaCard(
+      modifier = Modifier.fillMaxWidth()
     ) {
-      Column(modifier = Modifier.padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-              .size(34.dp)
-              .clip(RoundedCornerShape(10.dp))
-              .background(wisdomBg)
-          ) {
-            Icon(Icons.Default.Spa, contentDescription = null, tint = wisdomIconTint, modifier = Modifier.size(18.dp))
-          }
-          Spacer(modifier = Modifier.width(10.dp))
-          Column {
-            Text(
-              text = if (isNull) "INFORMACIÓN HORMONAL" else "TU CUERPO HOY (DÍA $dayNum)",
-              style = MaterialTheme.typography.labelSmall,
-              fontWeight = FontWeight.Bold,
-              color = wisdomIconTint,
-              letterSpacing = 0.5.sp
-            )
-            Text(
-              text = wisdomTitle,
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface
-            )
-          }
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+          contentAlignment = Alignment.Center,
+          modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(wisdomBg)
+        ) {
+          Icon(Icons.Default.Spa, contentDescription = null, tint = wisdomIconTint, modifier = Modifier.size(20.dp))
         }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column {
+          Text(
+            text = if (isNull) "INFORMACIÓN BIOLÓGICA" else "TU CUERPO HOY (DÍA $dayNum)",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = wisdomIconTint,
+            letterSpacing = 0.5.sp
+          )
+          Text(
+            text = wisdomTitle,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+        }
+      }
 
+      Spacer(modifier = Modifier.height(10.dp))
+
+      Text(
+        text = wisdomText,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        lineHeight = 19.sp
+      )
+
+      if (cycleStatus != null) {
         Spacer(modifier = Modifier.height(10.dp))
-
-        Text(
-          text = wisdomText,
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurface,
-          lineHeight = 18.sp
+        LunaBadge(
+          text = if (cycleStatus.isBasedOnHistory) "Basado en tu historial confirmado" else "Estimación preliminar (estándar ${cycleStatus.totalDays}d)",
+          style = if (cycleStatus.isBasedOnHistory) LunaBadgeStyle.FACT else LunaBadgeStyle.ESTIMATE
         )
-
-        if (cycleStatus?.isBasedOnHistory == false) {
-          Spacer(modifier = Modifier.height(8.dp))
-          Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = AppleSystemGray5.copy(alpha = 0.5f)
-          ) {
-            Text(
-              text = "Estimación basada en duración estándar (${cycleStatus.totalDays}d) • A la espera de historial regular",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-          }
-        }
       }
     }
 
@@ -349,182 +337,250 @@ fun EllaDashboardView(
       !it.careActionTaken.isNullOrBlank() || !it.sweetMessage.isNullOrBlank()
     }
     if (latestObservationWithCare != null) {
-      Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+      LunaCard(
+        modifier = Modifier.fillMaxWidth()
       ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-              contentAlignment = Alignment.Center,
-              modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(PhaseFertileSubtle)
-            ) {
-              Icon(Icons.Default.VolunteerActivism, contentDescription = null, tint = PhaseFertileSage, modifier = Modifier.size(16.dp))
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-              Text(
-                text = "DETALLE DE TU PAREJA",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = PhaseFertileSage,
-                letterSpacing = 0.5.sp
-              )
-              Text(
-                text = "Cuidado registrado con amor",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-              )
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+              .size(34.dp)
+              .clip(RoundedCornerShape(10.dp))
+              .background(PhaseFertileSubtle)
+          ) {
+            Icon(Icons.Default.VolunteerActivism, contentDescription = null, tint = PhaseFertileSage, modifier = Modifier.size(18.dp))
           }
-
-          if (!latestObservationWithCare.careActionTaken.isNullOrBlank()) {
+          Spacer(modifier = Modifier.width(10.dp))
+          Column {
             Text(
-              text = "• Acción: ${latestObservationWithCare.careActionTaken}",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurface,
-              modifier = Modifier.padding(top = 8.dp)
+              text = "DETALLE DE TU PAREJA",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Bold,
+              color = PhaseFertileSage,
+              letterSpacing = 0.5.sp
+            )
+            Text(
+              text = "Acompañamiento registrado",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.SemiBold
             )
           }
+        }
 
-          if (!latestObservationWithCare.sweetMessage.isNullOrBlank()) {
-            Text(
-              text = "\"${latestObservationWithCare.sweetMessage}\"",
-              style = MaterialTheme.typography.bodySmall,
-              fontWeight = FontWeight.Medium,
-              color = PhaseLutealLavender,
-              modifier = Modifier.padding(top = 4.dp)
-            )
-          }
+        if (!latestObservationWithCare.careActionTaken.isNullOrBlank()) {
+          Text(
+            text = "• Acción: ${latestObservationWithCare.careActionTaken}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 8.dp)
+          )
+        }
+
+        if (!latestObservationWithCare.sweetMessage.isNullOrBlank()) {
+          Text(
+            text = "\"${latestObservationWithCare.sweetMessage}\"",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = PhaseLutealLavender,
+            modifier = Modifier.padding(top = 4.dp)
+          )
         }
       }
       Spacer(modifier = Modifier.height(14.dp))
     }
 
     // Today's Registered Symptoms Summary
-    Surface(
-      shape = RoundedCornerShape(20.dp),
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 1.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+    LunaCard(
+      modifier = Modifier.fillMaxWidth()
     ) {
-      Column(modifier = Modifier.padding(16.dp)) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column {
-            Text(
-              text = "REGISTRO DE HOY",
-              style = MaterialTheme.typography.labelSmall,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              letterSpacing = 0.5.sp
-            )
-            Text(
-              text = if (todaySymptom != null) "Síntomas y sensaciones" else "Sin registro de hoy aún",
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.Bold
-            )
-          }
-
-          if (todaySymptom?.isPrivate == true) {
-            Surface(
-              shape = RoundedCornerShape(8.dp),
-              color = PhaseLutealSubtle,
-              modifier = Modifier.border(0.5.dp, PhaseLutealLavender.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-              ) {
-                Icon(Icons.Default.Lock, contentDescription = null, tint = PhaseLutealLavender, modifier = Modifier.size(12.dp))
-                Spacer(modifier = Modifier.width(3.dp))
-                Text("Privado", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = PhaseLutealLavender)
-              }
-            }
-          }
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column {
+          Text(
+            text = "REGISTRO DE HOY",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 0.5.sp
+          )
+          Text(
+            text = if (todaySymptom != null) "Síntomas y sensaciones" else "Sin registro de hoy aún",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+          )
         }
 
-        if (todaySymptom != null) {
-          Spacer(modifier = Modifier.height(12.dp))
+        if (todaySymptom?.isPrivate == true) {
+          LunaBadge(
+            text = "Privado",
+            style = LunaBadgeStyle.FACT,
+            icon = Icons.Default.Lock
+          )
+        }
+      }
 
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth()
-          ) {
-            if (todaySymptom.flowLevel != "NONE") {
-              SymptomBadge(label = "Flujo: ${todaySymptom.flowLevel}", color = PhaseMenstrualRose)
-            }
-            if (todaySymptom.cramps) {
-              SymptomBadge(label = "Cólicos", color = PhaseMenstrualRose)
-            }
-            if (todaySymptom.tenderBreasts) {
-              SymptomBadge(label = "Senos sensibles", color = PhaseLutealLavender)
-            }
-            if (todaySymptom.cravings) {
-              SymptomBadge(label = "Antojos", color = PhaseFollicularPeach)
-            }
-            if (todaySymptom.cervicalMucus != "NONE") {
-              SymptomBadge(label = "Moco: ${todaySymptom.cervicalMucus}", color = PhaseFertileSage)
-            }
-            if (todaySymptom.headache) {
-              SymptomBadge(label = "Cefalea", color = BrandTerracottaRose)
-            }
-            if (todaySymptom.backPain) {
-              SymptomBadge(label = "Espalda baja", color = BrandTerracottaRose)
-            }
-            if (todaySymptom.bloating) {
-              SymptomBadge(label = "Hinchazón", color = BrandTerracottaRose)
-            }
-            if (todaySymptom.acne) {
-              SymptomBadge(label = "Acné/Piel", color = PhaseFollicularPeach)
-            }
-            SymptomBadge(label = "Ánimo: ${todaySymptom.mood}", color = BrandTerracottaRose)
-            SymptomBadge(label = "Energía: ${todaySymptom.energyLevel}/5", color = PhaseFollicularPeach)
-          }
+      if (todaySymptom != null) {
+        Spacer(modifier = Modifier.height(12.dp))
 
-          if (!todaySymptom.publicNote.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-              text = "Nota compartida: \"${todaySymptom.publicNote}\"",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          if (todaySymptom.flowLevel != "NONE") {
+            SymptomBadge(label = "Flujo: ${todaySymptom.flowLevel}", color = PhaseMenstrualRose)
           }
-        } else {
+          if (todaySymptom.cramps) {
+            SymptomBadge(label = "Cólicos", color = PhaseMenstrualRose)
+          }
+          if (todaySymptom.tenderBreasts) {
+            SymptomBadge(label = "Senos sensibles", color = PhaseLutealLavender)
+          }
+          if (todaySymptom.cravings) {
+            SymptomBadge(label = "Antojos", color = PhaseFollicularPeach)
+          }
+          if (todaySymptom.cervicalMucus != "NONE") {
+            SymptomBadge(label = "Moco: ${todaySymptom.cervicalMucus}", color = PhaseFertileSage)
+          }
+          if (todaySymptom.headache) {
+            SymptomBadge(label = "Cefalea", color = BrandTerracottaRose)
+          }
+          if (todaySymptom.backPain) {
+            SymptomBadge(label = "Espalda baja", color = BrandTerracottaRose)
+          }
+          if (todaySymptom.bloating) {
+            SymptomBadge(label = "Hinchazón", color = BrandTerracottaRose)
+          }
+          if (todaySymptom.acne) {
+            SymptomBadge(label = "Acné/Piel", color = PhaseFollicularPeach)
+          }
+          SymptomBadge(label = "Ánimo: ${todaySymptom.mood}", color = BrandTerracottaRose)
+          SymptomBadge(label = "Energía: ${todaySymptom.energyLevel}/5", color = PhaseFollicularPeach)
+        }
+
+        if (!todaySymptom.publicNote.isNullOrBlank()) {
           Spacer(modifier = Modifier.height(10.dp))
           Text(
-            text = "Toca 'Registrar' arriba para anotar cómo te sientes hoy.",
+            text = "Nota compartida: \"${todaySymptom.publicNote}\"",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
+      } else {
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+          text = "Toca 'Registrar' arriba para anotar cómo te sientes hoy.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
       }
     }
 
     Spacer(modifier = Modifier.height(14.dp))
 
     // Intimacy Log Overview
-    Surface(
-      shape = RoundedCornerShape(20.dp),
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 1.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+    LunaCard(
+      modifier = Modifier.fillMaxWidth()
     ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(
+          text = "REGISTRO DE INTIMIDAD",
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          letterSpacing = 0.5.sp
+        )
+        Text(
+          text = "${intimacyLogs.size} registrados",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+
+      if (intimacyLogs.isEmpty()) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          text = "No hay encuentros íntimos registrados recientemente.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      } else {
+        intimacyLogs.take(3).forEach { log ->
+          Spacer(modifier = Modifier.height(10.dp))
+          Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(Icons.Default.Favorite, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(14.dp))
+              Spacer(modifier = Modifier.width(8.dp))
+              val typeLabel = when (log.encounterType) {
+                "PROTECTED" -> "Con protección"
+                "UNPROTECTED" -> "Sin protección"
+                "OUTERCOURSE" -> "Caricias / Tocamientos"
+                else -> log.encounterType
+              }
+              Text(
+                text = "${log.date}: $typeLabel",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+              if (log.isPrivate) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(Icons.Default.Lock, contentDescription = "Privado", tint = PhaseLutealLavender, modifier = Modifier.size(12.dp))
+              }
+            }
+
+            // Physiological tags (Lube, Orgasm, Post Contact Effect)
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(4.dp),
+              modifier = Modifier.padding(start = 22.dp, top = 4.dp)
+            ) {
+              if (log.hadOrgasm) {
+                SymptomBadge("Orgasmo ✨", BrandTerracottaRose)
+              }
+              if (log.usedLubricant) {
+                SymptomBadge("Con lubricante", PhaseFertileSage)
+              }
+              if (log.postContactEffect != "NONE") {
+                val effectLabel = when (log.postContactEffect) {
+                  "AROUSAL_FLUID" -> "Fluido de excitación (trasudado)"
+                  "PH_SHIFT" -> "Flujo acuoso (semen/pH)"
+                  "CONTACT_SPOTTING" -> "Manchado leve por roce"
+                  "FRICTION_SENSITIVITY" -> "Sensibilidad por fricción"
+                  else -> log.postContactEffect
+                }
+                SymptomBadge(effectLabel, PhaseFollicularPeach)
+              }
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = PhaseFertileSubtle,
+          modifier = Modifier
+            .fillMaxWidth()
+            .border(0.5.dp, PhaseFertileSage.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+        ) {
+          Text(
+            text = "🧬 Recuerda: El fluido de excitación y el semen alteran temporalmente la consistencia del flujo y el pH durante 24-48 horas.",
+            fontSize = 11.sp,
+            color = PhaseFertileSage,
+            lineHeight = 15.sp,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+          )
+        }
+      }
+    }
+  }
+}
       Column(modifier = Modifier.padding(16.dp)) {
         Row(
           verticalAlignment = Alignment.CenterVertically,

@@ -47,11 +47,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.UserRole
 import com.example.data.repository.AuthRepository
+import com.example.ui.components.LunaCard
 import com.example.ui.theme.AppleHairlineBorder
-import com.example.ui.theme.AppleHealthFollicularSubtle
-import com.example.ui.theme.AppleSystemBlue
-import com.example.ui.theme.AppleSystemGray5
-import com.example.ui.theme.AppleSystemIndigo
+import com.example.ui.theme.BrandDustyRose
+import com.example.ui.theme.BrandTerracottaRose
+import com.example.ui.theme.BrandWarmRose
+import com.example.ui.theme.PhaseFertileSage
+import com.example.ui.theme.PhaseLutealLavender
+import com.example.ui.theme.StatusError
 
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.OutlinedButton
@@ -81,20 +84,20 @@ fun AuthScreen(
       verticalArrangement = Arrangement.Center,
       modifier = Modifier.fillMaxSize()
     ) {
-      // Clean Apple style app glyph
+      // App glyph
       Surface(
         shape = RoundedCornerShape(26.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
         modifier = Modifier
           .size(88.dp)
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(26.dp))
+          .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(26.dp))
       ) {
         Box(contentAlignment = Alignment.Center) {
           Icon(
             imageVector = Icons.Default.NightsStay,
             contentDescription = "LunaSync Logo",
-            tint = AppleSystemBlue,
+            tint = BrandTerracottaRose,
             modifier = Modifier.size(44.dp)
           )
         }
@@ -120,60 +123,53 @@ fun AuthScreen(
 
       Spacer(modifier = Modifier.height(32.dp))
 
-      // Apple Card for Role Selection
-      Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+      // Card for Role Selection
+      LunaCard(
+        modifier = Modifier.fillMaxWidth()
       ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-          Text(
-            text = "SELECCIONA TU ROL INICIAL",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 0.5.sp
+        Text(
+          text = "SELECCIONA TU ROL INICIAL",
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          letterSpacing = 0.5.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          FilterChip(
+            selected = currentRole == UserRole.PRIMARY_ELLA,
+            onClick = { onRoleSelected(UserRole.PRIMARY_ELLA) },
+            label = { Text("Ella (Espacio)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+            shape = RoundedCornerShape(12.dp),
+            colors = FilterChipDefaults.filterChipColors(
+              selectedContainerColor = BrandTerracottaRose,
+              selectedLabelColor = Color.White
+            ),
+            modifier = Modifier.weight(1f).testTag("role_ella_chip")
           )
 
-          Spacer(modifier = Modifier.height(12.dp))
-
-          Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
-          ) {
-            FilterChip(
-              selected = currentRole == UserRole.PRIMARY_ELLA,
-              onClick = { onRoleSelected(UserRole.PRIMARY_ELLA) },
-              label = { Text("Ella (Espacio)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-              shape = RoundedCornerShape(12.dp),
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = AppleSystemBlue,
-                selectedLabelColor = Color.White
-              ),
-              modifier = Modifier.weight(1f).testTag("role_ella_chip")
-            )
-
-            FilterChip(
-              selected = currentRole == UserRole.SUPPORT_PARTNER,
-              onClick = { onRoleSelected(UserRole.SUPPORT_PARTNER) },
-              label = { Text("Novio (Soporte)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-              shape = RoundedCornerShape(12.dp),
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = AppleSystemBlue,
-                selectedLabelColor = Color.White
-              ),
-              modifier = Modifier.weight(1f).testTag("role_partner_chip")
-            )
-          }
+          FilterChip(
+            selected = currentRole == UserRole.SUPPORT_PARTNER,
+            onClick = { onRoleSelected(UserRole.SUPPORT_PARTNER) },
+            label = { Text("Pareja (Soporte)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+            shape = RoundedCornerShape(12.dp),
+            colors = FilterChipDefaults.filterChipColors(
+              selectedContainerColor = BrandTerracottaRose,
+              selectedLabelColor = Color.White
+            ),
+            modifier = Modifier.weight(1f).testTag("role_partner_chip")
+          )
         }
       }
 
       Spacer(modifier = Modifier.height(24.dp))
 
-      // Apple Style Pill CTA
+      // Primary Button
       Button(
         onClick = {
           isLoading = true
@@ -195,11 +191,11 @@ fun AuthScreen(
           )
         },
         enabled = !isLoading,
-        shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = AppleSystemBlue),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier
           .fillMaxWidth()
-          .height(52.dp)
+          .height(50.dp)
           .testTag("google_signin_button")
       ) {
         if (isLoading) {
@@ -221,24 +217,24 @@ fun AuthScreen(
 
       Spacer(modifier = Modifier.height(12.dp))
 
-      // Apple HIG Outlined Secondary CTA for instant emulator exploration
+      // Outlined Secondary CTA for instant emulator exploration
       OutlinedButton(
         onClick = onEnterGuestMode,
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, AppleHairlineBorder),
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = ButtonDefaults.outlinedButtonColors(
           containerColor = MaterialTheme.colorScheme.surface,
           contentColor = MaterialTheme.colorScheme.onSurface
         ),
         modifier = Modifier
           .fillMaxWidth()
-          .height(52.dp)
+          .height(50.dp)
           .testTag("guest_demo_mode_button")
       ) {
         Icon(
           imageVector = Icons.Default.PlayArrow,
           contentDescription = null,
-          tint = AppleSystemBlue,
+          tint = BrandTerracottaRose,
           modifier = Modifier.size(18.dp)
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -264,7 +260,7 @@ fun AuthScreen(
         Text(
           text = errorMessage!!,
           style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.error,
+          color = StatusError,
           textAlign = TextAlign.Center
         )
       }
@@ -273,13 +269,13 @@ fun AuthScreen(
 
       Surface(
         shape = RoundedCornerShape(14.dp),
-        color = AppleSystemGray5.copy(alpha = 0.5f)
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
       ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
           modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
         ) {
-          Icon(Icons.Default.Favorite, contentDescription = null, tint = AppleSystemIndigo, modifier = Modifier.size(14.dp))
+          Icon(Icons.Default.Favorite, contentDescription = null, tint = PhaseLutealLavender, modifier = Modifier.size(14.dp))
           Spacer(modifier = Modifier.width(6.dp))
           Text(
             text = "Privacidad protegida con reglas Zero-Trust",

@@ -48,6 +48,9 @@ import com.example.data.model.IntimacyLog
 import com.example.data.model.PartnerObservation
 import com.example.ui.components.CheckInBannerComponent
 import com.example.ui.components.DailyCareCheatSheetCard
+import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaBadgeStyle
+import com.example.ui.components.LunaCard
 import com.example.ui.theme.AppleHairlineBorder
 import com.example.ui.theme.AppleHealthFertile
 import com.example.ui.theme.AppleHealthFollicular
@@ -56,6 +59,17 @@ import com.example.ui.theme.AppleHealthMenstrual
 import com.example.ui.theme.AppleSystemBlue
 import com.example.ui.theme.AppleSystemGray5
 import com.example.ui.theme.AppleSystemIndigo
+import com.example.ui.theme.BrandTerracottaRose
+import com.example.ui.theme.BrandWarmRose
+import com.example.ui.theme.PhaseFertileSage
+import com.example.ui.theme.PhaseFertileSubtle
+import com.example.ui.theme.PhaseFollicularPeach
+import com.example.ui.theme.PhaseFollicularSubtle
+import com.example.ui.theme.PhaseLutealLavender
+import com.example.ui.theme.PhaseLutealSubtle
+import com.example.ui.theme.PhaseMenstrualRose
+import com.example.ui.theme.PhaseMenstrualSubtle
+import com.example.ui.theme.StatusError
 
 @Composable
 fun PartnerDashboardView(
@@ -83,84 +97,52 @@ fun PartnerDashboardView(
       .verticalScroll(rememberScrollState())
       .padding(horizontal = 18.dp, vertical = 8.dp)
   ) {
-    // Apple Health Phase Status Header
     if (isLoading) {
-      Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
-      ) {
+      LunaCard(modifier = Modifier.fillMaxWidth()) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.padding(24.dp)
+          modifier = Modifier.padding(12.dp)
         ) {
-          CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = AppleSystemBlue)
+          CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = BrandTerracottaRose)
           Spacer(modifier = Modifier.width(14.dp))
           Text("Cargando información del ciclo...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     } else if (errorMessage != null) {
-      Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+      LunaCard(
+        modifier = Modifier.fillMaxWidth(),
+        borderColor = StatusError.copy(alpha = 0.5f)
       ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-          Text("ESTADO DEL CICLO", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-          Spacer(modifier = Modifier.height(6.dp))
-          Text("No se pudo cargar la información", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text("ESTADO DEL CICLO", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = StatusError)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text("No se pudo cargar la información", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     } else if (cycleStatus == null) {
-      Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
-      ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = AppleSystemGray5.copy(alpha = 0.6f)
-          ) {
-            Text(
-              text = "SIN REGISTROS DE CICLO",
-              style = MaterialTheme.typography.labelSmall,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              letterSpacing = 0.5.sp,
-              modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-            )
-          }
+      LunaCard(modifier = Modifier.fillMaxWidth()) {
+        LunaBadge(
+          text = "Sin registros de ciclo",
+          style = LunaBadgeStyle.NEUTRAL
+        )
 
-          Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-          Text(
-            text = "Esperando primer registro",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-          )
+        Text(
+          text = "Esperando primer registro",
+          style = MaterialTheme.typography.headlineSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
 
-          Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-          Text(
-            text = "Tu pareja aún no ha registrado el inicio de su ciclo menstrual. Tan pronto anote su periodo, verás aquí su fase actual, días estimados y consejos de cuidado personalizados.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 21.sp
-          )
-        }
+        Text(
+          text = "Tu pareja aún no ha registrado el inicio de su ciclo menstrual. Tan pronto anote su periodo, verás aquí su fase estimada, días calculados y sugerencias de acompañamiento.",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          lineHeight = 21.sp
+        )
       }
     } else {
       val phase = cycleStatus.currentPhase
@@ -169,19 +151,19 @@ fun PartnerDashboardView(
       val isDelayed = cycleStatus.isDelayed
 
       val (phaseName, phaseColor, phaseBg) = when (phase) {
-        CyclePhase.MENSTRUAL -> Triple("Fase Menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.10f))
-        CyclePhase.FOLLICULAR -> Triple("Fase Folicular", AppleHealthFollicular, AppleHealthFollicular.copy(alpha = 0.10f))
-        CyclePhase.OVULATORY -> Triple("Fase Ovulatoria • Ventana Fértil", AppleHealthFertile, AppleHealthFertile.copy(alpha = 0.10f))
-        CyclePhase.LUTEAL -> Triple("Fase Lútea • Fase de Cuidado", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.10f))
-        CyclePhase.DELAYED -> Triple("Retraso Estimado", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.10f))
+        CyclePhase.MENSTRUAL -> Triple("Fase Menstrual", PhaseMenstrualRose, PhaseMenstrualSubtle)
+        CyclePhase.FOLLICULAR -> Triple("Fase Folicular", PhaseFollicularPeach, PhaseFollicularSubtle)
+        CyclePhase.OVULATORY -> Triple("Fase Ovulatoria • Ventana Fértil", PhaseFertileSage, PhaseFertileSubtle)
+        CyclePhase.LUTEAL -> Triple("Fase Lútea • Fase de Cuidado", PhaseLutealLavender, PhaseLutealSubtle)
+        CyclePhase.DELAYED -> Triple("Fecha Estimada Superada", PhaseLutealLavender, PhaseLutealSubtle)
       }
 
       val phaseDescription = when {
         isDelayed || phase == CyclePhase.DELAYED -> "Se ha superado la fecha estimada para el próximo periodo (Día $currentDay, ${cycleStatus.delayedDays}d de retraso). Cada ciclo presenta variaciones normales por descanso o estrés. Bríndale empatía y apoyo sin presiones."
-        phase == CyclePhase.MENSTRUAL -> "Niveles bajos de energía y sensibilidad física. Tu mejor apoyo es calidez, té caliente y descanso."
-        phase == CyclePhase.FOLLICULAR -> "El estrógeno sube. Su energía y creatividad aumentan. Gran momento para salidas y proyectos juntos."
-        phase == CyclePhase.OVULATORY -> "Pico de fertilidad y mayor vitalidad social y emocional. Máxima conexión en pareja."
-        else -> "Descenso de progesterona. Puede experimentar cansancio o cambios de humor. Bríndale empatía y paciencia."
+        phase == CyclePhase.MENSTRUAL -> "Niveles basales de energía y sensibilidad física. El mejor apoyo es calidez, bebidas tibias y espacio para descansar."
+        phase == CyclePhase.FOLLICULAR -> "El estrógeno aumenta gradualmente. Su vitalidad y claridad mental suben. Excelente momento para salidas y proyectos compartidos."
+        phase == CyclePhase.OVULATORY -> "Ventana de máxima fertilidad y conexión socioemocional."
+        else -> "La progesterona acompaña esta etapa. Puede experimentar mayor necesidad de calma o sensibilidad. Escúchala con paciencia."
       }
 
       val periodStatusText = when {
@@ -193,75 +175,57 @@ fun PartnerDashboardView(
         }
       }
 
-      Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
-      ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
+      LunaCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween,
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = phaseBg
           ) {
-            Surface(
-              shape = RoundedCornerShape(10.dp),
-              color = phaseBg
-            ) {
-              Text(
-                text = if (isDelayed) "DÍA $currentDay • FECHA ESTIMADA SUPERADA" else "DÍA $currentDay DEL CICLO",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = phaseColor,
-                letterSpacing = 0.5.sp,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-              )
-            }
-
             Text(
-              text = periodStatusText,
+              text = if (isDelayed) "DÍA $currentDay • FECHA SUPERADA" else "DÍA $currentDay DEL CICLO",
               style = MaterialTheme.typography.labelSmall,
-              fontWeight = if (isDelayed) FontWeight.SemiBold else FontWeight.Normal,
-              color = if (isDelayed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+              fontWeight = FontWeight.Bold,
+              color = phaseColor,
+              letterSpacing = 0.5.sp,
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
             )
           }
 
-          Spacer(modifier = Modifier.height(12.dp))
-
           Text(
-            text = phaseName,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            text = periodStatusText,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (isDelayed) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isDelayed) StatusError else MaterialTheme.colorScheme.onSurfaceVariant
           )
-
-          Spacer(modifier = Modifier.height(6.dp))
-
-          Text(
-            text = phaseDescription,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 21.sp
-          )
-
-          if (!cycleStatus.isBasedOnHistory) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Surface(
-              shape = RoundedCornerShape(8.dp),
-              color = AppleSystemGray5.copy(alpha = 0.5f)
-            ) {
-              Text(
-                text = "Duración estándar configurada (${cycleStatus.totalDays}d) • A la espera de historial regular",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-              )
-            }
-          }
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+          text = phaseName,
+          style = MaterialTheme.typography.headlineMedium,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+          text = phaseDescription,
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          lineHeight = 21.sp
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+        LunaBadge(
+          text = if (cycleStatus.isBasedOnHistory) "Basado en historial confirmado" else "Estimación preliminar (estándar ${cycleStatus.totalDays}d)",
+          style = if (cycleStatus.isBasedOnHistory) LunaBadgeStyle.FACT else LunaBadgeStyle.ESTIMATE
+        )
       }
     }
 
@@ -277,18 +241,18 @@ fun PartnerDashboardView(
       )
     }
 
-    // iOS Style Primary Action Buttons
+    // Action Buttons
     Row(
       horizontalArrangement = Arrangement.spacedBy(10.dp),
       modifier = Modifier.fillMaxWidth()
     ) {
       Button(
         onClick = onOpenCheckInDialog,
-        shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = AppleSystemBlue),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
         modifier = Modifier
           .weight(1f)
-          .height(50.dp)
+          .height(48.dp)
           .testTag("partner_send_checkin_cta")
       ) {
         Icon(Icons.Default.QuestionAnswer, contentDescription = null, modifier = Modifier.size(17.dp))
@@ -298,18 +262,18 @@ fun PartnerDashboardView(
 
       FilledTonalButton(
         onClick = onOpenObservationDialog,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
           containerColor = MaterialTheme.colorScheme.surface,
-          contentColor = AppleSystemIndigo
+          contentColor = PhaseLutealLavender
         ),
         modifier = Modifier
           .weight(1f)
-          .height(50.dp)
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(16.dp))
+          .height(48.dp)
+          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
           .testTag("partner_log_observation_cta")
       ) {
-        Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(17.dp), tint = AppleSystemIndigo)
+        Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(17.dp), tint = PhaseLutealLavender)
         Spacer(modifier = Modifier.width(6.dp))
         Text("Anotar Cuidado", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
       }
@@ -317,183 +281,163 @@ fun PartnerDashboardView(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // Daily Care Cheat Sheet (Apple List Inset Style)
+    // Daily Care Cheat Sheet
     if (partnerCareTips.isNotEmpty()) {
       DailyCareCheatSheetCard(careTips = partnerCareTips)
     } else {
-      Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
-      ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-          Text(
-            text = "GUÍA DE CUIDADOS Y EMPATÍA",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 0.5.sp
-          )
-          Spacer(modifier = Modifier.height(6.dp))
-          Text(
-            text = "Sin recomendaciones activas",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-          )
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(
-            text = "Los consejos de apoyo diario se activarán automáticamente según la fase cuando se registre el ciclo.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      }
-    }
-
-    Spacer(modifier = Modifier.height(14.dp))
-
-    // What Ella is feeling today (Apple Inset Grouped Card)
-    Surface(
-      shape = RoundedCornerShape(20.dp),
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 1.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
-    ) {
-      Column(modifier = Modifier.padding(18.dp)) {
+      LunaCard(modifier = Modifier.fillMaxWidth()) {
         Text(
-          text = "ESTADO REPORTADO POR ELLA",
+          text = "GUÍA DE CUIDADOS DIARIOS",
           style = MaterialTheme.typography.labelSmall,
           fontWeight = FontWeight.Bold,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           letterSpacing = 0.5.sp
         )
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
-          text = "Bienestar Compartido",
+          text = "Sin recomendaciones activas",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold
         )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+          text = "Las sugerencias de apoyo diario se activarán automáticamente según la fase biológica cuando se registre el ciclo.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+    }
 
-        Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(14.dp))
 
-        if (isLoading) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+    // What Ella is feeling today
+    LunaCard(modifier = Modifier.fillMaxWidth()) {
+      Text(
+        text = "ESTADO REPORTADO POR ELLA",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 0.5.sp
+      )
+      Text(
+        text = "Bienestar Compartido",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      if (isLoading) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("Cargando información compartida...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      } else if (errorMessage != null) {
+        Text(
+          text = "No fue posible cargar el estado: $errorMessage",
+          style = MaterialTheme.typography.bodySmall,
+          color = StatusError
+        )
+      } else if (!shareSymptomsAllowed && !shareMoodAllowed) {
+        // Explicit Privacy State: Categories NOT shared
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp)
+          ) {
+            Icon(Icons.Default.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Cargando información compartida...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+              text = "Tu pareja ha desactivado la visibilidad de sus síntomas físicos y estado emocional. Respeta su privacidad y acompáñala con un Check-in.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              lineHeight = 18.sp
+            )
           }
-        } else if (errorMessage != null) {
-          Text(
-            text = "No fue posible cargar el estado: $errorMessage",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error
-          )
-        } else if (!shareSymptomsAllowed && !shareMoodAllowed) {
-          // Explicit Privacy State: Categories NOT shared
+        }
+      } else if (todaySymptom != null) {
+        // If Ella set isPrivate = true on this specific entry
+        if (todaySymptom.isPrivate) {
           Surface(
             shape = RoundedCornerShape(12.dp),
-            color = AppleSystemGray5.copy(alpha = 0.5f),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier.fillMaxWidth()
           ) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
               modifier = Modifier.padding(12.dp)
             ) {
-              Icon(Icons.Default.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+              Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = "Tu pareja ha desactivado la visibilidad de sus síntomas físicos y estado emocional. Respeta su espacio y consulta con un Check-in.",
+                text = "Ella prefirió mantener los detalles de hoy en privado. Acompáñala con calidez y dale su espacio si lo necesita.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 18.sp
               )
             }
           }
-        } else if (todaySymptom != null) {
-          // If Ella set isPrivate = true on this specific entry
-          if (todaySymptom.isPrivate) {
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = AppleSystemGray5.copy(alpha = 0.5f),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(12.dp)
-              ) {
-                Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = "Ella prefirió mantener los detalles de hoy en privado. Acompáñala con cariño y dale su espacio si lo necesita.",
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  lineHeight = 18.sp
-                )
+        } else {
+          Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            if (shareSymptomsAllowed) {
+              Column(modifier = Modifier.weight(1f)) {
+                Text("Flujo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(todaySymptom.flowLevel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
               }
-            }
-          } else {
-            // Respect independent permissions without fabricating data
-            Row(
-              horizontalArrangement = Arrangement.spacedBy(16.dp),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              if (shareSymptomsAllowed) {
-                Column(modifier = Modifier.weight(1f)) {
-                  Text("Flujo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                  Text(todaySymptom.flowLevel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                  Text("Dolor", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                  Text("${todaySymptom.painLevel} / 5", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                }
-              } else {
-                Column(modifier = Modifier.weight(2f)) {
-                  Text("Síntomas Físicos", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                  Text("No compartidos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+              Column(modifier = Modifier.weight(1f)) {
+                Text("Molestia", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${todaySymptom.painLevel} / 5", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
               }
-
-              if (shareMoodAllowed) {
-                Column(modifier = Modifier.weight(1f)) {
-                  Text("Ánimo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                  val moodText = if (todaySymptom.mood.isNotBlank()) todaySymptom.mood else "Sin registrar"
-                  Text(moodText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                }
-                if (todaySymptom.energyLevel > 0) {
-                  Column(modifier = Modifier.weight(1f)) {
-                    Text("Energía", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${todaySymptom.energyLevel} / 5", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                  }
-                }
-              } else {
-                Column(modifier = Modifier.weight(1f)) {
-                  Text("Ánimo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                  Text("No compartido", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+            } else {
+              Column(modifier = Modifier.weight(2f)) {
+                Text("Síntomas Físicos", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No compartidos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
             }
 
-            if (shareSymptomsAllowed && !todaySymptom.publicNote.isNullOrBlank()) {
-              Spacer(modifier = Modifier.height(10.dp))
-              Text(
-                text = "Mensaje de tu novia: \"${todaySymptom.publicNote}\"",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
+            if (shareMoodAllowed) {
+              Column(modifier = Modifier.weight(1f)) {
+                Text("Ánimo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val moodText = if (todaySymptom.mood.isNotBlank()) todaySymptom.mood else "Sin registrar"
+                Text(moodText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+              }
+              if (todaySymptom.energyLevel > 0) {
+                Column(modifier = Modifier.weight(1f)) {
+                  Text("Energía", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  Text("${todaySymptom.energyLevel} / 5", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+              }
+            } else {
+              Column(modifier = Modifier.weight(1f)) {
+                Text("Ánimo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No compartido", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
             }
           }
-        } else {
-          // Categories are allowed, but no entry registered yet for today
-          Text(
-            text = "Ella aún no ha registrado síntomas para hoy. Puedes consultarle con un Check-in afectivo.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+
+          if (shareSymptomsAllowed && !todaySymptom.publicNote.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+              text = "Mensaje de tu pareja: \"${todaySymptom.publicNote}\"",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
         }
+      } else {
+        Text(
+          text = "Ella aún no ha registrado síntomas para hoy. Puedes consultarle con un Check-in afectivo.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
       }
     }
 
@@ -501,14 +445,52 @@ fun PartnerDashboardView(
 
     // Shared Intimacy History
     if (shareIntimacyAllowed && intimacyLogs.isNotEmpty()) {
-      Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
-      ) {
+      LunaCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+          text = "ENCUENTROS ÍNTIMOS COMPARTIDOS",
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          letterSpacing = 0.5.sp
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        intimacyLogs.take(2).forEach { log ->
+          val typeLabel = when (log.encounterType) {
+            "PROTECTED" -> "Con protección"
+            "UNPROTECTED" -> "Sin protección"
+            "OUTERCOURSE" -> "Caricias íntimas"
+            else -> log.encounterType
+          }
+          Text(
+            text = "• $typeLabel (${log.date})",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(vertical = 3.dp)
+          )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = PhaseFertileSubtle,
+          modifier = Modifier
+            .fillMaxWidth()
+            .border(0.5.dp, PhaseFertileSage.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+        ) {
+          Text(
+            text = "💡 Para cuidar su salud íntima: Mantén manos muy limpias antes de cualquier contacto para proteger su flora protectora y su pH ácido natural.",
+            fontSize = 11.sp,
+            color = PhaseFertileSage,
+            lineHeight = 15.sp,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+          )
+        }
+      }
+      Spacer(modifier = Modifier.height(14.dp))
+    }
+  }
+}
         Column(modifier = Modifier.padding(18.dp)) {
           Text(
             text = "ENCUENTROS ÍNTIMOS COMPARTIDOS",

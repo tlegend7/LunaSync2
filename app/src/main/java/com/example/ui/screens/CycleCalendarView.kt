@@ -65,8 +65,10 @@ import com.example.data.model.DailySymptom
 import com.example.data.model.DayHighlightType
 import com.example.data.model.IntimacyLog
 import com.example.data.model.PredictedCycle
+import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaBadgeStyle
+import com.example.ui.components.LunaCard
 import com.example.ui.theme.AppleHairlineBorder
-import com.example.ui.theme.AppleSystemBlue
 import com.example.ui.theme.BrandTerracottaRose
 import com.example.ui.theme.PhaseFertileSage
 import com.example.ui.theme.PhaseFertileSubtle
@@ -153,29 +155,24 @@ fun CycleCalendarView(
       .padding(horizontal = 16.dp, vertical = 8.dp)
   ) {
     // Top Overview Summary
-    Surface(
-      shape = RoundedCornerShape(20.dp),
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 1.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+    LunaCard(
+      modifier = Modifier.fillMaxWidth()
     ) {
       Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceAround,
-        modifier = Modifier.padding(vertical = 12.dp, horizontal = 14.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
       ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           Text("Ciclo Medio", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Text("${averageCycleLength}d", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
         }
-        Box(modifier = Modifier.width(1.dp).height(24.dp).background(AppleHairlineBorder))
+        Box(modifier = Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           Text("Periodo", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Text("${averagePeriodLength}d", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PhaseMenstrualRose)
         }
-        Box(modifier = Modifier.width(1.dp).height(24.dp).background(AppleHairlineBorder))
+        Box(modifier = Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           Text("Predicciones", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Text("+6 meses", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PhaseFertileSage)
@@ -230,16 +227,10 @@ fun CycleCalendarView(
     Spacer(modifier = Modifier.height(8.dp))
 
     // Interactive Calendar Surface
-    Surface(
-      shape = RoundedCornerShape(22.dp),
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 1.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
+    LunaCard(
+      modifier = Modifier.fillMaxWidth()
     ) {
-      Column(modifier = Modifier.padding(14.dp)) {
-        // Weekday header (L, M, M, J, V, S, D)
+      // Weekday header (L, M, M, J, V, S, D)
         Row(
           horizontalArrangement = Arrangement.SpaceAround,
           modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
@@ -324,7 +315,6 @@ fun CycleCalendarView(
           LegendItem(color = PhaseLutealLavender, label = "Síntoma")
           LegendItem(color = PhaseMenstrualRose, isDot = true, label = "Intimidad")
         }
-      }
     }
 
     Spacer(modifier = Modifier.height(16.dp))
@@ -502,84 +492,69 @@ private fun DayDetailCard(
   val dateTitle = selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("es", "ES")))
     .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
-  Surface(
-    shape = RoundedCornerShape(22.dp),
-    color = MaterialTheme.colorScheme.surface,
-    tonalElevation = 2.dp,
-    modifier = modifier
-      .fillMaxWidth()
-      .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
+  LunaCard(
+    modifier = modifier.fillMaxWidth()
   ) {
-    Column(modifier = Modifier.padding(18.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = dateTitle,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-          )
-          Text(
-            text = detail.phaseName,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = when (detail.highlightType) {
-              DayHighlightType.ACTUAL_PERIOD -> PhaseMenstrualRose
-              DayHighlightType.PREDICTED_PERIOD -> PhaseMenstrualRose
-              DayHighlightType.OVULATION_DAY -> PhaseFertileSage
-              DayHighlightType.FERTILE_WINDOW -> PhaseFertileSage
-              DayHighlightType.FOLLICULAR -> PhaseFollicularPeach
-              DayHighlightType.LUTEAL -> PhaseLutealLavender
-              DayHighlightType.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-          )
-        }
-
-        if (detail.isPredicted) {
-          val isFuture = detail.date.isAfter(LocalDate.now())
-          val badgeText = if (isFuture) "Proyección Futura" else "Estimación no confirmada"
-          val badgeColor = if (detail.highlightType == DayHighlightType.PREDICTED_PERIOD) PhaseMenstrualRose else PhaseFertileSage
-          val badgeBg = if (detail.highlightType == DayHighlightType.PREDICTED_PERIOD) PhaseMenstrualSubtle else PhaseFertileSubtle
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = badgeBg,
-            modifier = Modifier.border(0.5.dp, badgeColor.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-          ) {
-            Text(
-              text = badgeText,
-              fontSize = 11.sp,
-              fontWeight = FontWeight.SemiBold,
-              color = badgeColor,
-              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = dateTitle,
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+          text = detail.phaseName,
+          style = MaterialTheme.typography.labelMedium,
+          fontWeight = FontWeight.SemiBold,
+          color = when (detail.highlightType) {
+            DayHighlightType.ACTUAL_PERIOD -> PhaseMenstrualRose
+            DayHighlightType.PREDICTED_PERIOD -> PhaseMenstrualRose
+            DayHighlightType.OVULATION_DAY -> PhaseFertileSage
+            DayHighlightType.FERTILE_WINDOW -> PhaseFertileSage
+            DayHighlightType.FOLLICULAR -> PhaseFollicularPeach
+            DayHighlightType.LUTEAL -> PhaseLutealLavender
+            DayHighlightType.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
           }
-        }
+        )
       }
 
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Hormonal / Biological Insight for women
-      Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxWidth().border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(14.dp))
-      ) {
-        Row(modifier = Modifier.padding(12.dp)) {
-          Icon(
-            Icons.Default.Spa,
-            contentDescription = null,
-            tint = BrandTerracottaRose,
-            modifier = Modifier.size(18.dp).padding(top = 2.dp)
-          )
-          Spacer(modifier = Modifier.width(10.dp))
-          Text(
-            text = detail.hormoneInsight,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            lineHeight = 18.sp
-          )
-        }
+      if (detail.isPredicted) {
+        val isFuture = detail.date.isAfter(LocalDate.now())
+        val badgeText = if (isFuture) "Proyección Futura" else "Estimación no confirmada"
+        LunaBadge(
+          text = badgeText,
+          style = LunaBadgeStyle.ESTIMATE
+        )
       }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Hormonal / Biological Insight for women
+    Surface(
+      shape = RoundedCornerShape(14.dp),
+      color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+      modifier = Modifier
+        .fillMaxWidth()
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+    ) {
+      Row(modifier = Modifier.padding(12.dp)) {
+        Icon(
+          Icons.Default.Spa,
+          contentDescription = null,
+          tint = BrandTerracottaRose,
+          modifier = Modifier.size(18.dp).padding(top = 2.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+          text = detail.hormoneInsight,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurface,
+          lineHeight = 18.sp
+        )
+      }
+    }
 
       // Display logged symptoms if they exist
       if (todaySymptom != null) {
@@ -659,7 +634,6 @@ private fun DayDetailCard(
       }
     }
   }
-}
 
 @Composable
 private fun DetailChip(text: String, color: Color) {

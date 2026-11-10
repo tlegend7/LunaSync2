@@ -27,8 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CheckInPromptType
-import com.example.ui.theme.DeepOceanBlue
-import com.example.ui.theme.SoftCerulean
+import com.example.ui.theme.AppleHairlineBorder
+import com.example.ui.theme.BrandTerracottaRose
 
 @Composable
 fun SendCheckInDialog(
@@ -40,13 +40,13 @@ fun SendCheckInDialog(
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    shape = RoundedCornerShape(28.dp),
+    shape = RoundedCornerShape(24.dp),
     title = {
       Text(
         text = "Enviar Check-in Afectivo",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
-        color = DeepOceanBlue
+        color = MaterialTheme.colorScheme.onSurface
       )
     },
     text = {
@@ -54,7 +54,8 @@ fun SendCheckInDialog(
         Text(
           text = "Selecciona una pregunta cariñosa:",
           style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -62,8 +63,8 @@ fun SendCheckInDialog(
           CheckInPromptType.entries.forEach { prompt ->
             val title = when (prompt) {
               CheckInPromptType.HOW_ARE_YOU_FEELING -> "¿Cómo te sientes en este momento?"
-              CheckInPromptType.NEED_SPACE_OR_CUDDLES -> "¿Necesitas espacio a solas o mimos?"
-              CheckInPromptType.ARE_YOU_UPSET_WITH_ME -> "¿Estás molesta conmigo o es bajón hormonal?"
+              CheckInPromptType.NEED_SPACE_OR_CUDDLES -> "¿Necesitas espacio a solas o compañía?"
+              CheckInPromptType.ARE_YOU_UPSET_WITH_ME -> "¿Hay algo en lo que te pueda ayudar o prefieres un momento?"
               CheckInPromptType.CAN_I_BRING_YOU_SOMETHING -> "¿Puedo llevarte algo rico o caliente?"
             }
 
@@ -72,7 +73,14 @@ fun SendCheckInDialog(
               onClick = { selectedPrompt = prompt },
               label = { Text(title, fontSize = 13.sp) },
               colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = SoftCerulean.copy(alpha = 0.35f)
+                selectedContainerColor = BrandTerracottaRose.copy(alpha = 0.15f),
+                selectedLabelColor = BrandTerracottaRose
+              ),
+              border = FilterChipDefaults.filterChipBorder(
+                enabled = true,
+                selected = selectedPrompt == prompt,
+                borderColor = AppleHairlineBorder,
+                selectedBorderColor = BrandTerracottaRose
               ),
               modifier = Modifier.fillMaxWidth().testTag("prompt_${prompt.name}")
             )
@@ -85,7 +93,7 @@ fun SendCheckInDialog(
           value = customNote,
           onValueChange = { customNote = it },
           label = { Text("Nota personalizada (opcional)") },
-          placeholder = { Text("Ej. Te pienso mucho hoy, avísame...") },
+          placeholder = { Text("Ej. Te pienso mucho hoy, avísame si necesitas algo...") },
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(14.dp)
         )
@@ -97,16 +105,16 @@ fun SendCheckInDialog(
           onSend(selectedPrompt, customNote.ifBlank { null })
           onDismiss()
         },
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = DeepOceanBlue),
-        modifier = Modifier.testTag("send_check_in_button")
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
+        modifier = Modifier.height(44.dp).testTag("send_check_in_button")
       ) {
-        Text("Enviar Pregunta")
+        Text("Enviar Pregunta", fontWeight = FontWeight.SemiBold)
       }
     },
     dismissButton = {
       TextButton(onClick = onDismiss) {
-        Text("Cancelar")
+        Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
   )

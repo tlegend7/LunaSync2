@@ -78,13 +78,13 @@ fun CycleDialComponent(
   Box(
     contentAlignment = Alignment.Center,
     modifier = modifier
-      .size(270.dp)
+      .size(240.dp)
       .testTag("cycle_dial_component")
   ) {
-    // Subtle Apple-like inner ambient halo
+    // Subtle inner ambient halo
     Box(
       modifier = Modifier
-        .size(190.dp)
+        .size(165.dp)
         .clip(CircleShape)
         .background(
           Brush.radialGradient(

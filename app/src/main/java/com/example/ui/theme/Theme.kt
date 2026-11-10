@@ -8,15 +8,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val AppleLightColorScheme = lightColorScheme(
-  primary = AppleSystemBlue,
+  primary = BrandTerracottaRose,
   onPrimary = Color.White,
-  primaryContainer = AppleSystemBlue.copy(alpha = 0.12f),
-  onPrimaryContainer = AppleSystemBlue,
-  secondary = AppleSystemIndigo,
+  primaryContainer = BrandTerracottaRose.copy(alpha = 0.12f),
+  onPrimaryContainer = BrandTerracottaRose,
+  secondary = BrandWarmRose,
   onSecondary = Color.White,
   secondaryContainer = AppleSystemGray5,
   onSecondaryContainer = AppleTextPrimary,
-  tertiary = AppleSystemTeal,
+  tertiary = PhaseFertileSage,
   onTertiary = Color.White,
   background = AppleBackground,
   onBackground = AppleTextPrimary,
@@ -24,19 +24,20 @@ private val AppleLightColorScheme = lightColorScheme(
   onSurface = AppleTextPrimary,
   surfaceVariant = AppleSystemGray6,
   onSurfaceVariant = AppleTextSecondary,
-  outline = AppleHairlineBorder
+  outline = AppleHairlineBorder,
+  outlineVariant = AppleHairlineBorder
 )
 
 private val AppleDarkColorScheme = darkColorScheme(
-  primary = AppleSystemBlue,
+  primary = BrandTerracottaRose,
   onPrimary = Color.White,
-  primaryContainer = AppleSystemBlue.copy(alpha = 0.25f),
+  primaryContainer = BrandTerracottaRose.copy(alpha = 0.25f),
   onPrimaryContainer = Color.White,
-  secondary = AppleSystemIndigo,
+  secondary = BrandWarmRose,
   onSecondary = Color.White,
   secondaryContainer = AppleDarkSurfaceElevated,
   onSecondaryContainer = AppleDarkTextPrimary,
-  tertiary = AppleSystemTeal,
+  tertiary = PhaseFertileSage,
   onTertiary = Color.White,
   background = AppleDarkBackground,
   onBackground = AppleDarkTextPrimary,
@@ -44,7 +45,8 @@ private val AppleDarkColorScheme = darkColorScheme(
   onSurface = AppleDarkTextPrimary,
   surfaceVariant = AppleDarkSurfaceElevated,
   onSurfaceVariant = AppleDarkTextSecondary,
-  outline = AppleDarkHairlineBorder
+  outline = AppleDarkHairlineBorder,
+  outlineVariant = AppleDarkHairlineBorder
 )
 
 @Composable
