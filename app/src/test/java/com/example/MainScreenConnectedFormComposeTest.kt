@@ -95,7 +95,8 @@ class MainScreenConnectedFormComposeTest {
     testAuthRepo = TestControlledAuthRepository(application)
   }
 
-  private fun createVm(): MainViewModel {
+  private fun createVm(referenceDate: LocalDate = fixedDate): MainViewModel {
+    val controlledClock = Clock.fixed(referenceDate.atStartOfDay(ZoneId.of("UTC")).toInstant(), ZoneId.of("UTC"))
     return MainViewModel(
       application = application,
       authRepo = testAuthRepo,
@@ -104,7 +105,7 @@ class MainScreenConnectedFormComposeTest {
       intimacyRepo = intimacyRepo,
       partnerRepo = partnerRepo
     ).apply {
-      this.clock = fixedClock
+      this.clock = controlledClock
     }
   }
 
@@ -133,7 +134,12 @@ class MainScreenConnectedFormComposeTest {
     }
   }
 
-  private suspend fun setupCoherentSession(vm: MainViewModel, user: FirebaseUser, spaceId: String): CoupleSpace {
+  private suspend fun setupCoherentSession(
+    vm: MainViewModel,
+    user: FirebaseUser,
+    spaceId: String,
+    referenceDate: LocalDate = vm.getToday()
+  ): CoupleSpace {
     val space = CoupleSpace(
       id = spaceId,
       ownerId = user.uid,
@@ -155,12 +161,14 @@ class MainScreenConnectedFormComposeTest {
         currentRole = UserRole.PRIMARY_ELLA,
         space = space,
         isGuestMode = false,
+        selectedDate = referenceDate,
         todaySymptom = null,
         activePairingCode = null,
         errorMessage = null,
         successMessage = null
       )
     }
+    vm.updateSelectedDayDetail()
     return space
   }
 
@@ -468,5 +476,77 @@ class MainScreenConnectedFormComposeTest {
 
     val cyclesAfterCalendar = vm.uiState.value.pastCycles
     assertTrue("Cycle must be saved for June 2", cyclesAfterCalendar.any { it.startDate == pastSelectedDate.toString() })
+  }
+
+  /**
+   * Verificación de reproducibilidad con fecha controlada de otro mes y otro año:
+   * Por ejemplo: Miércoles 20 de Octubre de 2027 (2027-10-20).
+   * Demuestra que el calendario, el encabezado, el diálogo y el destino de guardado
+   * se rigen íntegramente por la fecha controlada y son completamente independientes del reloj del host.
+   */
+  @Test
+  fun testScenarioReproducibilityWithDifferentMonthAndYear_October2027() {
+    val controlledDate2027 = LocalDate.of(2027, 10, 20)
+    val email = "ella_oct2027_${UUID.randomUUID()}@test.com"
+    val (user, spaceId) = runWithLooper {
+      val authResult = auth.createUserWithEmailAndPassword(email, "password123").await()
+      val u = authResult.user!!
+      val sId = coupleRepo.createSpace(u.uid, 28, 5)
+      cycleRepo.recordPeriodStart(sId, controlledDate2027.minusDays(10), null)
+      Pair(u, sId)
+    }
+
+    val vm = createVm(referenceDate = controlledDate2027)
+    runWithLooper {
+      setupCoherentSession(vm, user, spaceId, referenceDate = controlledDate2027)
+    }
+
+    composeTestRule.setContent {
+      MainScreen(viewModel = vm)
+    }
+
+    // 1. Navegar al calendario
+    composeTestRule.onNodeWithTag("nav_tab_calendar").performClick()
+
+    // 2. El mes mostrado inicialmente debe ser Octubre de 2027.
+    // Seleccionar día 5 de octubre de 2027 mediante calendar_date_2027-10-05 (o calendar_day_5)
+    val octDateFormatter = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("es", "ES"))
+    val pastDayOct5 = LocalDate.of(2027, 10, 5)
+    composeTestRule.onNodeWithTag("calendar_day_5").performClick()
+    assertEquals(pastDayOct5, vm.uiState.value.selectedDate)
+
+    // 3. Volver a pestaña Hoy
+    composeTestRule.onNodeWithTag("nav_tab_dashboard").performClick()
+
+    // 4. Abrir diálogo de síntomas desde Hoy
+    composeTestRule.onNodeWithTag("log_symptoms_cta").performClick()
+
+    // El diálogo debe mostrar la fecha controlada: 20 de octubre de 2027
+    val expectedFormatted = controlledDate2027.format(octDateFormatter)
+    composeTestRule.onNodeWithTag("symptom_dialog_date_text").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("symptom_dialog_date_text").assertTextContains(expectedFormatted, substring = true, ignoreCase = true)
+
+    // 5. Guardar síntoma
+    composeTestRule.onNodeWithTag("flow_chip_MEDIUM").performClick()
+    composeTestRule.onNodeWithTag("save_symptom_button").performClick()
+
+    waitForCondition {
+      vm.uiState.value.todaySymptom != null
+    }
+
+    // Comprobar persistencia en ViewModel
+    val savedToday = vm.uiState.value.todaySymptom
+    assertNotNull(savedToday)
+    assertEquals(controlledDate2027.toString(), savedToday!!.date)
+    assertEquals("MEDIUM", savedToday.flowLevel)
+
+    // Comprobar lectura real persistida en Firestore
+    val docInDb = runWithLooper {
+      db.collection("couple_spaces").document(spaceId)
+        .collection("physical_symptoms").document(controlledDate2027.toString())
+        .get().await()
+    }
+    assertTrue("Document must exist in Firestore under 2027-10-20", docInDb.exists())
+    assertEquals("MEDIUM", docInDb.getString("flowLevel"))
   }
 }

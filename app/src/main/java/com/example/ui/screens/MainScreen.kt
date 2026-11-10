@@ -271,6 +271,7 @@ fun MainScreen(
                 intimacyLogs = uiState.intimacyLogs,
                 predictedCycles = uiState.predictedCycles,
                 selectedDate = uiState.selectedDate,
+                today = viewModel.getToday(),
                 canLogSymptoms = uiState.currentRole == UserRole.PRIMARY_ELLA,
                 onDateSelected = { date -> viewModel.selectDate(date) },
                 onOpenSymptomDialogForDate = { date ->

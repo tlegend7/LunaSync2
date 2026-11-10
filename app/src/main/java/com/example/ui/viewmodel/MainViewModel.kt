@@ -437,7 +437,7 @@ class MainViewModel(
 
   fun enterGuestDemoMode() {
     currentSessionId = UUID.randomUUID().toString()
-    val today = LocalDate.now()
+    val today = getToday()
     val periodStart = today.minusDays(13)
     val demoCycles = listOf(
       CycleEntry(
@@ -1085,7 +1085,7 @@ class MainViewModel(
     careActionTaken: String?,
     sweetMessage: String?
   ) {
-    val dateStr = LocalDate.now().toString()
+    val dateStr = getToday().toString()
     val obs = PartnerObservation(
       id = "obs_${System.currentTimeMillis()}",
       spaceId = _uiState.value.space?.id ?: "demo_space",

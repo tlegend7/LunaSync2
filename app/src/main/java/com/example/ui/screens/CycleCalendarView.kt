@@ -93,6 +93,7 @@ fun CycleCalendarView(
   intimacyLogs: List<IntimacyLog>,
   predictedCycles: List<PredictedCycle>,
   selectedDate: LocalDate = LocalDate.now(),
+  today: LocalDate = LocalDate.now(),
   canLogSymptoms: Boolean = true,
   onDateSelected: (LocalDate) -> Unit,
   onOpenSymptomDialogForDate: (LocalDate) -> Unit,
@@ -100,8 +101,9 @@ fun CycleCalendarView(
   onOpenPeriodDialogForDate: ((LocalDate) -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
-  val today = remember { LocalDate.now() }
-  var displayedMonth by remember { mutableStateOf(YearMonth.from(selectedDate)) }
+  var displayedMonth by remember(selectedDate.year, selectedDate.month) {
+    mutableStateOf(YearMonth.from(selectedDate))
+  }
 
   val symptomDates = remember(symptoms) {
     symptoms.mapNotNull {
@@ -291,7 +293,9 @@ fun CycleCalendarView(
                   isToday = cellDate.isEqual(today),
                   isSelected = cellDate.isEqual(selectedDate),
                   onClick = { onDateSelected(cellDate) },
-                  modifier = Modifier.weight(1f)
+                  modifier = Modifier
+                    .weight(1f)
+                    .testTag("calendar_date_${cellDate}")
                 )
               } else {
                 // Dimmed placeholder for padding days
