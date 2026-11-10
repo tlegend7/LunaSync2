@@ -124,10 +124,8 @@ class MainViewModel @JvmOverloads constructor(
   }
 
   fun switchRole(role: UserRole) {
-    if (_uiState.value.isGuestMode) {
-      authRepo.setRole(role)
-      _uiState.value = _uiState.value.copy(currentRole = role)
-    }
+    authRepo.setRole(role)
+    _uiState.value = _uiState.value.copy(currentRole = role)
   }
 
   fun selectDate(date: LocalDate) {
@@ -538,9 +536,10 @@ class MainViewModel @JvmOverloads constructor(
       cyclesCount = 6
     )
 
+    val selectedRole = _uiState.value.currentRole
     _uiState.value = _uiState.value.copy(
       isGuestMode = true,
-      currentRole = UserRole.PRIMARY_ELLA,
+      currentRole = selectedRole,
       space = demoSpace,
       pastCycles = demoCycles,
       predictedCycles = demoPredictions,
