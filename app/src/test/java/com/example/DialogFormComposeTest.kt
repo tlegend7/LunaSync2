@@ -315,7 +315,7 @@ class DialogFormComposeTest {
 
     // 6. Pulsar botón de guardado y verificar que pulsaciones consecutivas no duplican envíos
     composeTestRule.onNodeWithTag("save_observation_button")
-      .performScrollTo()
+      .assertIsDisplayed()
       .assertIsEnabled()
       .performClick()
 
@@ -343,7 +343,7 @@ class DialogFormComposeTest {
       .performScrollTo()
       .assertTextContains(expectedMessage)
     composeTestRule.onNodeWithTag("save_observation_button")
-      .performScrollTo()
+      .assertIsDisplayed()
       .assertIsEnabled()
 
     // 9. Reintentar guardado
