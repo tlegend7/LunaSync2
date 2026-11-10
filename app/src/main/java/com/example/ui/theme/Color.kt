@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.Color
 val BrandTerracottaRose = Color(0xFFC75D6D) // Warm harmonic hero rose
 val BrandTerracottaSoft = Color(0xFFFBECEF)
 val BrandRoseGold = Color(0xFFD48B80)
+val BrandWarmRose = Color(0xFFD48B80)
+val BrandDustyRose = Color(0xFFBA6B75)
 
 // Phase Specific Organic Tones
 val PhaseMenstrualRose = Color(0xFFE26D77) // Soft rosewood / terracotta blush
