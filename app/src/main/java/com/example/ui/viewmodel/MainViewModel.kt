@@ -99,9 +99,11 @@ class MainViewModel(
       authRepo.currentUser.collectLatest { user ->
         _uiState.value = _uiState.value.copy(currentUser = user)
         if (user != null) {
-          currentSessionId = UUID.randomUUID().toString()
-          activeObservedUserId = user.uid
-          observeUserData(user.uid, currentSessionId)
+          if (activeObservedUserId != user.uid) {
+            currentSessionId = UUID.randomUUID().toString()
+            activeObservedUserId = user.uid
+            observeUserData(user.uid, currentSessionId)
+          }
         } else {
           currentSessionId = UUID.randomUUID().toString()
           activeObservedUserId = null
@@ -359,12 +361,17 @@ class MainViewModel(
       return
     }
 
+    val confirmedBleedingDates = _uiState.value.allSymptoms.filter { it.flowLevel != FlowLevel.NONE.name }.mapNotNull {
+      try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+    }.toSet()
+
     val status = CycleCalculationEngine.calculateCycleStatus(
       lastPeriodStart = lastPeriodStart,
       averagePeriodDays = space.averagePeriodLength,
       pastCycles = cycles,
       configuredAverageCycle = space.averageCycleLength,
-      today = today
+      today = today,
+      confirmedBleedingDates = confirmedBleedingDates
     )
 
     val futurePredictions = CycleCalculationEngine.predictFutureCycles(
@@ -391,15 +398,26 @@ class MainViewModel(
     return viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       try {
-        spaceRepo.createSpace(
+        val spaceId = spaceRepo.createSpace(
           ownerId = user.uid,
           averageCycleLength = 28,
           averagePeriodLength = 5
         )
         // Corrección 2A.1: Crear espacio real NO crea menstruación ficticia
         if (isSessionValid(sessionId, user.uid)) {
+          val createdSpace = CoupleSpace(
+            id = spaceId,
+            ownerId = user.uid,
+            partnerId = null,
+            status = SpaceStatus.UNPAIRED.name,
+            averageCycleLength = 28,
+            averagePeriodLength = 5,
+            sharingPermissions = SharingPermissions()
+          )
           _uiState.value = _uiState.value.copy(
             isLoading = false,
+            space = createdSpace,
+            currentRole = UserRole.PRIMARY_ELLA,
             successMessage = "¡Espacio personal creado con éxito!"
           )
         }
@@ -860,7 +878,7 @@ class MainViewModel(
 
     if (_uiState.value.isGuestMode) {
       val periodDuration = if (endDate != null) {
-        (ChronoUnit.DAYS.between(startDate, endDate) + 1).toInt().coerceIn(1, 15)
+        (ChronoUnit.DAYS.between(startDate, endDate) + 1).toInt().coerceIn(1, 120)
       } else 5
       val newCycle = CycleEntry(
         id = "demo_cycle_${System.currentTimeMillis()}",

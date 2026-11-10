@@ -47,12 +47,35 @@ open class CycleRepository(
   internal var onAfterReadInSpottingTransactionHook: ((date: String, attempt: Int) -> Unit)? = null
 ) {
 
+  internal var onBeforeRecordPeriodStartHook: (suspend (startDate: String) -> Unit)? = null
+
+  /**
+   * Deriva de forma canónica y consistente las duraciones de ciclo (cycleLength)
+   * a partir de la secuencia cronológica de inicios (startDate).
+   * El ciclo más reciente siempre queda incompleto (cycleLength = null).
+   */
+  fun deriveCycleLengths(cycles: List<CycleEntry>): List<CycleEntry> {
+    val sorted = cycles.sortedWith(compareBy({ it.startDate }, { it.id }))
+    return sorted.mapIndexed { index, entry ->
+      val derivedLen = if (index < sorted.size - 1) {
+        val nextStart = LocalDate.parse(sorted[index + 1].startDate)
+        val thisStart = LocalDate.parse(entry.startDate)
+        ChronoUnit.DAYS.between(thisStart, nextStart).toInt()
+      } else {
+        null
+      }
+      entry.copy(cycleLength = derivedLen)
+    }
+  }
+
   fun observeCycles(spaceId: String): Flow<List<CycleEntry>> {
     return db.collection("couple_spaces").document(spaceId)
       .collection("cycles")
-      .orderBy("startDate", Query.Direction.DESCENDING)
       .snapshots()
-      .map { snapshot -> snapshot.toObjects(CycleEntry::class.java) }
+      .map { snapshot ->
+        val raw = snapshot.toObjects(CycleEntry::class.java)
+        deriveCycleLengths(raw).sortedByDescending { it.startDate }
+      }
   }
 
   open suspend fun addCycleEntry(spaceId: String, startDate: String, periodDuration: Int = 5) {
@@ -60,10 +83,9 @@ open class CycleRepository(
   }
 
   /**
-   * Registra un inicio menstrual real.
-   * - Valida fechas y orden cronológico.
-   * - Previene duplicados con la misma fecha de inicio.
-   * - Si se especifica endDate, calcula la duración real confirmada; de lo contrario usa la predeterminada con isCalculated = true.
+   * Registra un inicio menstrual real con unicidad canónica y protección transaccional.
+   * - Previene duplicados del mismo inicio mediante clave determinista y verificación transaccional.
+   * - Si se especifica endDate, conserva la duración real completa sin recortes artificiales.
    * - Recalcula atómicamente los intervalos de ciclo (cycleLength) entre inicios consecutivos.
    */
   open suspend fun recordPeriodStart(
@@ -80,7 +102,7 @@ open class CycleRepository(
         return Result.failure(IllegalArgumentException("La fecha de fin no puede ser anterior a la de inicio"))
       }
 
-      // Prevenir duplicados del mismo inicio
+      // Prevenir duplicados del mismo inicio consultando la colección (incluye documentos legacy con ID aleatorio)
       val existingWithSameStart = db.collection("couple_spaces").document(spaceId)
         .collection("cycles")
         .whereEqualTo("startDate", startDate)
@@ -92,31 +114,44 @@ open class CycleRepository(
       }
 
       val actualDuration = if (parsedEnd != null) {
-        (ChronoUnit.DAYS.between(parsedStart, parsedEnd) + 1).toInt().coerceIn(1, 15)
+        (ChronoUnit.DAYS.between(parsedStart, parsedEnd) + 1).toInt()
       } else {
-        (periodDuration ?: 5).coerceIn(1, 15)
+        periodDuration ?: 5
       }
       val isCalculated = parsedEnd == null
 
-      val docRef = db.collection("couple_spaces").document(spaceId)
-        .collection("cycles").document()
+      // Hook de concurrencia para pruebas controladas
+      onBeforeRecordPeriodStartHook?.invoke(startDate)
 
-      val payload = mapOf(
-        "spaceId" to spaceId,
-        "startDate" to startDate,
-        "endDate" to endDate,
-        "cycleLength" to null,
-        "periodDuration" to actualDuration,
-        "isCalculated" to isCalculated,
-        "createdAt" to FieldValue.serverTimestamp(),
-        "updatedAt" to FieldValue.serverTimestamp()
-      )
-      docRef.set(payload).await()
+      val docRef = db.collection("couple_spaces").document(spaceId)
+        .collection("cycles").document(startDate)
+
+      db.runTransaction { transaction ->
+        val snap = transaction.get(docRef)
+        if (snap.exists()) {
+          throw IllegalArgumentException("Ya existe un ciclo registrado con inicio en $startDate")
+        }
+
+        val payload = mapOf(
+          "spaceId" to spaceId,
+          "startDate" to startDate,
+          "endDate" to endDate,
+          "cycleLength" to null,
+          "periodDuration" to actualDuration,
+          "isCalculated" to isCalculated,
+          "createdAt" to FieldValue.serverTimestamp(),
+          "updatedAt" to FieldValue.serverTimestamp()
+        )
+        transaction.set(docRef, payload)
+      }.await()
 
       syncCycleLengths(spaceId)
       Result.success(docRef.id)
     } catch (e: Exception) {
-      Result.failure(e)
+      val unwrapped = if (e is com.google.firebase.firestore.FirebaseFirestoreException && e.cause is IllegalArgumentException) {
+        e.cause as IllegalArgumentException
+      } else e
+      Result.failure(unwrapped)
     }
   }
 
@@ -129,6 +164,7 @@ open class CycleRepository(
 
   /**
    * Registra o corrige la fecha de fin de sangrado menstrual confirmado por la usuaria.
+   * Conserva la duración real sin acotación arbitraria.
    */
   open suspend fun updatePeriodEnd(
     spaceId: String,
@@ -138,36 +174,44 @@ open class CycleRepository(
     return try {
       val docRef = db.collection("couple_spaces").document(spaceId)
         .collection("cycles").document(cycleId)
-      val snap = docRef.get().await()
-      if (!snap.exists()) {
-        return Result.failure(IllegalArgumentException("El ciclo no existe"))
-      }
-      val startDate = snap.getString("startDate")
-        ?: return Result.failure(IllegalStateException("El ciclo no tiene fecha de inicio"))
-      val parsedStart = LocalDate.parse(startDate)
-      val parsedEnd = LocalDate.parse(endDate)
 
-      if (parsedEnd.isBefore(parsedStart)) {
-        return Result.failure(IllegalArgumentException("La fecha de fin no puede ser anterior al inicio"))
-      }
+      db.runTransaction { transaction ->
+        val snap = transaction.get(docRef)
+        if (!snap.exists()) {
+          throw IllegalArgumentException("El ciclo no existe")
+        }
+        val startDate = snap.getString("startDate")
+          ?: throw IllegalStateException("El ciclo no tiene fecha de inicio")
+        val parsedStart = LocalDate.parse(startDate)
+        val parsedEnd = LocalDate.parse(endDate)
 
-      val duration = (ChronoUnit.DAYS.between(parsedStart, parsedEnd) + 1).toInt().coerceIn(1, 15)
-      docRef.update(
-        mapOf(
-          "endDate" to endDate,
-          "periodDuration" to duration,
-          "isCalculated" to false,
-          "updatedAt" to FieldValue.serverTimestamp()
+        if (parsedEnd.isBefore(parsedStart)) {
+          throw IllegalArgumentException("La fecha de fin no puede ser anterior al inicio")
+        }
+
+        val duration = (ChronoUnit.DAYS.between(parsedStart, parsedEnd) + 1).toInt()
+        transaction.update(
+          docRef,
+          mapOf(
+            "endDate" to endDate,
+            "periodDuration" to duration,
+            "isCalculated" to false,
+            "updatedAt" to FieldValue.serverTimestamp()
+          )
         )
-      ).await()
+      }.await()
       Result.success(Unit)
     } catch (e: Exception) {
-      Result.failure(e)
+      val unwrapped = if (e is com.google.firebase.firestore.FirebaseFirestoreException && e.cause is IllegalArgumentException) {
+        e.cause as IllegalArgumentException
+      } else e
+      Result.failure(unwrapped)
     }
   }
 
   /**
    * Corrige las fechas de un registro de ciclo existente y sincroniza las duraciones de ciclos vecinos.
+   * Evita colisiones de fecha y mantiene la consistencia atómica.
    */
   open suspend fun updateCycleDates(
     spaceId: String,
@@ -194,28 +238,64 @@ open class CycleRepository(
       }
 
       val actualDuration = if (parsedEnd != null) {
-        (ChronoUnit.DAYS.between(parsedStart, parsedEnd) + 1).toInt().coerceIn(1, 15)
+        (ChronoUnit.DAYS.between(parsedStart, parsedEnd) + 1).toInt()
       } else {
         5
       }
 
-      val docRef = db.collection("couple_spaces").document(spaceId)
+      val oldDocRef = db.collection("couple_spaces").document(spaceId)
         .collection("cycles").document(cycleId)
 
-      docRef.update(
-        mapOf(
-          "startDate" to newStartDate,
-          "endDate" to newEndDate,
-          "periodDuration" to actualDuration,
-          "isCalculated" to (parsedEnd == null),
-          "updatedAt" to FieldValue.serverTimestamp()
-        )
-      ).await()
+      db.runTransaction { transaction ->
+        val oldSnap = transaction.get(oldDocRef)
+        if (!oldSnap.exists()) {
+          throw IllegalArgumentException("El ciclo a modificar no existe")
+        }
+
+        val oldStartDate = oldSnap.getString("startDate") ?: cycleId
+
+        // Si el cycleId correspondía exactamente a oldStartDate y la fecha cambia, movemos al nuevo document
+        if (cycleId == oldStartDate && cycleId != newStartDate) {
+          val newDocRef = db.collection("couple_spaces").document(spaceId)
+            .collection("cycles").document(newStartDate)
+          val targetSnap = transaction.get(newDocRef)
+          if (targetSnap.exists() && targetSnap.id != cycleId) {
+            throw IllegalArgumentException("Ya existe otro ciclo con inicio en $newStartDate")
+          }
+
+          val payload = mapOf(
+            "spaceId" to spaceId,
+            "startDate" to newStartDate,
+            "endDate" to newEndDate,
+            "periodDuration" to actualDuration,
+            "isCalculated" to (parsedEnd == null),
+            "createdAt" to (oldSnap.get("createdAt") ?: FieldValue.serverTimestamp()),
+            "updatedAt" to FieldValue.serverTimestamp()
+          )
+          transaction.delete(oldDocRef)
+          transaction.set(newDocRef, payload)
+        } else {
+          // Documento legacy con ID aleatorio o cuya clave no colisiona
+          transaction.update(
+            oldDocRef,
+            mapOf(
+              "startDate" to newStartDate,
+              "endDate" to newEndDate,
+              "periodDuration" to actualDuration,
+              "isCalculated" to (parsedEnd == null),
+              "updatedAt" to FieldValue.serverTimestamp()
+            )
+          )
+        }
+      }.await()
 
       syncCycleLengths(spaceId)
       Result.success(Unit)
     } catch (e: Exception) {
-      Result.failure(e)
+      val unwrapped = if (e is com.google.firebase.firestore.FirebaseFirestoreException && e.cause is IllegalArgumentException) {
+        e.cause as IllegalArgumentException
+      } else e
+      Result.failure(unwrapped)
     }
   }
 

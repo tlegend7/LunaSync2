@@ -78,6 +78,7 @@ import com.example.ui.theme.AppleSystemBlue
 import com.example.ui.theme.AppleSystemGray5
 import com.example.ui.theme.AppleSystemIndigo
 import com.example.ui.viewmodel.MainViewModel
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 @Composable
@@ -92,10 +93,10 @@ fun MainScreen(
   var currentNavTab by remember { mutableIntStateOf(0) }
   var showJoinCodeFormOnboarding by remember { mutableStateOf(false) }
 
-  // Dialog triggers
-  var showPeriodDialog by remember { mutableStateOf(false) }
-  var showSymptomDialog by remember { mutableStateOf(false) }
-  var showIntimacyDialog by remember { mutableStateOf(false) }
+  // Dialog target dates (capturan la fecha explícita de apertura y no mutan con selecciones externas)
+  var periodDialogTargetDate by remember { mutableStateOf<LocalDate?>(null) }
+  var symptomDialogTargetDate by remember { mutableStateOf<LocalDate?>(null) }
+  var intimacyDialogTargetDate by remember { mutableStateOf<LocalDate?>(null) }
   var showObservationDialog by remember { mutableStateOf(false) }
   var showCheckInDialog by remember { mutableStateOf(false) }
   var showPrivacyDialog by remember { mutableStateOf(false) }
@@ -228,9 +229,9 @@ fun MainScreen(
                   partnerObservations = uiState.partnerObservations,
                   latestCheckIn = uiState.latestCheckIn,
                   activeSpottingSuggestion = uiState.activeSpottingSuggestion,
-                  onOpenPeriodDialog = { showPeriodDialog = true },
-                  onOpenSymptomDialog = { showSymptomDialog = true },
-                  onOpenIntimacyDialog = { showIntimacyDialog = true },
+                  onOpenPeriodDialog = { periodDialogTargetDate = viewModel.getToday() },
+                  onOpenSymptomDialog = { symptomDialogTargetDate = viewModel.getToday() },
+                  onOpenIntimacyDialog = { intimacyDialogTargetDate = viewModel.getToday() },
                   onNavigateToCalendar = { currentNavTab = 1 },
                   onQuickReplySelected = { reply -> viewModel.answerCheckIn(reply) },
                   onAcceptSpotting = { viewModel.acceptSpottingSuggestion() },
@@ -274,13 +275,12 @@ fun MainScreen(
                 onDateSelected = { date -> viewModel.selectDate(date) },
                 onOpenSymptomDialogForDate = { date ->
                   if (uiState.currentRole == UserRole.PRIMARY_ELLA) {
-                    viewModel.selectDate(date)
-                    showSymptomDialog = true
+                    symptomDialogTargetDate = date
                   }
                 },
                 onOpenPeriodDialog = {
                   if (uiState.currentRole == UserRole.PRIMARY_ELLA) {
-                    showPeriodDialog = true
+                    periodDialogTargetDate = uiState.selectedDate
                   }
                 }
               )
@@ -304,24 +304,25 @@ fun MainScreen(
   }
 
   // Dialogs
-  if (showPeriodDialog) {
-    val selectedDateStr = uiState.selectedDate.toString()
-    val existingCycleForDate = remember(uiState.selectedDate, uiState.pastCycles) {
-      uiState.pastCycles.firstOrNull { it.startDate == selectedDateStr }
+  // Dialogs
+  periodDialogTargetDate?.let { targetDate ->
+    val targetDateStr = targetDate.toString()
+    val existingCycleForDate = remember(targetDate, uiState.pastCycles) {
+      uiState.pastCycles.firstOrNull { it.startDate == targetDateStr }
         ?: uiState.pastCycles.firstOrNull { cycle ->
           val start = try { java.time.LocalDate.parse(cycle.startDate) } catch (e: Exception) { null }
           val end = cycle.endDate?.let { try { java.time.LocalDate.parse(it) } catch (e: Exception) { null } }
           if (start != null && end != null) {
-            !uiState.selectedDate.isBefore(start) && !uiState.selectedDate.isAfter(end)
+            !targetDate.isBefore(start) && !targetDate.isAfter(end)
           } else false
         }
     }
 
     PeriodLogDialog(
-      initialDate = uiState.selectedDate,
+      initialDate = targetDate,
       existingCycle = existingCycleForDate,
       today = viewModel.getToday(),
-      onDismiss = { showPeriodDialog = false },
+      onDismiss = { periodDialogTargetDate = null },
       onSave = { startDate, endDate, onComplete ->
         if (existingCycleForDate != null) {
           viewModel.updateCycleDates(existingCycleForDate.id, startDate, endDate, onComplete)
@@ -337,20 +338,20 @@ fun MainScreen(
     )
   }
 
-  if (showSymptomDialog) {
-    val symptomForSelectedDate = remember(uiState.selectedDate, uiState.allSymptoms, uiState.todaySymptom) {
-      val dateStr = uiState.selectedDate.toString()
+  symptomDialogTargetDate?.let { targetDate ->
+    val symptomForTargetDate = remember(targetDate, uiState.allSymptoms, uiState.todaySymptom) {
+      val dateStr = targetDate.toString()
       uiState.allSymptoms.firstOrNull { it.date == dateStr }
         ?: if (dateStr == viewModel.getToday().toString()) uiState.todaySymptom else null
     }
 
     SymptomLogDialog(
-      initialSymptom = symptomForSelectedDate,
-      date = uiState.selectedDate,
-      onDismiss = { showSymptomDialog = false },
+      initialSymptom = symptomForTargetDate,
+      date = targetDate,
+      onDismiss = { symptomDialogTargetDate = null },
       onSave = { flow, pain, mood, energy, cramps, headache, backPain, bloating, mucus, breasts, cravings, acne, pubNote, privNote, isPriv, onComplete ->
         viewModel.saveSymptom(
-          date = uiState.selectedDate,
+          date = targetDate,
           flowLevel = flow,
           painLevel = pain,
           mood = mood,
@@ -372,13 +373,13 @@ fun MainScreen(
     )
   }
 
-  if (showIntimacyDialog) {
+  intimacyDialogTargetDate?.let { targetDate ->
     IntimacyLogDialog(
-      date = uiState.selectedDate,
-      onDismiss = { showIntimacyDialog = false },
+      date = targetDate,
+      onDismiss = { intimacyDialogTargetDate = null },
       onSave = { type, lube, orgasm, effect, notes, isPriv, onComplete ->
         viewModel.logIntimacy(
-          date = uiState.selectedDate,
+          date = targetDate,
           encounterType = type,
           usedLubricant = lube,
           hadOrgasm = orgasm,

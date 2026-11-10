@@ -11,9 +11,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.example.ui.dialogs.IntimacyLogDialog
+import com.example.ui.dialogs.PeriodLogDialog
 import com.example.ui.dialogs.SymptomLogDialog
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -181,5 +184,77 @@ class DialogFormComposeTest {
 
     // 9. Verificar cierre del diálogo
     assertTrue("Dialog must be dismissed after success", onDismissCalled)
+  }
+
+  // ==========================================
+  // PRUEBAS DE PeriodLogDialog
+  // ==========================================
+
+  @Test
+  fun `PeriodLogDialog - flujo completo de guardado, persistencia en error y cierre en reintento exitoso`() {
+    var onDismissCalled = false
+    var onSaveCallbackHolder: ((Boolean, String?) -> Unit)? = null
+    var capturedStartDate: LocalDate? = null
+    var capturedEndDate: LocalDate? = null
+
+    val testStartDate = LocalDate.of(2026, 5, 10)
+    val testToday = LocalDate.of(2026, 5, 20)
+
+    composeTestRule.setContent {
+      PeriodLogDialog(
+        initialDate = testStartDate,
+        existingCycle = null,
+        today = testToday,
+        onDismiss = { onDismissCalled = true },
+        onSave = { start, end, onComplete ->
+          capturedStartDate = start
+          capturedEndDate = end
+          onSaveCallbackHolder = onComplete
+        }
+      )
+    }
+
+    // 1. Verificar renderizado del diálogo de periodo
+    composeTestRule.onNodeWithText("Registrar Menstruación").assertIsDisplayed()
+
+    // 2. Activar switch de sangrado finalizado
+    composeTestRule.onNodeWithTag("period_finished_switch")
+      .performScrollTo()
+      .performClick()
+
+    // 3. Pulsar botón de guardar periodo
+    composeTestRule.onNodeWithTag("save_period_button")
+      .assertIsEnabled()
+      .performClick()
+
+    // 4. Verificar que se capturó la fecha y que no se cerró prematuramente
+    assertFalse("Dialog must not be dismissed while saving", onDismissCalled)
+    assertEquals(testStartDate, capturedStartDate)
+    assertNotNull("End date must be populated when finished bleeding is true", capturedEndDate)
+
+    // 5. Simular error del backend
+    val serverError = "Error al persistir el ciclo en la base de datos"
+    composeTestRule.runOnUiThread {
+      onSaveCallbackHolder?.invoke(false, serverError)
+    }
+    composeTestRule.waitForIdle()
+
+    // 6. Verificar que el diálogo permanece abierto y el error es visible
+    assertFalse("Dialog must remain open on error", onDismissCalled)
+    composeTestRule.onNodeWithText(serverError).performScrollTo().assertIsDisplayed()
+
+    // 7. Reintentar guardado
+    composeTestRule.onNodeWithTag("save_period_button")
+      .assertIsEnabled()
+      .performClick()
+
+    // 8. Confirmar éxito del servidor
+    composeTestRule.runOnUiThread {
+      onSaveCallbackHolder?.invoke(true, null)
+    }
+    composeTestRule.waitForIdle()
+
+    // 9. Verificar que se cerró el diálogo mediante onDismiss
+    assertTrue("Dialog must be dismissed after successful retry", onDismissCalled)
   }
 }

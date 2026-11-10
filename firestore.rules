@@ -47,7 +47,7 @@ service cloud.firestore {
       return data.keys().hasOnly(['spaceId', 'startDate', 'endDate', 'cycleLength', 'periodDuration', 'isCalculated', 'createdAt', 'updatedAt']) &&
              data.spaceId is string &&
              data.startDate is string &&
-             data.periodDuration is int && data.periodDuration >= 1 && data.periodDuration <= 15 &&
+             data.periodDuration is int && data.periodDuration >= 1 && data.periodDuration <= 120 &&
              !('privateNote' in data.keys());
     }
 

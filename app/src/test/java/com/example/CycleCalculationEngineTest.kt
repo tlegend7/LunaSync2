@@ -191,27 +191,141 @@ class CycleCalculationEngineTest {
   }
 
   @Test
-  fun testRangeLimitsCoercion() {
-    // Abnormally short cycle length (e.g. 15) is clamped to MIN_CYCLE_DAYS = 20
+  fun testOutliersExcludedFromEstimatorWithoutRewritingRawHistory() {
+    // Abnormally short cycle length (e.g. 15) is an outlier, excluded from regular estimator
     val shortCycle = listOf(CycleEntry(startDate = "2026-01-01", cycleLength = 15))
     val avgShort = CycleCalculationEngine.calculateWeightedAverage(shortCycle, fallbackAverage = 28)
+    assertEquals(28.0, avgShort, 0.001) // falls back to 28 without crashing or rewriting raw history
     val statusShort = CycleCalculationEngine.calculateCycleStatus(
       lastPeriodStart = LocalDate.of(2026, 2, 1),
       averagePeriodDays = 5,
       pastCycles = shortCycle,
       configuredAverageCycle = 28
     )
-    assertEquals(20, statusShort.totalDays)
+    assertEquals(28, statusShort.totalDays)
 
-    // Abnormally long cycle length (e.g. 60) is clamped to MAX_CYCLE_DAYS = 45
+    // Abnormally long cycle length (e.g. 60) is preserved as outlier, excluded from regular estimator
     val longCycle = listOf(CycleEntry(startDate = "2026-01-01", cycleLength = 60))
+    val avgLong = CycleCalculationEngine.calculateWeightedAverage(longCycle, fallbackAverage = 28)
+    assertEquals(28.0, avgLong, 0.001) // falls back to 28 without clipping raw 60 into 45
     val statusLong = CycleCalculationEngine.calculateCycleStatus(
       lastPeriodStart = LocalDate.of(2026, 2, 1),
       averagePeriodDays = 5,
       pastCycles = longCycle,
       configuredAverageCycle = 28
     )
-    assertEquals(45, statusLong.totalDays)
+    assertEquals(28, statusLong.totalDays)
+  }
+
+  @Test
+  fun testProblemAOpenDelayedCycleInterpretedEquallyInSummaryAndCalendar() {
+    // Cycle starts on Oct 1, 2026 with 28-day expected cycle -> next period expected Oct 29.
+    // On Oct 30, 2026: it's Day 30 and 1 day delayed in both Summary and Calendar (NOT Day 2 of next cycle).
+    val lastStart = LocalDate.of(2026, 10, 1)
+    val testDate = LocalDate.of(2026, 10, 30)
+    val pastCycles = listOf(CycleEntry(id = "c1", startDate = "2026-10-01", cycleLength = null))
+
+    val status = CycleCalculationEngine.calculateCycleStatus(
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      configuredAverageCycle = 28,
+      today = testDate
+    )
+    assertEquals(30, status.currentDay)
+    assertEquals(-1, status.daysUntilNextPeriod)
+    assertTrue(status.isDelayed)
+    assertEquals(1, status.delayedDays)
+
+    val detail = CycleCalculationEngine.getDayDetail(
+      date = testDate,
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      configuredAverageCycle = 28,
+      today = testDate
+    )
+    assertEquals(30, detail.cycleDay)
+    assertFalse("Must NOT mark delayed day as actual period", detail.highlightType == DayHighlightType.ACTUAL_PERIOD)
+    assertFalse("Delayed open cycle must not be marked as period confirmed", detail.isPeriodConfirmed)
+  }
+
+  @Test
+  fun testProblemBConfirmedSingleDayBleedingIsFollicularTwoDaysLater() {
+    // Nov 1 bleeding registered and finished on Nov 1 (endDate = 2026-11-01)
+    val lastStart = LocalDate.of(2026, 11, 1)
+    val cycle = CycleEntry(
+      id = "c1",
+      startDate = "2026-11-01",
+      endDate = "2026-11-01",
+      periodDuration = 1,
+      cycleLength = null,
+      isCalculated = false
+    )
+    val pastCycles = listOf(cycle)
+    val testDate = LocalDate.of(2026, 11, 3)
+
+    // In status: on Nov 3, it must be Follicular phase (Day 3), NOT Menstrual phase
+    val status = CycleCalculationEngine.calculateCycleStatus(
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      configuredAverageCycle = 28,
+      today = testDate
+    )
+    assertEquals(3, status.currentDay)
+    assertEquals(CyclePhase.FOLLICULAR, status.currentPhase)
+
+    // In Calendar day detail: Nov 3 must be FOLLICULAR, not ACTUAL_PERIOD
+    val detail = CycleCalculationEngine.getDayDetail(
+      date = testDate,
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles,
+      configuredAverageCycle = 28,
+      today = testDate
+    )
+    assertEquals(3, detail.cycleDay)
+    assertEquals(DayHighlightType.FOLLICULAR, detail.highlightType)
+    assertFalse(detail.isPeriodConfirmed)
+    assertFalse(detail.isPredicted)
+  }
+
+  @Test
+  fun testUnconfirmedBleedingDaysAreMarkedAsEstimatedNotConfirmedFacts() {
+    // Start date Nov 1, average 5 days, no endDate confirmed
+    val lastStart = LocalDate.of(2026, 11, 1)
+    val cycle = CycleEntry(
+      id = "c1",
+      startDate = "2026-11-01",
+      endDate = null,
+      periodDuration = 5,
+      cycleLength = null,
+      isCalculated = true
+    )
+    val pastCycles = listOf(cycle)
+
+    // Day 1 (Nov 1): Start date is a confirmed fact
+    val day1 = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 11, 1),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles
+    )
+    assertEquals(DayHighlightType.ACTUAL_PERIOD, day1.highlightType)
+    assertTrue(day1.isPeriodConfirmed)
+    assertFalse(day1.isPredicted)
+
+    // Day 4 (Nov 4): Within average period duration, but unconfirmed -> PREDICTED_PERIOD, isPeriodConfirmed = false, isPredicted = true
+    val day4 = CycleCalculationEngine.getDayDetail(
+      date = LocalDate.of(2026, 11, 4),
+      lastPeriodStart = lastStart,
+      averagePeriodDays = 5,
+      pastCycles = pastCycles
+    )
+    assertEquals(DayHighlightType.PREDICTED_PERIOD, day4.highlightType)
+    assertFalse("Unconfirmed bleeding day must not be isPeriodConfirmed", day4.isPeriodConfirmed)
+    assertTrue("Unconfirmed bleeding day must be isPredicted", day4.isPredicted)
   }
 
   @Test

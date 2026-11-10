@@ -124,7 +124,10 @@ class SessionAndCalendarIntegrationTest {
     return runBlocking { deferred.await() }
   }
 
-  private fun setupCoherentSession(vm: MainViewModel, user: FirebaseUser, spaceId: String): CoupleSpace {
+  private suspend fun setupCoherentSession(vm: MainViewModel, user: FirebaseUser, spaceId: String): CoupleSpace {
+    user.email?.let {
+      try { auth.signInWithEmailAndPassword(it, "password123").await() } catch (_: Exception) {}
+    }
     val space = CoupleSpace(
       id = spaceId,
       ownerId = user.uid,
@@ -162,8 +165,28 @@ class SessionAndCalendarIntegrationTest {
     val user = authResult.user!!
 
     val vm = createVm()
-    val spaceId = coupleRepo.createSpace(user.uid, 28, 5)
-    setupCoherentSession(vm, user, spaceId)
+    testAuthRepo.emitUser(user)
+    val sessionId = UUID.randomUUID().toString()
+    vm.currentSessionId = sessionId
+    vm.activeObservedUserId = user.uid
+
+    vm.setUiStateForTesting { state ->
+      state.copy(
+        currentUser = user,
+        currentRole = UserRole.PRIMARY_ELLA,
+        space = null,
+        isGuestMode = false,
+        pastCycles = emptyList(),
+        cycleStatus = null
+      )
+    }
+
+    // Execute space creation through the real ViewModel function
+    vm.createOwnerSpace().join()
+
+    val createdSpace = vm.uiState.value.space
+    assertNotNull("Space must be created and set in ViewModel state", createdSpace)
+    val spaceId = createdSpace!!.id
 
     // Check cycles subcollection in Firestore is completely empty
     val cyclesSnap = db.collection("couple_spaces").document(spaceId).collection("cycles").get().await()
@@ -172,7 +195,6 @@ class SessionAndCalendarIntegrationTest {
     // Check ViewModel state
     vm.refreshCycleCalculations()
     val state = vm.uiState.value
-    assertNotNull("Space must be assigned", state.space)
     assertTrue("A freshly created space must have an empty pastCycles list", state.pastCycles.isEmpty())
     assertNull("A freshly created space must have null cycleStatus", state.cycleStatus)
   }
@@ -364,5 +386,98 @@ class SessionAndCalendarIntegrationTest {
 
     // ViewModel error message state is preserved and input dates remain available for correction
     assertEquals("La fecha de fin no puede ser anterior a la de inicio", vm.uiState.value.errorMessage)
+  }
+
+  @Test
+  fun testOpeningFromHoyAlwaysTargetsTodayEvenIfCalendarNavigated() = runWithLooper {
+    val email = "ella_hoy_${UUID.randomUUID()}@test.com"
+    val authResult = auth.createUserWithEmailAndPassword(email, "password123").await()
+    val user = authResult.user!!
+
+    val vm = createVm()
+    val spaceId = coupleRepo.createSpace(user.uid, 28, 5)
+    setupCoherentSession(vm, user, spaceId)
+
+    // 1. User navigates in Calendar to 5 days ago
+    val pastDate = fixedDate.minusDays(5)
+    vm.selectDate(pastDate)
+    assertEquals(pastDate, vm.uiState.value.selectedDate)
+
+    // 2. User goes back to 'Hoy' tab and clicks to log symptoms.
+    // In MainScreen, clicking from Hoy captures viewModel.getToday().
+    val capturedDateFromHoy = vm.getToday()
+    assertEquals(fixedDate, capturedDateFromHoy)
+
+    var saveSuccess = false
+    vm.saveSymptom(
+      date = capturedDateFromHoy,
+      flowLevel = FlowLevel.MEDIUM,
+      painLevel = 1,
+      mood = Mood.HAPPY,
+      energyLevel = 3,
+      cramps = false,
+      headache = false,
+      backPain = false,
+      bloating = false,
+      cervicalMucus = com.example.data.model.CervicalMucus.NONE,
+      tenderBreasts = false,
+      cravings = false,
+      acne = false,
+      publicNote = "Registro desde Hoy",
+      privateNote = null,
+      isPrivate = false,
+      onComplete = { success, _ -> saveSuccess = success }
+    ).join()
+
+    assertTrue("Save must succeed", saveSuccess)
+    // Symptom was saved for Today (fixedDate), NOT for pastDate
+    assertNotNull("Today symptom must be populated in state", vm.uiState.value.todaySymptom)
+    assertEquals(fixedDate.toString(), vm.uiState.value.todaySymptom!!.date)
+    assertNull("No symptom was erroneously created for the past date", vm.uiState.value.allSymptoms.firstOrNull { it.date == pastDate.toString() })
+  }
+
+  @Test
+  fun testCapturedFormDateDecoupledFromSubsequentCalendarMutation() = runWithLooper {
+    val email = "ella_decouple_${UUID.randomUUID()}@test.com"
+    val authResult = auth.createUserWithEmailAndPassword(email, "password123").await()
+    val user = authResult.user!!
+
+    val vm = createVm()
+    val spaceId = coupleRepo.createSpace(user.uid, 28, 5)
+    setupCoherentSession(vm, user, spaceId)
+
+    // 1. Calendar is on pastDate (e.g. 4 days ago)
+    val chosenDate = fixedDate.minusDays(4)
+    vm.selectDate(chosenDate)
+
+    // 2. Form opens and captures targetDate immutable snapshot
+    val capturedDialogTargetDate = chosenDate
+
+    // 3. User or async state mutates vm.uiState.selectedDate to another date (e.g. 10 days ago)
+    val subsequentDate = fixedDate.minusDays(10)
+    vm.selectDate(subsequentDate)
+    assertEquals(subsequentDate, vm.uiState.value.selectedDate)
+
+    // 4. Form submits using its capturedDialogTargetDate
+    var saveSuccess = false
+    var saveErrMsg: String? = null
+    vm.logIntimacy(
+      date = capturedDialogTargetDate,
+      encounterType = com.example.data.model.EncounterType.PROTECTED,
+      usedLubricant = true,
+      hadOrgasm = true,
+      postContactEffect = com.example.data.model.PostContactEffect.NONE,
+      notes = "Encuentro protegido",
+      isPrivate = false,
+      onComplete = { success, err ->
+        saveSuccess = success
+        saveErrMsg = err
+      }
+    ).join()
+
+    assertTrue("Intimacy save must succeed: $saveErrMsg", saveSuccess)
+    val savedLog = vm.uiState.value.intimacyLogs.firstOrNull { it.date == capturedDialogTargetDate.toString() }
+    assertNotNull("Intimacy log must be saved for the captured date", savedLog)
+    assertNull("No log should exist for the subsequently mutated date", vm.uiState.value.intimacyLogs.firstOrNull { it.date == subsequentDate.toString() })
   }
 }

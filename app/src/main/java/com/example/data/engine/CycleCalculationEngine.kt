@@ -42,22 +42,35 @@ object CycleCalculationEngine {
    * Solo considera ciclos completos ([CycleEntry.cycleLength] != null) dentro del rango clínico [20..45].
    * Si no hay historial completo suficiente, retorna [fallbackAverage].
    */
+  /**
+   * Calcula el promedio ponderado de longitud de ciclos completos válidos.
+   * Ordena explícitamente por [CycleEntry.startDate] ascendente (del más antiguo al más reciente)
+   * para garantizar que el resultado sea determinista e independiente del orden en que se entregue la lista.
+   * Los ciclos más recientes reciben progresivamente mayor peso ponderado (w_i = index + 1).
+   *
+   * Solo considera para la estimación de periodicidad regular los ciclos completos dentro de [MIN_CYCLE_DAYS..MAX_CYCLE_DAYS].
+   * Los ciclos atípicos (por ej. 60 días) se preservan intactos en el historial real del usuario, sin recortarlos artificialmente.
+   * Si no hay historial utilizable por el estimador, retorna [fallbackAverage].
+   */
   fun calculateWeightedAverage(cycles: List<CycleEntry>, fallbackAverage: Int = DEFAULT_AVERAGE_CYCLE): Double {
-    val validCycles = cycles.filter { it.cycleLength != null }
+    val usableCycles = cycles.filter { entry ->
+      val len = entry.cycleLength
+      len != null && len in MIN_CYCLE_DAYS..MAX_CYCLE_DAYS
+    }
     val clampedFallback = fallbackAverage.coerceIn(MIN_CYCLE_DAYS, MAX_CYCLE_DAYS)
 
-    if (validCycles.isEmpty()) return clampedFallback.toDouble()
+    if (usableCycles.isEmpty()) return clampedFallback.toDouble()
 
     // Ordenar explícitamente por startDate ascendente: el más reciente queda al final
-    val sorted = validCycles.sortedWith(compareBy({ it.startDate }, { it.id }))
+    val sorted = usableCycles.sortedWith(compareBy({ it.startDate }, { it.id }))
 
     var weightedSum = 0.0
     var totalWeight = 0.0
 
     sorted.forEachIndexed { index, entry ->
       val weight = (index + 1).toDouble()
-      val clampedLen = entry.cycleLength!!.coerceIn(MIN_CYCLE_DAYS, MAX_CYCLE_DAYS)
-      weightedSum += clampedLen * weight
+      val actualLen = entry.cycleLength!!.toDouble()
+      weightedSum += actualLen * weight
       totalWeight += weight
     }
 
@@ -66,21 +79,22 @@ object CycleCalculationEngine {
 
   /**
    * Calcula la desviación estándar de la longitud de los ciclos completos válidos respecto a la media.
-   * Si hay menos de 2 ciclos completos, asume una variabilidad fisiológica basal típica de 1.5 días.
+   * Utiliza la misma población de ciclos válidos que el promedio.
+   * Si hay menos de 2 ciclos utilizables, asume una variabilidad fisiológica basal típica de 1.5 días.
    */
   fun calculateStandardDeviation(cycles: List<CycleEntry>, mean: Double): Double {
-    val validCycles = cycles.filter { entry ->
+    val usableCycles = cycles.filter { entry ->
       val len = entry.cycleLength
       len != null && len in MIN_CYCLE_DAYS..MAX_CYCLE_DAYS
     }
 
-    if (validCycles.size < 2) return 1.5
+    if (usableCycles.size < 2) return 1.5
 
-    val sumSquaredDiffs = validCycles.sumOf {
+    val sumSquaredDiffs = usableCycles.sumOf {
       val diff = it.cycleLength!! - mean
       diff * diff
     }
-    return sqrt(sumSquaredDiffs / (validCycles.size - 1))
+    return sqrt(sumSquaredDiffs / (usableCycles.size - 1))
   }
 
   /**
@@ -90,14 +104,15 @@ object CycleCalculationEngine {
    * - El día del ciclo se cuenta desde [lastPeriodStart] (Día 1 = fecha de inicio).
    * - NUNCA se reinicia a 1 por módulo al superar la duración media; continúa acumulando días si hay retraso.
    * - [daysUntilNextPeriod] puede ser negativo si la fecha estimada ya pasó, representando retraso real.
-   * - La ventana fértil y la ovulación estimada se proyectan 14 días antes del próximo periodo esperado.
+   * - Incorpora el fin de sangrado confirmado [CycleEntry.endDate] para no prolongar artificialmente la fase menstrual.
    */
   fun calculateCycleStatus(
     lastPeriodStart: LocalDate,
     averagePeriodDays: Int = DEFAULT_PERIOD_DURATION,
     pastCycles: List<CycleEntry> = emptyList(),
     configuredAverageCycle: Int = DEFAULT_AVERAGE_CYCLE,
-    today: LocalDate = LocalDate.now()
+    today: LocalDate = LocalDate.now(),
+    confirmedBleedingDates: Set<LocalDate> = emptySet()
   ): CycleStatusData {
     val meanCycle = calculateWeightedAverage(pastCycles, configuredAverageCycle)
     val roundedCycle = meanCycle.roundToInt().coerceIn(MIN_CYCLE_DAYS, MAX_CYCLE_DAYS)
@@ -119,12 +134,28 @@ object CycleCalculationEngine {
       ovulationDate = estimatedOvulationDate
     )
 
-    // Determinación de fase basada en el día real sin inventar un nuevo ciclo al superar el promedio
+    // Buscar si el ciclo activo tiene fin de sangrado confirmado por la usuaria
+    val activeCycle = pastCycles.firstOrNull { it.startDate == lastPeriodStart.toString() }
+    val activeConfirmedEnd = activeCycle?.endDate?.let {
+      try { LocalDate.parse(it) } catch (e: Exception) { null }
+    }
+
     val isDelayed = daysUntilNext < 0
+
+    // Determinación precisa de si hoy es sangrado:
+    // Si hay fin confirmado: solo es menstrual entre lastPeriodStart y activeConfirmedEnd.
+    // Si no hay fin confirmado: es confirmada hoy si today == lastPeriodStart o hay sangrado diario confirmado;
+    // o es estimada si currentDay <= averagePeriodDays.
+    val isBleedingToday = today.isEqual(lastPeriodStart) ||
+      (activeConfirmedEnd != null && !today.isBefore(lastPeriodStart) && !today.isAfter(activeConfirmedEnd)) ||
+      confirmedBleedingDates.contains(today)
+
+    val isEstimatedBleed = activeConfirmedEnd == null && currentDay in 1..averagePeriodDays
+
     val currentPhase = when {
       isDelayed -> CyclePhase.LUTEAL // Al superarse la fecha estimada, permanece en fase lútea tardía hasta nuevo sangrado
-      currentDay in 1..averagePeriodDays -> CyclePhase.MENSTRUAL
-      currentDay in (averagePeriodDays + 1)..(estimatedOvulationDay - 2) -> CyclePhase.FOLLICULAR
+      isBleedingToday || isEstimatedBleed -> CyclePhase.MENSTRUAL
+      currentDay in 1..(estimatedOvulationDay - 2) -> CyclePhase.FOLLICULAR
       currentDay in (estimatedOvulationDay - 1)..(estimatedOvulationDay + 1) -> CyclePhase.OVULATORY
       else -> CyclePhase.LUTEAL
     }
@@ -315,59 +346,57 @@ object CycleCalculationEngine {
       val (cycleStart, entry) = sortedAscCycles[i]
       val nextCycleStart = if (i + 1 < sortedAscCycles.size) sortedAscCycles[i + 1].first else null
 
-      // ¿La fecha pertenece a este ciclo histórico específico?
       val belongsToThisHistoricalCycle = !date.isBefore(cycleStart) && (nextCycleStart == null || date.isBefore(nextCycleStart))
       if (belongsToThisHistoricalCycle && nextCycleStart != null) {
-        // Es un ciclo histórico completado con siguiente inicio confirmado
+        // Ciclo histórico cerrado
         val dayNum = ChronoUnit.DAYS.between(cycleStart, date).toInt() + 1
         val confirmedEnd = entry.endDate?.let {
           try { LocalDate.parse(it) } catch (e: Exception) { null }
         }
-        val bleedEnd = confirmedEnd ?: cycleStart.plusDays((entry.periodDuration - 1).coerceAtLeast(0).toLong())
-        val isDuringBleed = !date.isBefore(cycleStart) && !date.isAfter(bleedEnd)
 
-        return DayCycleDetail(
-          date = date,
-          cycleDay = dayNum,
-          highlightType = if (isDuringBleed || hasConfirmedBleeding) DayHighlightType.ACTUAL_PERIOD else DayHighlightType.NONE,
-          phaseName = if (isDuringBleed) "Menstruación histórica (Día $dayNum)" else "Ciclo histórico (Día $dayNum)",
-          hormoneInsight = if (isDuringBleed) {
-            "Día de sangrado menstrual registrado en tu historial."
-          } else {
-            "Registro histórico correspondiente al ciclo iniciado el $cycleStart."
-          },
-          hasSymptomLogged = hasSymptom,
-          hasIntimacyLogged = hasIntimacy,
-          isPredicted = false,
-          isPeriodConfirmed = isDuringBleed || hasConfirmedBleeding
-        )
+        val isStartDay = date.isEqual(cycleStart)
+        val isConfirmedBleed = isStartDay || (confirmedEnd != null && !date.isBefore(cycleStart) && !date.isAfter(confirmedEnd)) || hasConfirmedBleeding
+        val isEstimatedBleed = !isConfirmedBleed && confirmedEnd == null && dayNum in 1..averagePeriodDays
+
+        return when {
+          isConfirmedBleed -> DayCycleDetail(
+            date = date,
+            cycleDay = dayNum,
+            highlightType = DayHighlightType.ACTUAL_PERIOD,
+            phaseName = if (isStartDay) "Menstruación histórica (Día 1)" else "Menstruación confirmada (Día $dayNum)",
+            hormoneInsight = "Día de sangrado menstrual registrado en tu historial.",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = false,
+            isPeriodConfirmed = true
+          )
+          isEstimatedBleed -> DayCycleDetail(
+            date = date,
+            cycleDay = dayNum,
+            highlightType = DayHighlightType.PREDICTED_PERIOD,
+            phaseName = "Periodo no confirmado (Día $dayNum)",
+            hormoneInsight = "Estimación según tu promedio; no se confirmó fin de sangrado ni registro diario para esta fecha histórica.",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = true,
+            isPeriodConfirmed = false
+          )
+          else -> DayCycleDetail(
+            date = date,
+            cycleDay = dayNum,
+            highlightType = DayHighlightType.NONE,
+            phaseName = "Ciclo histórico (Día $dayNum)",
+            hormoneInsight = "Registro histórico correspondiente al ciclo iniciado el $cycleStart.",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = false,
+            isPeriodConfirmed = false
+          )
+        }
       }
     }
 
-    // 2. Revisar el ciclo más reciente (en curso)
-    val activeCycleEntry = sortedAscCycles.lastOrNull()?.second
-    val activeConfirmedEnd = activeCycleEntry?.endDate?.let {
-      try { LocalDate.parse(it) } catch (e: Exception) { null }
-    }
-    val activePeriodEnd = activeConfirmedEnd ?: lastPeriodStart.plusDays((averagePeriodDays - 1).coerceAtLeast(0).toLong())
-
-    // ¿Cae dentro del sangrado del ciclo actual?
-    if (!date.isBefore(lastPeriodStart) && !date.isAfter(activePeriodEnd)) {
-      val dayNum = ChronoUnit.DAYS.between(lastPeriodStart, date).toInt() + 1
-      return DayCycleDetail(
-        date = date,
-        cycleDay = dayNum,
-        highlightType = DayHighlightType.ACTUAL_PERIOD,
-        phaseName = "Menstruación (Día $dayNum)",
-        hormoneInsight = "Fase menstrual activa. El endometrio se renueva. Prioriza descanso, hidratación tibia y alimentos reconfortantes.",
-        hasSymptomLogged = hasSymptom,
-        hasIntimacyLogged = hasIntimacy,
-        isPredicted = false,
-        isPeriodConfirmed = activeConfirmedEnd != null || hasConfirmedBleeding || !date.isAfter(today)
-      )
-    }
-
-    // Si la fecha es anterior a lastPeriodStart y no cayó en un ciclo anterior conocido
+    // 2. Si la fecha es anterior a lastPeriodStart y no cayó en un ciclo anterior conocido
     if (date.isBefore(lastPeriodStart)) {
       return DayCycleDetail(
         date = date,
@@ -382,6 +411,51 @@ object CycleCalculationEngine {
       )
     }
 
+    // 3. Evaluar el ciclo activo (iniciado en lastPeriodStart)
+    val activeCycleEntry = sortedAscCycles.lastOrNull()?.second
+    val activeConfirmedEnd = activeCycleEntry?.endDate?.let {
+      try { LocalDate.parse(it) } catch (e: Exception) { null }
+    }
+
+    val daysFromStart = ChronoUnit.DAYS.between(lastPeriodStart, date).toInt()
+    val activeDayNum = daysFromStart + 1
+
+    val isStartDay = date.isEqual(lastPeriodStart)
+    val isConfirmedBleedDay = isStartDay ||
+      (activeConfirmedEnd != null && !date.isBefore(lastPeriodStart) && !date.isAfter(activeConfirmedEnd)) ||
+      hasConfirmedBleeding
+
+    val isEstimatedBleedDay = !isConfirmedBleedDay && activeConfirmedEnd == null && activeDayNum in 1..averagePeriodDays
+
+    if (isConfirmedBleedDay) {
+      return DayCycleDetail(
+        date = date,
+        cycleDay = activeDayNum,
+        highlightType = DayHighlightType.ACTUAL_PERIOD,
+        phaseName = if (isStartDay) "Menstruación registrada (Día 1)" else "Menstruación confirmada (Día $activeDayNum)",
+        hormoneInsight = "Fase menstrual activa confirmada. El endometrio se renueva. Prioriza descanso, hidratación y confort.",
+        hasSymptomLogged = hasSymptom,
+        hasIntimacyLogged = hasIntimacy,
+        isPredicted = false,
+        isPeriodConfirmed = true
+      )
+    }
+
+    if (isEstimatedBleedDay) {
+      val isFuture = date.isAfter(today)
+      return DayCycleDetail(
+        date = date,
+        cycleDay = activeDayNum,
+        highlightType = DayHighlightType.PREDICTED_PERIOD,
+        phaseName = if (isFuture) "Periodo estimado (Día $activeDayNum)" else "Periodo no confirmado (Día $activeDayNum)",
+        hormoneInsight = "Día estimado según tu duración promedio. No has confirmado fin de sangrado ni registro diario para esta fecha.",
+        hasSymptomLogged = hasSymptom,
+        hasIntimacyLogged = hasIntimacy,
+        isPredicted = true,
+        isPeriodConfirmed = false
+      )
+    }
+
     // Ventana fértil del ciclo actual
     val currentNextPeriod = lastPeriodStart.plusDays(roundedCycle.toLong())
     val currentOvulation = currentNextPeriod.minusDays(LUTEAL_PHASE_DAYS.toLong())
@@ -390,13 +464,12 @@ object CycleCalculationEngine {
 
     // ¿Es el día de ovulación del ciclo actual?
     if (date.isEqual(currentOvulation)) {
-      val dayNum = ChronoUnit.DAYS.between(lastPeriodStart, date).toInt() + 1
       return DayCycleDetail(
         date = date,
-        cycleDay = dayNum,
+        cycleDay = activeDayNum,
         highlightType = DayHighlightType.OVULATION_DAY,
         phaseName = "Día de Ovulación Estimada",
-        hormoneInsight = "Ovulación estimada fisiológicamente a 14 días del próximo periodo previsto. Mayor probabilidad de moco tipo clara de huevo.",
+        hormoneInsight = "Ovulación estimada fisiológicamente a 14 días del próximo periodo previsto. Mayor probabilidad de fertilidad.",
         hasSymptomLogged = hasSymptom,
         hasIntimacyLogged = hasIntimacy,
         isPredicted = true,
@@ -406,10 +479,9 @@ object CycleCalculationEngine {
 
     // ¿Está en la ventana fértil estimada del ciclo actual?
     if (!date.isBefore(currentFertileStart) && !date.isAfter(currentFertileEnd)) {
-      val dayNum = ChronoUnit.DAYS.between(lastPeriodStart, date).toInt() + 1
       return DayCycleDetail(
         date = date,
-        cycleDay = dayNum,
+        cycleDay = activeDayNum,
         highlightType = DayHighlightType.FERTILE_WINDOW,
         phaseName = "Ventana Fértil Estimada",
         hormoneInsight = "Ventana de fertilidad proyectada según el promedio de tus ciclos.",
@@ -420,82 +492,96 @@ object CycleCalculationEngine {
       )
     }
 
-    // 3. Revisar si la fecha coincide con proyecciones de ciclos futuros
-    val futurePredictions = predictFutureCycles(
-      lastPeriodStart = lastPeriodStart,
-      averagePeriodDays = averagePeriodDays,
-      pastCycles = pastCycles,
-      configuredAverageCycle = configuredAverageCycle,
-      cyclesCount = 6
-    )
+    // 4. Si la fecha supera o iguala la fecha estimada de próximo periodo (currentNextPeriod):
+    // REGLA FUNDAMENTAL: La proyección nunca debe sustituir el conteo del ciclo real abierto.
+    // Si la fecha es <= today (o si hoy ya se encuentra en retraso), esta fecha pertenece al ciclo actual abierto.
+    val isAfterOrAtExpectedPeriod = !date.isBefore(currentNextPeriod)
+    val isOpenCycleDelay = isAfterOrAtExpectedPeriod && (date <= today || today >= currentNextPeriod)
 
-    for (pred in futurePredictions) {
-      if (!date.isBefore(pred.expectedStartDate) && !date.isAfter(pred.expectedEndDate)) {
-        val dayNum = ChronoUnit.DAYS.between(pred.expectedStartDate, date).toInt() + 1
-        return DayCycleDetail(
-          date = date,
-          cycleDay = dayNum,
-          highlightType = DayHighlightType.PREDICTED_PERIOD,
-          phaseName = "Periodo Proyectado (Ciclo #${pred.cycleNumber})",
-          hormoneInsight = "Inicio estimado del sangrado menstrual proyectado con tu ciclo de $roundedCycle días (variabilidad ±${String.format(java.util.Locale.US, "%.1f", pred.confidenceDays)}d).",
-          hasSymptomLogged = hasSymptom,
-          hasIntimacyLogged = hasIntimacy,
-          isPredicted = true,
-          isPeriodConfirmed = false
-        )
-      }
+    if (isOpenCycleDelay) {
+      val delayedDays = ChronoUnit.DAYS.between(currentNextPeriod, date).toInt()
+      val delayLabel = if (delayedDays > 0) " (${delayedDays}d de retraso)" else ""
+      return DayCycleDetail(
+        date = date,
+        cycleDay = activeDayNum,
+        highlightType = DayHighlightType.LUTEAL,
+        phaseName = "Retraso Estimado (Día $activeDayNum)",
+        hormoneInsight = "Se ha superado la fecha estimada para el próximo periodo$delayLabel. El ciclo actual continúa abierto hasta registrar un nuevo sangrado real.",
+        hasSymptomLogged = hasSymptom,
+        hasIntimacyLogged = hasIntimacy,
+        isPredicted = date.isAfter(today),
+        isPeriodConfirmed = false
+      )
+    }
 
-      if (date.isEqual(pred.expectedOvulationDate)) {
-        return DayCycleDetail(
-          date = date,
-          cycleDay = roundedCycle - (LUTEAL_PHASE_DAYS - 1),
-          highlightType = DayHighlightType.OVULATION_DAY,
-          phaseName = "Ovulación Estimada (Ciclo #${pred.cycleNumber})",
-          hormoneInsight = "Fecha estimada para la ovulación en el ciclo proyectado #${pred.cycleNumber}.",
-          hasSymptomLogged = hasSymptom,
-          hasIntimacyLogged = hasIntimacy,
-          isPredicted = true,
-          isPeriodConfirmed = false
-        )
-      }
+    // 5. Proyecciones futuras para fechas posteriores a la fecha esperada cuando hoy NO está en retraso
+    if (date.isAfter(currentNextPeriod) && today < currentNextPeriod) {
+      val futurePredictions = predictFutureCycles(
+        lastPeriodStart = lastPeriodStart,
+        averagePeriodDays = averagePeriodDays,
+        pastCycles = pastCycles,
+        configuredAverageCycle = configuredAverageCycle,
+        cyclesCount = 6
+      )
 
-      if (!date.isBefore(pred.fertileWindowStart) && !date.isAfter(pred.fertileWindowEnd)) {
-        return DayCycleDetail(
-          date = date,
-          cycleDay = null,
-          highlightType = DayHighlightType.FERTILE_WINDOW,
-          phaseName = "Ventana Fértil Estimada (Ciclo #${pred.cycleNumber})",
-          hormoneInsight = "Días de mayor probabilidad biológica calculados para tu ciclo proyectado #${pred.cycleNumber}.",
-          hasSymptomLogged = hasSymptom,
-          hasIntimacyLogged = hasIntimacy,
-          isPredicted = true,
-          isPeriodConfirmed = false
-        )
+      for (pred in futurePredictions) {
+        if (!date.isBefore(pred.expectedStartDate) && !date.isAfter(pred.expectedEndDate)) {
+          val dayNum = ChronoUnit.DAYS.between(pred.expectedStartDate, date).toInt() + 1
+          return DayCycleDetail(
+            date = date,
+            cycleDay = dayNum,
+            highlightType = DayHighlightType.PREDICTED_PERIOD,
+            phaseName = "Periodo Proyectado (Ciclo #${pred.cycleNumber})",
+            hormoneInsight = "Inicio estimado del sangrado menstrual proyectado con tu ciclo de $roundedCycle días (variabilidad ±${String.format(java.util.Locale.US, "%.1f", pred.confidenceDays)}d).",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = true,
+            isPeriodConfirmed = false
+          )
+        }
+
+        if (date.isEqual(pred.expectedOvulationDate)) {
+          return DayCycleDetail(
+            date = date,
+            cycleDay = roundedCycle - (LUTEAL_PHASE_DAYS - 1),
+            highlightType = DayHighlightType.OVULATION_DAY,
+            phaseName = "Ovulación Estimada (Ciclo #${pred.cycleNumber})",
+            hormoneInsight = "Fecha estimada para la ovulación en el ciclo proyectado #${pred.cycleNumber}.",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = true,
+            isPeriodConfirmed = false
+          )
+        }
+
+        if (!date.isBefore(pred.fertileWindowStart) && !date.isAfter(pred.fertileWindowEnd)) {
+          return DayCycleDetail(
+            date = date,
+            cycleDay = null,
+            highlightType = DayHighlightType.FERTILE_WINDOW,
+            phaseName = "Ventana Fértil Estimada (Ciclo #${pred.cycleNumber})",
+            hormoneInsight = "Días de mayor probabilidad biológica calculados para tu ciclo proyectado #${pred.cycleNumber}.",
+            hasSymptomLogged = hasSymptom,
+            hasIntimacyLogged = hasIntimacy,
+            isPredicted = true,
+            isPeriodConfirmed = false
+          )
+        }
       }
     }
 
-    // 4. Fase folicular o lútea dentro del ciclo actual
-    val daysFromStart = ChronoUnit.DAYS.between(lastPeriodStart, date).toInt()
-    val isAfterExpectedPeriod = date.isAfter(currentNextPeriod)
-    val dayNum = daysFromStart + 1
-
-    val isFollicular = !isAfterExpectedPeriod && (dayNum < (roundedCycle - (LUTEAL_PHASE_DAYS - 1)))
-
-    val phaseName = when {
-      isAfterExpectedPeriod -> "Retraso Estimado (Día $dayNum)"
-      isFollicular -> "Fase Folicular (Día $dayNum)"
-      else -> "Fase Lútea (Día $dayNum)"
-    }
-
-    val insight = when {
-      isAfterExpectedPeriod -> "Se ha superado la fecha estimada para el próximo periodo. No se inventa un nuevo ciclo hasta que registres un sangrado real."
-      isFollicular -> "Fase de ascenso de estrógeno. Suele acompañarse de energía creciente y motivación."
-      else -> "Fase dominada por progesterona. Invita a un ritmo más pausado y autocuidado."
+    // 6. Fases regulares del ciclo actual (Folicular o Lútea previa a la fecha esperada)
+    val isFollicular = activeDayNum < (roundedCycle - (LUTEAL_PHASE_DAYS - 1))
+    val phaseName = if (isFollicular) "Fase Folicular (Día $activeDayNum)" else "Fase Lútea (Día $activeDayNum)"
+    val insight = if (isFollicular) {
+      "Fase de ascenso de estrógeno. Suele acompañarse de energía creciente y motivación."
+    } else {
+      "Fase dominada por progesterona. Invita a un ritmo más pausado y autocuidado."
     }
 
     return DayCycleDetail(
       date = date,
-      cycleDay = dayNum,
+      cycleDay = activeDayNum,
       highlightType = if (isFollicular) DayHighlightType.FOLLICULAR else DayHighlightType.LUTEAL,
       phaseName = phaseName,
       hormoneInsight = insight,

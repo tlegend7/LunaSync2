@@ -265,4 +265,69 @@ class CycleRepositoryRealExecutionTest {
     }
     assertTrue("Partner must not have permission to write to cycles subcollection", failedWithPermission)
   }
+
+  @Test
+  fun testConcurrentRecordPeriodStartDuplicatePrevention() = runWithLooper {
+    val spaceId = "space_${UUID.randomUUID()}"
+    createSpaceWithElla(spaceId)
+
+    val targetDate = "2026-07-01"
+    var secondCallResult: Result<String>? = null
+
+    // Interleave execution: before the first write commits to Firestore, trigger a concurrent attempt
+    cycleRepo.onBeforeRecordPeriodStartHook = { date ->
+      // Temporarily clear hook to avoid recursion
+      cycleRepo.onBeforeRecordPeriodStartHook = null
+      secondCallResult = cycleRepo.recordPeriodStart(spaceId, date, null)
+    }
+
+    val firstCallResult = cycleRepo.recordPeriodStart(spaceId, targetDate, null)
+
+    assertNotNull("Second call must have executed", secondCallResult)
+    val oneSucceeded = firstCallResult.isSuccess xor secondCallResult!!.isSuccess
+    assertTrue("Exactly one of the concurrent writes must succeed and the other fail", oneSucceeded)
+
+    val docs = db.collection("couple_spaces").document(spaceId).collection("cycles")
+      .whereEqualTo("startDate", targetDate).get().await()
+    assertEquals("Exactly one document must exist for the date", 1, docs.size())
+  }
+
+  @Test
+  fun testRecordPeriodStartPreservesUnclippedDurationOver15Days() = runWithLooper {
+    val spaceId = "space_${UUID.randomUUID()}"
+    createSpaceWithElla(spaceId)
+
+    // Bleeding for 20 days: Aug 1 to Aug 20 (20 days inclusive)
+    val res = cycleRepo.recordPeriodStart(
+      spaceId = spaceId,
+      startDate = LocalDate.of(2026, 8, 1),
+      endDate = LocalDate.of(2026, 8, 20)
+    )
+    assertTrue("Record with 20 days duration must succeed", res.isSuccess)
+    val cycleId = res.getOrThrow()
+
+    val doc = db.collection("couple_spaces").document(spaceId).collection("cycles").document(cycleId).get().await()
+    assertEquals(20L, doc.getLong("periodDuration"))
+    assertEquals("2026-08-20", doc.getString("endDate"))
+    assertFalse(doc.getBoolean("isCalculated") ?: true)
+  }
+
+  @Test
+  fun testUpdateCycleDatesRejectsMovingToExistingStartDate() = runWithLooper {
+    val spaceId = "space_${UUID.randomUUID()}"
+    createSpaceWithElla(spaceId)
+
+    val id1 = cycleRepo.recordPeriodStart(spaceId, LocalDate.of(2026, 9, 1), null).getOrThrow()
+    val id2 = cycleRepo.recordPeriodStart(spaceId, LocalDate.of(2026, 9, 28), null).getOrThrow()
+
+    // Attempting to move cycle 2's start date to 2026-09-01 (occupied by cycle 1) MUST fail
+    val updateRes = cycleRepo.updateCycleDates(
+      spaceId = spaceId,
+      cycleId = id2,
+      newStartDate = LocalDate.of(2026, 9, 1),
+      newEndDate = null
+    )
+    assertTrue("Moving to already occupied startDate must fail", updateRes.isFailure)
+    assertTrue(updateRes.exceptionOrNull()?.message?.contains("Ya existe") == true)
+  }
 }

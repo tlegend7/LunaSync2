@@ -72,27 +72,9 @@ fun PartnerDashboardView(
   onOpenObservationDialog: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val phase = cycleStatus?.currentPhase ?: CyclePhase.FOLLICULAR
-  val currentDay = cycleStatus?.currentDay ?: 1
-  val daysUntilPeriod = cycleStatus?.daysUntilNextPeriod ?: 14
-
-  val shareSymptomsAllowed = space?.sharingPermissions?.shareSymptoms ?: false
-  val shareMoodAllowed = space?.sharingPermissions?.shareMood ?: false
+  val shareSymptomsAllowed = space?.sharingPermissions?.shareSymptoms ?: true
+  val shareMoodAllowed = space?.sharingPermissions?.shareMood ?: true
   val shareIntimacyAllowed = space?.sharingPermissions?.shareIntimacy ?: false
-
-  val (phaseName, phaseColor, phaseBg) = when (phase) {
-    CyclePhase.MENSTRUAL -> Triple("Fase Menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.10f))
-    CyclePhase.FOLLICULAR -> Triple("Fase Folicular", AppleHealthFollicular, AppleHealthFollicular.copy(alpha = 0.10f))
-    CyclePhase.OVULATORY -> Triple("Fase Ovulatoria • Ventana Fértil", AppleHealthFertile, AppleHealthFertile.copy(alpha = 0.10f))
-    CyclePhase.LUTEAL -> Triple("Fase Lútea • Fase de Cuidado", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.10f))
-  }
-
-  val phaseDescription = when (phase) {
-    CyclePhase.MENSTRUAL -> "Niveles bajos de energía y sensibilidad física. Tu mejor apoyo es calidez, té caliente y descanso."
-    CyclePhase.FOLLICULAR -> "El estrógeno sube. Su energía y creatividad aumentan. Gran momento para salidas y proyectos juntos."
-    CyclePhase.OVULATORY -> "Pico de fertilidad y mayor vitalidad social y emocional. Máxima conexión en pareja."
-    CyclePhase.LUTEAL -> "Descenso de progesterona. Puede experimentar cansancio o cambios de humor. Bríndale empatía y paciencia."
-  }
 
   Column(
     modifier = modifier
@@ -102,58 +84,172 @@ fun PartnerDashboardView(
       .padding(horizontal = 18.dp, vertical = 8.dp)
   ) {
     // Apple Health Phase Status Header
-    Surface(
-      shape = RoundedCornerShape(22.dp),
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 1.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
-    ) {
-      Column(modifier = Modifier.padding(20.dp)) {
+    if (isLoading) {
+      Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier
+          .fillMaxWidth()
+          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
+      ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween,
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.padding(24.dp)
         ) {
+          CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = AppleSystemBlue)
+          Spacer(modifier = Modifier.width(14.dp))
+          Text("Cargando información del ciclo...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    } else if (errorMessage != null) {
+      Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier
+          .fillMaxWidth()
+          .border(0.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+      ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+          Text("ESTADO DEL CICLO", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+          Spacer(modifier = Modifier.height(6.dp))
+          Text("No se pudo cargar la información", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    } else if (cycleStatus == null) {
+      Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier
+          .fillMaxWidth()
+          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
+      ) {
+        Column(modifier = Modifier.padding(20.dp)) {
           Surface(
             shape = RoundedCornerShape(10.dp),
-            color = phaseBg
+            color = AppleSystemGray5.copy(alpha = 0.6f)
           ) {
             Text(
-              text = "DÍA $currentDay DEL CICLO",
+              text = "SIN REGISTROS DE CICLO",
               style = MaterialTheme.typography.labelSmall,
               fontWeight = FontWeight.Bold,
-              color = phaseColor,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
               letterSpacing = 0.5.sp,
               modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
             )
           }
 
+          Spacer(modifier = Modifier.height(10.dp))
+
           Text(
-            text = if (daysUntilPeriod > 0) "~$daysUntilPeriod días para periodo" else "Periodo esperado hoy",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "Esperando primer registro",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          Text(
+            text = "Tu pareja aún no ha registrado el inicio de su ciclo menstrual. Tan pronto anote su periodo, verás aquí su fase actual, días estimados y consejos de cuidado personalizados.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 21.sp
           )
         }
+      }
+    } else {
+      val phase = cycleStatus.currentPhase
+      val currentDay = cycleStatus.currentDay
+      val daysUntilPeriod = cycleStatus.daysUntilNextPeriod
+      val isDelayed = cycleStatus.isDelayed
 
-        Spacer(modifier = Modifier.height(12.dp))
+      val (phaseName, phaseColor, phaseBg) = when (phase) {
+        CyclePhase.MENSTRUAL -> Triple("Fase Menstrual", AppleHealthMenstrual, AppleHealthMenstrual.copy(alpha = 0.10f))
+        CyclePhase.FOLLICULAR -> Triple("Fase Folicular", AppleHealthFollicular, AppleHealthFollicular.copy(alpha = 0.10f))
+        CyclePhase.OVULATORY -> Triple("Fase Ovulatoria • Ventana Fértil", AppleHealthFertile, AppleHealthFertile.copy(alpha = 0.10f))
+        CyclePhase.LUTEAL -> if (isDelayed) {
+          Triple("Fase Lútea Tardía (Retraso Estimado)", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.10f))
+        } else {
+          Triple("Fase Lútea • Fase de Cuidado", AppleHealthLuteal, AppleHealthLuteal.copy(alpha = 0.10f))
+        }
+      }
 
-        Text(
-          text = phaseName,
-          style = MaterialTheme.typography.headlineMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface
-        )
+      val phaseDescription = when {
+        isDelayed -> "Se ha superado la fecha estimada para el próximo periodo. Es común que el ciclo varíe por estrés o cambios hormonales. Bríndale empatía y apoyo sin presionarla."
+        phase == CyclePhase.MENSTRUAL -> "Niveles bajos de energía y sensibilidad física. Tu mejor apoyo es calidez, té caliente y descanso."
+        phase == CyclePhase.FOLLICULAR -> "El estrógeno sube. Su energía y creatividad aumentan. Gran momento para salidas y proyectos juntos."
+        phase == CyclePhase.OVULATORY -> "Pico de fertilidad y mayor vitalidad social y emocional. Máxima conexión en pareja."
+        else -> "Descenso de progesterona. Puede experimentar cansancio o cambios de humor. Bríndale empatía y paciencia."
+      }
 
-        Spacer(modifier = Modifier.height(6.dp))
+      val periodStatusText = when {
+        daysUntilPeriod > 0 -> "~$daysUntilPeriod días para periodo"
+        daysUntilPeriod == 0 -> "Periodo estimado hoy"
+        else -> {
+          val delayedDays = -daysUntilPeriod
+          "Retraso estimado (~$delayedDays ${if (delayedDays == 1) "día" else "días"})"
+        }
+      }
 
-        Text(
-          text = phaseDescription,
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          lineHeight = 21.sp
-        )
+      Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier
+          .fillMaxWidth()
+          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(22.dp))
+      ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Surface(
+              shape = RoundedCornerShape(10.dp),
+              color = phaseBg
+            ) {
+              Text(
+                text = if (isDelayed) "DÍA $currentDay • FECHA ESTIMADA SUPERADA" else "DÍA $currentDay DEL CICLO",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = phaseColor,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+              )
+            }
+
+            Text(
+              text = periodStatusText,
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = if (isDelayed) FontWeight.SemiBold else FontWeight.Normal,
+              color = if (isDelayed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
+
+          Text(
+            text = phaseName,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          Text(
+            text = phaseDescription,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 21.sp
+          )
+        }
       }
     }
 
@@ -210,7 +306,40 @@ fun PartnerDashboardView(
     Spacer(modifier = Modifier.height(16.dp))
 
     // Daily Care Cheat Sheet (Apple List Inset Style)
-    DailyCareCheatSheetCard(careTips = partnerCareTips)
+    if (partnerCareTips.isNotEmpty()) {
+      DailyCareCheatSheetCard(careTips = partnerCareTips)
+    } else {
+      Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier
+          .fillMaxWidth()
+          .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+      ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+          Text(
+            text = "GUÍA DE CUIDADOS Y EMPATÍA",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 0.5.sp
+          )
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = "Sin recomendaciones activas",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = "Los consejos de apoyo diario se activarán automáticamente según la fase cuando se registre el ciclo.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      }
+    }
 
     Spacer(modifier = Modifier.height(14.dp))
 
