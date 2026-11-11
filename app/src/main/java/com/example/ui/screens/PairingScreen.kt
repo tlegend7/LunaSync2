@@ -235,7 +235,7 @@ fun PairingScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-              text = "Ingresar código de invitación",
+              text = "Pídele su código a tu pareja",
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.onBackground
@@ -244,7 +244,7 @@ fun PairingScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-              text = "Pídele a tu pareja el código generado desde su app (ej. LUNA-XXXX):",
+              text = "Ella lo genera desde su espacio. Los permisos se eligen por separado.",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -470,11 +470,20 @@ fun PairingScreen(
         Text("¿Desvincular a tu pareja?", fontWeight = FontWeight.Bold)
       },
       text = {
-        Text(
-          text = "Se detiene el acceso compartido de forma inmediata. Tus registros, síntomas e historial personal seguirán intactos en tu cuenta.",
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Column {
+          Text(
+            text = "Se detiene el acceso compartido",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = "Tu pareja dejará de acceder a este espacio. Esto no puede borrar información que ya haya visto o guardado.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
       },
       confirmButton = {
         LunaButton(
