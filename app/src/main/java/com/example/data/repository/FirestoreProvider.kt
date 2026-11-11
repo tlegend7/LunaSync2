@@ -3,6 +3,8 @@ package com.example.data.repository
 import android.content.Context
 import com.example.R
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -12,7 +14,27 @@ object FirestoreProvider {
   private var firestoreInstance: FirebaseFirestore? = null
   private var authInstance: FirebaseAuth? = null
 
+  fun ensureInitialized(context: Context) {
+    val appContext = context.applicationContext ?: context
+    if (FirebaseApp.getApps(appContext).isEmpty()) {
+      try {
+        FirebaseApp.initializeApp(appContext)
+      } catch (_: Exception) {
+        try {
+          val pkg = appContext.packageName.ifBlank { "com.aistudio.lunasync" }
+          val options = FirebaseOptions.Builder()
+            .setApplicationId(pkg)
+            .setProjectId("demo-no-project")
+            .setApiKey("AIzaSyDummyKeyForFallbackInit1234567")
+            .build()
+          FirebaseApp.initializeApp(appContext, options)
+        } catch (_: Exception) {}
+      }
+    }
+  }
+
   fun getDb(context: Context): FirebaseFirestore {
+    ensureInitialized(context)
     if (firestoreInstance == null) {
       val dbId = try {
         context.applicationContext.getString(R.string.firestore_database_id)
@@ -20,7 +42,11 @@ object FirestoreProvider {
         ""
       }
       val db = if (dbId.isNotBlank()) {
-        FirebaseFirestore.getInstance(dbId)
+        try {
+          FirebaseFirestore.getInstance(dbId)
+        } catch (_: Exception) {
+          Firebase.firestore
+        }
       } else {
         Firebase.firestore
       }
@@ -42,7 +68,10 @@ object FirestoreProvider {
     return firestoreInstance!!
   }
 
-  fun getAuth(): FirebaseAuth {
+  fun getAuth(context: Context? = null): FirebaseAuth {
+    if (context != null) {
+      ensureInitialized(context)
+    }
     if (authInstance == null) {
       val auth = Firebase.auth
       val emulatorHost = System.getenv("FIREBASE_AUTH_EMULATOR_HOST")

@@ -29,7 +29,7 @@ open class CoupleSpaceRepository(
   context: Context,
   protected val db: FirebaseFirestore = FirestoreProvider.getDb(context)
 ) {
-  protected val auth: FirebaseAuth = FirestoreProvider.getAuth()
+  protected val auth: FirebaseAuth = FirestoreProvider.getAuth(context)
   private val secureRandom = SecureRandom()
 
   open fun observeSpace(spaceId: String): Flow<CoupleSpace?> {

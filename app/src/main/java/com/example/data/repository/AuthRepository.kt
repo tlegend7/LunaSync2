@@ -26,7 +26,7 @@ import kotlinx.coroutines.tasks.await
 
 open class AuthRepository(
   private val context: Context,
-  protected val auth: FirebaseAuth = FirestoreProvider.getAuth()
+  protected val auth: FirebaseAuth = FirestoreProvider.getAuth(context)
 ) {
   private val credentialManager: CredentialManager = CredentialManager.create(context)
 

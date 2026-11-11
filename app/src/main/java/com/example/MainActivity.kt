@@ -16,6 +16,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.example.data.repository.FirestoreProvider
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.MainScreen
 import com.example.ui.theme.LunaSyncTheme
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
     object : ViewModelProvider.Factory {
       @Suppress("UNCHECKED_CAST")
       override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        FirestoreProvider.ensureInitialized(applicationContext)
         return MainViewModel(application) as T
       }
     }
@@ -33,6 +35,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    FirestoreProvider.ensureInitialized(applicationContext)
     enableEdgeToEdge()
 
     setContent {
