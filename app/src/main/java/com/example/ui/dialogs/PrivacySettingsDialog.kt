@@ -45,14 +45,7 @@ import com.example.ui.components.LunaBadgeStyle
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaToggle
-import com.example.ui.theme.LunaBorderLight
-import com.example.ui.theme.LunaDarkBorder
-import com.example.ui.theme.LunaDarkSurface
-import com.example.ui.theme.LunaIceBlueSubtle
-import com.example.ui.theme.LunaNavyPrimary
-import com.example.ui.theme.LunaSurfaceLight
-import com.example.ui.theme.LunaTextPrimary
-import com.example.ui.theme.LunaTextSecondary
+import com.example.ui.theme.*
 
 /**
  * Diálogo / Pantalla modal de control de privacidad y permisos (Figma: privacy · Tú eliges #5:615)

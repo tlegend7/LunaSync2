@@ -31,12 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CareTip
 import com.example.data.model.CyclePhase
-import com.example.ui.theme.LunaNavyPrimary
-import com.example.ui.theme.LunaPeriodRed
-import com.example.ui.theme.LunaSageSoft
-import com.example.ui.theme.LunaSageText
-import com.example.ui.theme.LunaSandSoft
-import com.example.ui.theme.LunaSandText
+import com.example.ui.theme.*
 
 @Composable
 fun DailyCareCheatSheetCard(

@@ -60,22 +60,7 @@ import com.example.ui.components.LunaBadgeStyle
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaNavigationRow
-import com.example.ui.theme.LunaBorderLight
-import com.example.ui.theme.LunaCoralSoft
-import com.example.ui.theme.LunaCoralText
-import com.example.ui.theme.LunaDarkBorder
-import com.example.ui.theme.LunaDarkSurface
-import com.example.ui.theme.LunaIceBlueAccent
-import com.example.ui.theme.LunaIceBlueSubtle
-import com.example.ui.theme.LunaIceBlueText
-import com.example.ui.theme.LunaNavyDarkCard
-import com.example.ui.theme.LunaNavyPrimary
-import com.example.ui.theme.LunaSageSoft
-import com.example.ui.theme.LunaSageText
-import com.example.ui.theme.LunaSurfaceLight
-import com.example.ui.theme.LunaTextPrimary
-import com.example.ui.theme.LunaTextSecondary
-import com.example.ui.theme.StatusError
+import com.example.ui.theme.*
 
 /**
  * Pantalla del Espacio Compartido / Nosotros (Figma: space · Nuestro espacio #5:535 y partnerSpace #5:1282)

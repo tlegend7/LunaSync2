@@ -53,15 +53,7 @@ import com.example.data.repository.AuthRepository
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaContextTopBar
-import com.example.ui.theme.LunaBorderLight
-import com.example.ui.theme.LunaIceBlueAccent
-import com.example.ui.theme.LunaIceBlueSubtle
-import com.example.ui.theme.LunaIceBlueText
-import com.example.ui.theme.LunaNavyDarkCard
-import com.example.ui.theme.LunaNavyPrimary
-import com.example.ui.theme.LunaTextPrimary
-import com.example.ui.theme.LunaTextSecondary
-import com.example.ui.theme.StatusError
+import com.example.ui.theme.*
 
 /**
  * Pantalla de bienvenida y selección de experiencia inicial (Figma: welcome · Tu ritmo. Su compañía #5:32)

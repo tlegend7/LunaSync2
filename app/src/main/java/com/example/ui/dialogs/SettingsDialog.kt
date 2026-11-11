@@ -40,13 +40,7 @@ import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaNavigationRow
 import com.example.ui.components.LunaOptionChip
-import com.example.ui.theme.LunaBorderLight
-import com.example.ui.theme.LunaDarkBorder
-import com.example.ui.theme.LunaDarkSurface
-import com.example.ui.theme.LunaNavyPrimary
-import com.example.ui.theme.LunaSurfaceLight
-import com.example.ui.theme.LunaTextSecondary
-import com.example.ui.theme.StatusError
+import com.example.ui.theme.*
 
 enum class AppAppearanceMode {
   SYSTEM,
