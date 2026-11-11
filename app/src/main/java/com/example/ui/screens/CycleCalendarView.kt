@@ -1,8 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,17 +26,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,30 +53,40 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.engine.CycleCalculationEngine
 import com.example.data.model.CycleEntry
-import com.example.data.model.CycleStatusData
 import com.example.data.model.DailySymptom
 import com.example.data.model.DayHighlightType
 import com.example.data.model.IntimacyLog
 import com.example.data.model.PredictedCycle
 import com.example.ui.components.LunaBadge
 import com.example.ui.components.LunaBadgeStyle
+import com.example.ui.components.LunaButton
+import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaCard
-import com.example.ui.theme.AppleHairlineBorder
-import com.example.ui.theme.BrandTerracottaRose
-import com.example.ui.theme.PhaseFertileSage
-import com.example.ui.theme.PhaseFertileSubtle
-import com.example.ui.theme.PhaseFollicularPeach
-import com.example.ui.theme.PhaseFollicularSubtle
-import com.example.ui.theme.PhaseLutealLavender
-import com.example.ui.theme.PhaseLutealSubtle
-import com.example.ui.theme.PhaseMenstrualRose
-import com.example.ui.theme.PhaseMenstrualSubtle
-import com.example.ui.theme.PhaseOvulationGold
+import com.example.ui.theme.LunaBorderLight
+import com.example.ui.theme.LunaCoralSoft
+import com.example.ui.theme.LunaCoralText
+import com.example.ui.theme.LunaDarkBorder
+import com.example.ui.theme.LunaDarkSurface
+import com.example.ui.theme.LunaIceBlueAccent
+import com.example.ui.theme.LunaIceBlueSubtle
+import com.example.ui.theme.LunaNavyPrimary
+import com.example.ui.theme.LunaPeriodRed
+import com.example.ui.theme.LunaSageSoft
+import com.example.ui.theme.LunaSageText
+import com.example.ui.theme.LunaSandSoft
+import com.example.ui.theme.LunaSandText
+import com.example.ui.theme.LunaSurfaceLight
+import com.example.ui.theme.LunaTextPrimary
+import com.example.ui.theme.LunaTextSecondary
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
+/**
+ * Vista de Calendario mensual según Figma (calendar · Tu calendario #5:195)
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CycleCalendarView(
@@ -103,6 +106,9 @@ fun CycleCalendarView(
   onOpenPeriodDialogForDate: ((LocalDate) -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
+  val isDark = MaterialTheme.colorScheme.background.red < 0.2f
+  val localeEs = Locale("es", "ES")
+
   var displayedMonth by remember(selectedDate.year, selectedDate.month) {
     mutableStateOf(YearMonth.from(selectedDate))
   }
@@ -125,7 +131,6 @@ fun CycleCalendarView(
     }.toSet()
   }
 
-  // Pre-calculate day details for the selected date
   val selectedDayDetail by remember(selectedDate, lastPeriodStart, pastCycles, symptoms, intimacyLogs) {
     derivedStateOf {
       CycleCalculationEngine.getDayDetail(
@@ -152,502 +157,370 @@ fun CycleCalendarView(
       .fillMaxSize()
       .background(MaterialTheme.colorScheme.background)
       .verticalScroll(rememberScrollState())
-      .padding(horizontal = 16.dp, vertical = 8.dp)
+      .padding(horizontal = 24.dp)
+      .padding(top = 12.dp, bottom = 100.dp)
   ) {
-    // Top Overview Summary
-    LunaCard(
+    // 1. Título y subtítulo
+    Text(
+      text = if (canLogSymptoms) "Tu calendario" else "Calendario compartido",
+      style = MaterialTheme.typography.displaySmall,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.onBackground
+    )
+
+    Spacer(modifier = Modifier.height(4.dp))
+
+    Text(
+      text = if (canLogSymptoms) "Selecciona un día para consultar o registrar." else "Consulta el historial compartido por tu pareja.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Spacer(modifier = Modifier.height(20.dp))
+
+    // 2. Cabecera del Mes (Figma #5:245)
+    val monthTitle = displayedMonth.month.getDisplayName(TextStyle.FULL, localeEs).replaceFirstChar { it.titlecase(localeEs) }
+    val yearTitle = displayedMonth.year.toString()
+
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.SpaceBetween,
       modifier = Modifier.fillMaxWidth()
     ) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceAround,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-      ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Text("Ciclo Medio", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("${averageCycleLength}d", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+      Text(
+        text = "$monthTitle $yearTitle",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onBackground
+      )
+
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(
+          onClick = { displayedMonth = displayedMonth.minusMonths(1) },
+          modifier = Modifier.size(36.dp).testTag("prev_month_button")
+        ) {
+          Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Mes anterior",
+            tint = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.size(20.dp)
+          )
         }
-        Box(modifier = Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Text("Periodo", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("${averagePeriodLength}d", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PhaseMenstrualRose)
-        }
-        Box(modifier = Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Text("Predicciones", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("+6 meses", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PhaseFertileSage)
+
+        IconButton(
+          onClick = { displayedMonth = displayedMonth.plusMonths(1) },
+          modifier = Modifier.size(36.dp).testTag("next_month_button")
+        ) {
+          Icon(
+            Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = "Mes siguiente",
+            tint = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.size(20.dp)
+          )
         }
       }
     }
 
     Spacer(modifier = Modifier.height(14.dp))
 
-    // Month Navigation Header
+    // 3. Días de la semana (L, M, X, J, V, S, D) (Figma #5:251)
+    val dayLabels = listOf("L", "M", "X", "J", "V", "S", "D")
     Row(
-      verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.SpaceBetween,
       modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
     ) {
-      IconButton(
-        onClick = { displayedMonth = displayedMonth.minusMonths(1) },
-        modifier = Modifier.size(36.dp).testTag("prev_month_button")
-      ) {
-        Icon(
-          Icons.AutoMirrored.Filled.ArrowBack,
-          contentDescription = "Mes anterior",
-          tint = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.size(20.dp)
-        )
-      }
-
-      val monthTitle = displayedMonth.month.getDisplayName(TextStyle.FULL, Locale("es", "ES"))
-        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-      val yearTitle = displayedMonth.year
-
-      Text(
-        text = "$monthTitle $yearTitle",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-      )
-
-      IconButton(
-        onClick = { displayedMonth = displayedMonth.plusMonths(1) },
-        modifier = Modifier.size(36.dp).testTag("next_month_button")
-      ) {
-        Icon(
-          Icons.AutoMirrored.Filled.ArrowForward,
-          contentDescription = "Mes siguiente",
-          tint = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.size(20.dp)
+      dayLabels.forEach { label ->
+        Text(
+          text = label,
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Medium,
+          color = LunaTextSecondary,
+          textAlign = TextAlign.Center,
+          modifier = Modifier.weight(1f)
         )
       }
     }
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    // Interactive Calendar Surface
-    LunaCard(
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      // Weekday header (L, M, M, J, V, S, D)
-        Row(
-          horizontalArrangement = Arrangement.SpaceAround,
-          modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-        ) {
-          listOf("L", "M", "M", "J", "V", "S", "D").forEach { dayLabel ->
-            Text(
-              text = dayLabel,
-              fontSize = 11.sp,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-              textAlign = TextAlign.Center,
+    // 4. Cuadrícula de Días (Semanas 1..6)
+    val firstDayOfMonth = displayedMonth.atDay(1)
+    val daysInMonth = displayedMonth.lengthOfMonth()
+    val firstDayOfWeekIndex = firstDayOfMonth.dayOfWeek.value - 1 // 0: Lunes, 6: Domingo
+    val totalCells = ((firstDayOfWeekIndex + daysInMonth + 6) / 7) * 7
+
+    for (weekRow in 0 until (totalCells / 7)) {
+      Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+      ) {
+        for (col in 0..6) {
+          val cellIndex = weekRow * 7 + col
+          val dayNumber = cellIndex - firstDayOfWeekIndex + 1
+
+          if (dayNumber in 1..daysInMonth) {
+            val cellDate = displayedMonth.atDay(dayNumber)
+            val isSelected = cellDate == selectedDate
+            val isTodayDate = cellDate == today
+
+            val cellDetail = remember(cellDate, lastPeriodStart, pastCycles, symptoms, intimacyLogs) {
+              CycleCalculationEngine.getDayDetail(
+                date = cellDate,
+                lastPeriodStart = lastPeriodStart,
+                averagePeriodDays = averagePeriodLength,
+                pastCycles = pastCycles,
+                configuredAverageCycle = averageCycleLength,
+                today = today,
+                symptomDates = symptomDates,
+                intimacyDates = intimacyDates,
+                confirmedBleedingDates = confirmedBleedingDates
+              )
+            }
+
+            CalendarFigmaCell(
+              dayNumber = dayNumber,
+              detail = cellDetail,
+              isToday = isTodayDate,
+              isSelected = isSelected,
+              isDark = isDark,
+              onClick = {
+                onDateSelected(cellDate)
+              },
               modifier = Modifier.weight(1f)
             )
+          } else {
+            Spacer(modifier = Modifier.weight(1f))
           }
         }
+      }
+    }
 
-        // Calendar Grid Matrix
-        val firstDayOfMonth = displayedMonth.atDay(1)
-        val dayOfWeekOffset = (firstDayOfMonth.dayOfWeek.value - 1) // 0 = Monday, 6 = Sunday
-        val daysInMonth = displayedMonth.lengthOfMonth()
+    Spacer(modifier = Modifier.height(14.dp))
 
-        val totalCells = ((dayOfWeekOffset + daysInMonth + 6) / 7) * 7
-        val weeks = totalCells / 7
+    // 5. Leyenda según Figma (#5:331)
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      LunaBadge(
+        text = "Registrado",
+        backgroundColor = LunaCoralSoft,
+        textColor = LunaPeriodRed,
+        shape = RoundedCornerShape(12.dp)
+      )
 
-        for (week in 0 until weeks) {
-          Row(
-            horizontalArrangement = Arrangement.SpaceAround,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-          ) {
-            for (col in 0..6) {
-              val cellIndex = week * 7 + col
-              val dayNumber = cellIndex - dayOfWeekOffset + 1
+      LunaBadge(
+        text = "Estimado",
+        backgroundColor = LunaSandSoft,
+        textColor = LunaSandText,
+        shape = RoundedCornerShape(12.dp)
+      )
 
-              if (dayNumber in 1..daysInMonth) {
-                val cellDate = displayedMonth.atDay(dayNumber)
-                val detail = CycleCalculationEngine.getDayDetail(
-                  date = cellDate,
-                  lastPeriodStart = lastPeriodStart,
-                  averagePeriodDays = averagePeriodLength,
-                  pastCycles = pastCycles,
-                  configuredAverageCycle = averageCycleLength,
-                  today = today,
-                  symptomDates = symptomDates,
-                  intimacyDates = intimacyDates,
-                  confirmedBleedingDates = confirmedBleedingDates
-                )
+      LunaBadge(
+        text = "Solo tú",
+        backgroundColor = LunaIceBlueSubtle,
+        textColor = LunaNavyPrimary,
+        shape = RoundedCornerShape(12.dp)
+      )
+    }
 
-                CalendarDayCell(
-                  dayNumber = dayNumber,
-                  detail = detail,
-                  isToday = cellDate.isEqual(today),
-                  isSelected = cellDate.isEqual(selectedDate),
-                  onClick = { onDateSelected(cellDate) },
-                  modifier = Modifier
-                    .weight(1f)
-                    .testTag("calendar_date_${cellDate}")
-                )
-              } else {
-                // Dimmed placeholder for padding days
-                Box(
-                  modifier = Modifier
-                    .weight(1f)
-                    .aspectRatio(1f)
-                )
-              }
-            }
-          }
+    Spacer(modifier = Modifier.height(24.dp))
+
+    // 6. Detalle del Día Seleccionado (Figma #5:336)
+    val selectedDateStr = selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", localeEs))
+      .replaceFirstChar { if (it.isLowerCase()) it.titlecase(localeEs) else it.toString() }
+
+    Text(
+      text = selectedDateStr,
+      style = MaterialTheme.typography.titleLarge,
+      fontWeight = FontWeight.SemiBold,
+      color = MaterialTheme.colorScheme.onBackground
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // Panel: Cómo te sentiste (Figma Patrón 09 #15:162)
+    Surface(
+      shape = RoundedCornerShape(16.dp),
+      color = if (isDark) LunaDarkSurface else LunaSurfaceLight,
+      border = BorderStroke(1.dp, if (isDark) LunaDarkBorder else LunaBorderLight),
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Column(modifier = Modifier.padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            imageVector = Icons.Default.Tune,
+            contentDescription = null,
+            tint = if (isDark) LunaIceBlueAccent else LunaNavyPrimary,
+            modifier = Modifier.size(20.dp)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "Cómo te sentiste",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+          )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Legend row
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-        ) {
-          LegendItem(color = PhaseMenstrualRose, label = "Periodo confirmado")
-          LegendItem(color = PhaseMenstrualRose, isOutlined = true, label = "Periodo estimado / proyectado")
-          LegendItem(color = PhaseFertileSage, label = "Ventana fértil")
-          LegendItem(color = PhaseOvulationGold, isStar = true, label = "Ovulación")
-          LegendItem(color = PhaseLutealLavender, label = "Síntoma")
-          LegendItem(color = PhaseMenstrualRose, isDot = true, label = "Intimidad")
+        if (selectedDateSymptom != null) {
+          val symptomItems = mutableListOf<String>()
+          if (selectedDateSymptom.cramps) symptomItems.add("Cólicos leves")
+          if (selectedDateSymptom.headache) symptomItems.add("Cefalea")
+          if (selectedDateSymptom.backPain) symptomItems.add("Dolor lumbar")
+          if (selectedDateSymptom.bloating) symptomItems.add("Inflamación")
+          if (selectedDateSymptom.painLevel > 0) symptomItems.add("Dolor ${selectedDateSymptom.painLevel}/5")
+          if (selectedDateSymptom.energyLevel > 0) symptomItems.add("Energía ${selectedDateSymptom.energyLevel}/5")
+          if (!selectedDateSymptom.publicNote.isNullOrBlank()) symptomItems.add(selectedDateSymptom.publicNote!!)
+
+          val summaryText = if (symptomItems.isNotEmpty()) symptomItems.joinToString(" · ") else "Sin molestias físicas registradas"
+          Text(
+            text = summaryText,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onBackground
+          )
+
+          Spacer(modifier = Modifier.height(4.dp))
+
+          Text(
+            text = "Solo tú puedes ver tu nota privada.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        } else {
+          Text(
+            text = "Sin síntomas registrados para esta fecha.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
         }
+      }
     }
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // Selected Day Insight Card
-    DayDetailCard(
-      detail = selectedDayDetail,
-      selectedDate = selectedDate,
-      hasCycles = pastCycles.isNotEmpty(),
-      todaySymptom = selectedDateSymptom,
-      isToday = selectedDate.isEqual(today),
-      canLogSymptoms = canLogSymptoms,
-      onLogSymptoms = { onOpenSymptomDialogForDate(selectedDate) },
-      onOpenPeriodDialog = if (onOpenPeriodDialogForDate != null || onOpenPeriodDialog != null) {
-        {
-          if (onOpenPeriodDialogForDate != null) {
-            onOpenPeriodDialogForDate(selectedDate)
-          } else {
-            onOpenPeriodDialog?.invoke()
-          }
-        }
-      } else null
-    )
+    // Botón de acción para el día seleccionado
+    if (canLogSymptoms) {
+      val isSymptomLogged = selectedDateSymptom != null
+      LunaButton(
+        text = if (isSymptomLogged) "Editar registro del día" else "Registrar síntomas de este día",
+        onClick = { onOpenSymptomDialogForDate(selectedDate) },
+        type = if (isSymptomLogged) LunaButtonType.SECONDARY else LunaButtonType.PRIMARY,
+        icon = Icons.Default.Edit,
+        modifier = Modifier.testTag(if (isSymptomLogged) "edit_day_symptoms_cta" else "log_symptoms_for_date_cta")
+      )
+
+      if (onOpenPeriodDialogForDate != null || onOpenPeriodDialog != null) {
+        Spacer(modifier = Modifier.height(8.dp))
+        LunaButton(
+          text = "Registrar periodo en esta fecha",
+          onClick = {
+            if (onOpenPeriodDialogForDate != null) {
+              onOpenPeriodDialogForDate(selectedDate)
+            } else {
+              onOpenPeriodDialog?.invoke()
+            }
+          },
+          type = LunaButtonType.SECONDARY,
+          icon = Icons.Default.CalendarMonth,
+          modifier = Modifier.testTag("register_period_for_date_cta")
+        )
+      }
+    }
   }
 }
 
+/**
+ * Celda de día individual del calendario siguiendo exactamente el diseño de Figma #5:260
+ */
 @Composable
-private fun CalendarDayCell(
+private fun CalendarFigmaCell(
   dayNumber: Int,
   detail: com.example.data.model.DayCycleDetail,
   isToday: Boolean,
   isSelected: Boolean,
+  isDark: Boolean,
   onClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
   val shape = RoundedCornerShape(12.dp)
 
-  // Determine background and text colors based on clinical phase
-  val (bgColor, textColor, borderColor) = when (detail.highlightType) {
-    DayHighlightType.ACTUAL_PERIOD -> Triple(PhaseMenstrualRose, Color.White, Color.Transparent)
-    DayHighlightType.PREDICTED_PERIOD -> Triple(PhaseMenstrualSubtle, PhaseMenstrualRose, PhaseMenstrualRose.copy(alpha = 0.5f))
-    DayHighlightType.OVULATION_DAY -> Triple(PhaseFertileSubtle, PhaseFertileSage, PhaseOvulationGold)
-    DayHighlightType.FERTILE_WINDOW -> Triple(PhaseFertileSubtle, PhaseFertileSage, Color.Transparent)
-    DayHighlightType.FOLLICULAR -> Triple(Color.Transparent, MaterialTheme.colorScheme.onSurface, Color.Transparent)
-    DayHighlightType.LUTEAL -> Triple(Color.Transparent, MaterialTheme.colorScheme.onSurface, Color.Transparent)
-    DayHighlightType.NONE -> Triple(Color.Transparent, MaterialTheme.colorScheme.onSurface, Color.Transparent)
+  // Color de fondo y borde según highlightType
+  val isActualPeriod = detail.highlightType == DayHighlightType.ACTUAL_PERIOD
+  val isPredictedPeriod = detail.highlightType == DayHighlightType.PREDICTED_PERIOD
+
+  val cellBg = when {
+    isSelected -> if (isDark) LunaIceBlueAccent else LunaNavyPrimary
+    isActualPeriod -> LunaCoralSoft
+    isPredictedPeriod -> Color.Transparent
+    else -> Color.Transparent
+  }
+
+  val textColor = when {
+    isSelected -> if (isDark) LunaNavyPrimary else Color.White
+    isActualPeriod -> LunaPeriodRed
+    isPredictedPeriod -> LunaPeriodRed
+    else -> if (isDark) LunaTextPrimary else MaterialTheme.colorScheme.onBackground
+  }
+
+  val border = when {
+    isSelected -> null
+    isPredictedPeriod -> BorderStroke(1.dp, LunaPeriodRed)
+    isToday -> BorderStroke(1.dp, if (isDark) LunaIceBlueAccent else LunaNavyPrimary)
+    else -> null
   }
 
   Box(
     contentAlignment = Alignment.Center,
     modifier = modifier
       .aspectRatio(1f)
-      .padding(2.dp)
       .clip(shape)
-      .background(bgColor)
-      .then(
-        if (isSelected) {
-          Modifier.border(2.dp, BrandTerracottaRose, shape)
-        } else if (borderColor != Color.Transparent) {
-          Modifier.border(1.dp, borderColor, shape)
-        } else if (isToday) {
-          Modifier.border(1.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), shape)
-        } else {
-          Modifier
-        }
-      )
-      .clickable { onClick() }
-      .testTag("calendar_day_${dayNumber}")
+      .background(cellBg)
+      .then(if (border != null) Modifier.border(border, shape) else Modifier)
+      .clickable(onClick = onClick)
+      .testTag("calendar_day_$dayNumber")
   ) {
     Column(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center
     ) {
-      // Day Number
       Text(
         text = dayNumber.toString(),
-        fontSize = 13.sp,
-        fontWeight = if (detail.highlightType == DayHighlightType.ACTUAL_PERIOD || isSelected) FontWeight.Bold else FontWeight.Medium,
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = if (isSelected || isActualPeriod) FontWeight.SemiBold else FontWeight.Normal,
         color = textColor
       )
 
-      // Micro indicators for Ovulation, Symptoms, or Intimacy
-      Row(
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(top = 1.dp)
-      ) {
-        if (detail.highlightType == DayHighlightType.OVULATION_DAY) {
-          Box(
-            modifier = Modifier
-              .size(4.dp)
-              .clip(CircleShape)
-              .background(PhaseOvulationGold)
-          )
-        } else if (detail.hasSymptomLogged) {
-          Box(
-            modifier = Modifier
-              .size(4.dp)
-              .clip(CircleShape)
-              .background(PhaseLutealLavender)
-          )
-        }
-
-        if (detail.hasIntimacyLogged) {
-          Spacer(modifier = Modifier.width(2.dp))
-          Box(
-            modifier = Modifier
-              .size(4.dp)
-              .clip(CircleShape)
-              .background(PhaseMenstrualRose)
-          )
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun LegendItem(
-  color: Color,
-  label: String,
-  isOutlined: Boolean = false,
-  isStar: Boolean = false,
-  isDot: Boolean = false
-) {
-  Row(verticalAlignment = Alignment.CenterVertically) {
-    if (isStar) {
-      Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-          .size(12.dp)
-          .clip(CircleShape)
-          .background(color)
-      ) {
-        Icon(Icons.Default.Star, contentDescription = null, tint = Color.White, modifier = Modifier.size(8.dp))
-      }
-    } else if (isDot) {
-      Box(
-        modifier = Modifier
-          .size(8.dp)
-          .clip(CircleShape)
-          .background(color)
-      )
-    } else {
-      Box(
-        modifier = Modifier
-          .size(10.dp)
-          .clip(RoundedCornerShape(3.dp))
-          .background(if (isOutlined) color.copy(alpha = 0.2f) else color)
-          .then(if (isOutlined) Modifier.border(1.dp, color, RoundedCornerShape(3.dp)) else Modifier)
-      )
-    }
-    Spacer(modifier = Modifier.width(4.dp))
-    Text(
-      text = label,
-      fontSize = 10.sp,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-  }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun DayDetailCard(
-  detail: com.example.data.model.DayCycleDetail,
-  selectedDate: LocalDate,
-  hasCycles: Boolean = true,
-  todaySymptom: DailySymptom?,
-  isToday: Boolean,
-  canLogSymptoms: Boolean = true,
-  onLogSymptoms: () -> Unit,
-  onOpenPeriodDialog: (() -> Unit)? = null,
-  modifier: Modifier = Modifier
-) {
-  val dateTitle = selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("es", "ES")))
-    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-
-  LunaCard(
-    modifier = modifier.fillMaxWidth()
-  ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Column(modifier = Modifier.weight(1f)) {
-        Text(
-          text = dateTitle,
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-          text = detail.phaseName,
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.SemiBold,
-          color = when (detail.highlightType) {
-            DayHighlightType.ACTUAL_PERIOD -> PhaseMenstrualRose
-            DayHighlightType.PREDICTED_PERIOD -> PhaseMenstrualRose
-            DayHighlightType.OVULATION_DAY -> PhaseFertileSage
-            DayHighlightType.FERTILE_WINDOW -> PhaseFertileSage
-            DayHighlightType.FOLLICULAR -> PhaseFollicularPeach
-            DayHighlightType.LUTEAL -> PhaseLutealLavender
-            DayHighlightType.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
-          }
-        )
-      }
-
-      if (detail.isPredicted) {
-        val isFuture = detail.date.isAfter(LocalDate.now())
-        val badgeText = if (isFuture) "Proyección Futura" else "Estimación no confirmada"
-        LunaBadge(
-          text = badgeText,
-          style = LunaBadgeStyle.ESTIMATE
-        )
-      }
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    // Hormonal / Biological Insight for women
-    Surface(
-      shape = RoundedCornerShape(14.dp),
-      color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
-    ) {
-      Row(modifier = Modifier.padding(12.dp)) {
-        Icon(
-          Icons.Default.Spa,
-          contentDescription = null,
-          tint = BrandTerracottaRose,
-          modifier = Modifier.size(18.dp).padding(top = 2.dp)
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-          text = detail.hormoneInsight,
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurface,
-          lineHeight = 18.sp
-        )
-      }
-    }
-
-      // Display logged symptoms if they exist
-      if (todaySymptom != null) {
-        Spacer(modifier = Modifier.height(14.dp))
-        Text(
-          text = "REGISTRADO PARA ESTE DÍA:",
-          style = MaterialTheme.typography.labelSmall,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.fillMaxWidth()
+      // Indicadores puntuales (manchado, síntoma, intimidad)
+      if (detail.hasSymptomLogged || detail.hasIntimacyLogged) {
+        Spacer(modifier = Modifier.height(2.dp))
+        Row(
+          horizontalArrangement = Arrangement.Center,
+          verticalAlignment = Alignment.CenterVertically
         ) {
-          if (todaySymptom.flowLevel != "NONE") {
-            DetailChip(text = "Flujo: ${todaySymptom.flowLevel}", color = PhaseMenstrualRose)
+          if (detail.hasSymptomLogged) {
+            Box(
+              modifier = Modifier
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(if (isSelected) (if (isDark) LunaNavyPrimary else Color.White) else LunaSageText)
+            )
           }
-          if (todaySymptom.cramps) {
-            DetailChip(text = "Cólicos", color = PhaseMenstrualRose)
-          }
-          if (todaySymptom.tenderBreasts) {
-            DetailChip(text = "Senos sensibles", color = PhaseLutealLavender)
-          }
-          if (todaySymptom.cravings) {
-            DetailChip(text = "Antojos", color = PhaseFollicularPeach)
-          }
-          if (todaySymptom.cervicalMucus != "NONE") {
-            DetailChip(text = "Moco: ${todaySymptom.cervicalMucus}", color = PhaseFertileSage)
-          }
-          DetailChip(text = "Ánimo: ${todaySymptom.mood}", color = BrandTerracottaRose)
-        }
-      }
-
-      if (canLogSymptoms) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Primary Button for logging
-        Button(
-          onClick = onLogSymptoms,
-          shape = RoundedCornerShape(14.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
-          modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .testTag("log_symptoms_for_selected_date_button")
-        ) {
-          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = if (todaySymptom != null) "Editar registro de este día" else "Registrar síntomas de este día",
-            fontWeight = FontWeight.SemiBold
-          )
-        }
-
-        if (onOpenPeriodDialog != null) {
-          Spacer(modifier = Modifier.height(8.dp))
-          androidx.compose.material3.OutlinedButton(
-            onClick = onOpenPeriodDialog,
-            shape = RoundedCornerShape(14.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, PhaseMenstrualRose.copy(alpha = 0.5f)),
-            modifier = Modifier
-              .fillMaxWidth()
-              .height(46.dp)
-              .testTag("manage_period_from_calendar_button")
-          ) {
-            Icon(Icons.Default.Spa, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = if (!hasCycles) "Registrar primer periodo" else "Registrar / Corregir inicio de periodo",
-              color = PhaseMenstrualRose,
-              fontWeight = FontWeight.SemiBold
+          if (detail.hasIntimacyLogged) {
+            Spacer(modifier = Modifier.width(2.dp))
+            Box(
+              modifier = Modifier
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(if (isSelected) (if (isDark) LunaNavyPrimary else Color.White) else LunaPeriodRed)
             )
           }
         }
       }
     }
-  }
-
-@Composable
-private fun DetailChip(text: String, color: Color) {
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = color.copy(alpha = 0.12f),
-    modifier = Modifier.border(0.5.dp, color.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-  ) {
-    Text(
-      text = text,
-      fontSize = 11.sp,
-      fontWeight = FontWeight.SemiBold,
-      color = color,
-      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-    )
   }
 }

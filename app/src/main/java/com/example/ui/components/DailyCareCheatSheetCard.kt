@@ -30,11 +30,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CareTip
-import com.example.ui.theme.BrandTerracottaRose
-import com.example.ui.theme.PhaseFertileSage
-import com.example.ui.theme.PhaseFollicularPeach
-import com.example.ui.theme.PhaseLutealLavender
-import com.example.ui.theme.PhaseMenstrualRose
+import com.example.data.model.CyclePhase
+import com.example.ui.theme.LunaNavyPrimary
+import com.example.ui.theme.LunaPeriodRed
+import com.example.ui.theme.LunaSageSoft
+import com.example.ui.theme.LunaSageText
+import com.example.ui.theme.LunaSandSoft
+import com.example.ui.theme.LunaSandText
+
+@Composable
+fun DailyCareCheatSheetCard(
+  cyclePhase: CyclePhase?,
+  tips: List<CareTip>,
+  modifier: Modifier = Modifier
+) {
+  DailyCareCheatSheetCard(careTips = tips, modifier = modifier)
+}
 
 @Composable
 fun DailyCareCheatSheetCard(
@@ -50,7 +61,7 @@ fun DailyCareCheatSheetCard(
       text = "GUÍA DE CUIDADOS DIARIOS",
       style = MaterialTheme.typography.labelSmall,
       fontWeight = FontWeight.Bold,
-      color = BrandTerracottaRose,
+      color = LunaNavyPrimary,
       letterSpacing = 0.8.sp
     )
     Spacer(modifier = Modifier.height(2.dp))
@@ -65,11 +76,11 @@ fun DailyCareCheatSheetCard(
 
     careTips.forEachIndexed { index, tip ->
       val (icon, tintColor, bgTint) = when (tip.categoryIcon) {
-        "tea" -> Triple(Icons.Default.Spa, PhaseFertileSage, PhaseFertileSage.copy(alpha = 0.14f))
-        "massage" -> Triple(Icons.Default.SelfImprovement, PhaseLutealLavender, PhaseLutealLavender.copy(alpha = 0.14f))
-        "food" -> Triple(Icons.Default.Restaurant, PhaseFollicularPeach, PhaseFollicularPeach.copy(alpha = 0.14f))
-        "star" -> Triple(Icons.Default.Star, BrandTerracottaRose, BrandTerracottaRose.copy(alpha = 0.14f))
-        else -> Triple(Icons.Default.Favorite, PhaseMenstrualRose, PhaseMenstrualRose.copy(alpha = 0.14f))
+        "tea" -> Triple(Icons.Default.Spa, LunaSageText, LunaSageSoft)
+        "massage" -> Triple(Icons.Default.SelfImprovement, LunaNavyPrimary, LunaNavyPrimary.copy(alpha = 0.12f))
+        "food" -> Triple(Icons.Default.Restaurant, LunaSandText, LunaSandSoft)
+        "star" -> Triple(Icons.Default.Star, LunaNavyPrimary, LunaNavyPrimary.copy(alpha = 0.12f))
+        else -> Triple(Icons.Default.Favorite, LunaPeriodRed, LunaPeriodRed.copy(alpha = 0.12f))
       }
 
       Row(

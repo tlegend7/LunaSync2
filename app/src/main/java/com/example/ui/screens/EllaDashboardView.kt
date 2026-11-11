@@ -1,41 +1,33 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.SelfImprovement
-import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,36 +37,51 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CheckIn
 import com.example.data.model.CyclePhase
 import com.example.data.model.CycleStatusData
 import com.example.data.model.DailySymptom
-import com.example.data.model.EncounterType
 import com.example.data.model.IntimacyLog
 import com.example.data.model.PartnerObservation
 import com.example.data.model.QuickResponseOption
 import com.example.ui.components.CheckInBannerComponent
-import com.example.ui.components.CycleDialComponent
 import com.example.ui.components.LunaBadge
 import com.example.ui.components.LunaBadgeStyle
+import com.example.ui.components.LunaButton
+import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaCard
+import com.example.ui.components.LunaNavigationRow
 import com.example.ui.components.SpottingSuggestionCard
-import com.example.ui.theme.AppleHairlineBorder
-import com.example.ui.theme.AppleSystemGray5
-import com.example.ui.theme.BrandTerracottaRose
-import com.example.ui.theme.BrandWarmRose
-import com.example.ui.theme.PhaseFertileSage
-import com.example.ui.theme.PhaseFertileSubtle
-import com.example.ui.theme.PhaseFollicularPeach
-import com.example.ui.theme.PhaseFollicularSubtle
-import com.example.ui.theme.PhaseLutealLavender
-import com.example.ui.theme.PhaseLutealSubtle
-import com.example.ui.theme.PhaseMenstrualRose
-import com.example.ui.theme.PhaseMenstrualSubtle
+import com.example.ui.theme.LunaBorderLight
+import com.example.ui.theme.LunaCoralSoft
+import com.example.ui.theme.LunaCoralText
+import com.example.ui.theme.LunaDarkBorder
+import com.example.ui.theme.LunaDarkSurface
+import com.example.ui.theme.LunaIceBlueAccent
+import com.example.ui.theme.LunaIceBlueSubtle
+import com.example.ui.theme.LunaIceBlueText
+import com.example.ui.theme.LunaNavyDarkCard
+import com.example.ui.theme.LunaNavyPrimary
+import com.example.ui.theme.LunaPeriodRed
+import com.example.ui.theme.LunaSageSoft
+import com.example.ui.theme.LunaSageText
+import com.example.ui.theme.LunaSandSoft
+import com.example.ui.theme.LunaSandText
+import com.example.ui.theme.LunaSurfaceLight
+import com.example.ui.theme.LunaTextPrimary
+import com.example.ui.theme.LunaTextSecondary
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Pantalla principal de la mujer (Figma: woman · Hoy, a tu ritmo. #5:89)
+ */
 @Composable
 fun EllaDashboardView(
   cycleStatus: CycleStatusData?,
@@ -90,515 +97,325 @@ fun EllaDashboardView(
   onQuickReplySelected: (QuickResponseOption) -> Unit,
   onAcceptSpotting: () -> Unit,
   onDismissSpotting: () -> Unit,
+  selectedDate: LocalDate = LocalDate.now(),
+  onSelectDate: (LocalDate) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
+  val isDark = MaterialTheme.colorScheme.background.red < 0.2f
+  val localeEs = Locale("es", "ES")
+
+  // Formato de fecha para el encabezado: "Jueves, 18 de junio"
+  val dateTitleFormatter = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", localeEs)
+  val formattedDate = selectedDate.format(dateTitleFormatter)
+    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(localeEs) else it.toString() }
+
   Column(
     modifier = modifier
       .fillMaxSize()
       .background(MaterialTheme.colorScheme.background)
       .verticalScroll(rememberScrollState())
-      .padding(horizontal = 16.dp, vertical = 6.dp)
+      .padding(horizontal = 24.dp)
+      .padding(top = 12.dp, bottom = 100.dp)
   ) {
-    // Central Cycle Dial
-    Box(
-      contentAlignment = Alignment.Center,
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 4.dp)
-    ) {
-      CycleDialComponent(cycleStatus = cycleStatus)
-    }
+    // 1. Título y fecha
+    Text(
+      text = "Hoy, a tu ritmo.",
+      style = MaterialTheme.typography.displaySmall,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.onBackground
+    )
 
     Spacer(modifier = Modifier.height(4.dp))
 
-    // If no cycle status registered yet, show dedicated Onboarding Period Card
-    if (cycleStatus == null) {
-      LunaCard(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(bottom = 12.dp),
-        borderColor = PhaseMenstrualRose.copy(alpha = 0.4f)
-      ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(Icons.Default.Spa, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(20.dp))
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "Bienvenida a tu seguimiento",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = PhaseMenstrualRose
-          )
+    Text(
+      text = "$formattedDate · Tu registro es personal.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    // 2. Carrusel semanal horizontal (Figma Patrón 04 / Semana 15–21 junio)
+    val startOfWeek = selectedDate.with(DayOfWeek.MONDAY)
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      for (i in 0..6) {
+        val currentDay = startOfWeek.plusDays(i.toLong())
+        val isSelected = currentDay == selectedDate
+        val dayLetter = currentDay.dayOfWeek.getDisplayName(TextStyle.NARROW, localeEs).uppercase()
+        val dayNumber = currentDay.dayOfMonth.toString()
+
+        val itemBg = if (isSelected) {
+          if (isDark) LunaIceBlueAccent else LunaNavyPrimary
+        } else {
+          if (isDark) LunaDarkSurface else LunaSurfaceLight
         }
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-          text = "Registra el primer día de tu última menstruación para que LunaSync aprenda tus patrones reales y calcule tus fases biológicas.",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
-          onClick = onOpenPeriodDialog,
-          shape = RoundedCornerShape(14.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = PhaseMenstrualRose),
+
+        val textColor = if (isSelected) {
+          if (isDark) LunaNavyPrimary else Color.White
+        } else {
+          MaterialTheme.colorScheme.onBackground
+        }
+
+        val captionColor = if (isSelected) {
+          if (isDark) LunaNavyPrimary else Color.White
+        } else {
+          MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = itemBg,
+          border = if (!isSelected) BorderStroke(1.dp, if (isDark) LunaDarkBorder else LunaBorderLight) else null,
           modifier = Modifier
-            .fillMaxWidth()
-            .testTag("register_period_start_cta")
+            .weight(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onSelectDate(currentDay) }
         ) {
-          Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
-          Spacer(modifier = Modifier.width(6.dp))
-          Text("Registrar inicio de mi periodo", fontWeight = FontWeight.SemiBold)
+          Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 10.dp)
+          ) {
+            Text(
+              text = dayLetter,
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
+              color = captionColor
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              text = dayNumber,
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.SemiBold,
+              color = textColor
+            )
+          }
         }
       }
     }
 
-    // Interactive Check-In Banner from Partner (if active)
+    Spacer(modifier = Modifier.height(20.dp))
+
+    // 3. Hero Card: Resumen del ciclo (Figma #5:161)
+    if (cycleStatus == null) {
+      // Estado sin historial (Figma #5:1091: empty · Tu historia empieza contigo)
+      Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = LunaNavyDarkCard,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+          Text(
+            text = "TU HISTORIA EMPIEZA CONTIGO",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = LunaIceBlueText,
+            letterSpacing = 0.5.sp
+          )
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(
+            text = "Sin fechas inventadas",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+          )
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = "Registra el primer día de tu última menstruación para calcular tus fases reales con base biológica.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = LunaIceBlueText
+          )
+          Spacer(modifier = Modifier.height(16.dp))
+          LunaButton(
+            text = "Registrar inicio menstrual",
+            onClick = onOpenPeriodDialog,
+            type = LunaButtonType.PRIMARY,
+            icon = Icons.Default.CalendarMonth,
+            modifier = Modifier.testTag("register_period_start_cta")
+          )
+        }
+      }
+    } else {
+      val dayNum = cycleStatus.currentDay
+      val nextPeriodEstimate = cycleStatus.estimatedNextPeriodStart
+      val nextPeriodStr = if (nextPeriodEstimate != null) {
+        val formatterShort = DateTimeFormatter.ofPattern("d 'de' MMMM", localeEs)
+        nextPeriodEstimate.format(formatterShort)
+      } else {
+        "En cálculo"
+      }
+
+      Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = LunaNavyDarkCard,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Text(
+              text = "TU CICLO",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.SemiBold,
+              color = LunaIceBlueText,
+              letterSpacing = 0.5.sp
+            )
+
+            LunaBadge(
+              text = if (cycleStatus.isDelayed) "Ciclo Abierto" else "Estimación",
+              style = if (cycleStatus.isDelayed) LunaBadgeStyle.FACT else LunaBadgeStyle.ESTIMATE
+            )
+          }
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          Text(
+            text = "Día $dayNum",
+            style = MaterialTheme.typography.displayLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+          )
+
+          Spacer(modifier = Modifier.height(4.dp))
+
+          Text(
+            text = "Próximo periodo estimado · $nextPeriodStr",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = Color.White
+          )
+
+          Spacer(modifier = Modifier.height(4.dp))
+
+          Text(
+            text = "Las fechas pueden variar. Basado en tus registros.",
+            style = MaterialTheme.typography.bodySmall,
+            color = LunaIceBlueText
+          )
+        }
+      }
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    // 4. Botón principal: Registrar cómo me siento (Figma #5:166)
+    LunaButton(
+      text = if (cycleStatus == null) "Registrar inicio de ciclo" else "Registrar cómo me siento",
+      onClick = {
+        if (cycleStatus == null) onOpenPeriodDialog() else onOpenSymptomDialog()
+      },
+      type = LunaButtonType.PRIMARY,
+      icon = Icons.Default.Edit,
+      modifier = Modifier.testTag("log_symptoms_cta")
+    )
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    // 5. Encabezado de sección: Tus registros (Figma #5:168)
+    Text(
+      text = "Tus registros",
+      style = MaterialTheme.typography.titleLarge,
+      fontWeight = FontWeight.SemiBold,
+      color = MaterialTheme.colorScheme.onBackground
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // Fila: Menstruación (Figma Patrón 05 #15:107)
+    LunaNavigationRow(
+      title = "Menstruación",
+      subtitle = if (cycleStatus != null) "Ciclo en curso · Día ${cycleStatus.currentDay}" else "Sin registros de inicio",
+      onClick = onOpenPeriodDialog,
+      icon = Icons.Default.WaterDrop,
+      iconTint = LunaPeriodRed,
+      modifier = Modifier.testTag("open_period_dialog_row")
+    )
+
+    HorizontalDivider(color = if (isDark) LunaDarkBorder else LunaBorderLight, thickness = 1.dp)
+
+    // Fila: Intimidad (Figma Patrón 06 #15:118)
+    val intimacyCount = intimacyLogs.size
+    LunaNavigationRow(
+      title = "Intimidad",
+      subtitle = if (intimacyCount > 0) "$intimacyCount registros íntimos protegidos" else "Un registro que tú controlas.",
+      onClick = onOpenIntimacyDialog,
+      icon = Icons.Default.Lock,
+      iconTint = LunaNavyPrimary,
+      modifier = Modifier.testTag("log_intimacy_cta")
+    )
+
+    // Fila: Calendario de acceso rápido
+    HorizontalDivider(color = if (isDark) LunaDarkBorder else LunaBorderLight, thickness = 1.dp)
+
+    LunaNavigationRow(
+      title = "Tu calendario",
+      subtitle = "Consulta tu historial de ciclos y registros",
+      onClick = onNavigateToCalendar,
+      icon = Icons.Default.CalendarMonth,
+      iconTint = LunaSageText,
+      modifier = Modifier.testTag("open_calendar_cta")
+    )
+
+    // 6. Mensaje de apoyo de la pareja o Check-In activo (Figma Patrón 07 #15:124)
     if (latestCheckIn != null) {
+      Spacer(modifier = Modifier.height(16.dp))
       CheckInBannerComponent(
         checkIn = latestCheckIn,
         isElla = true,
-        onQuickReplySelected = onQuickReplySelected,
-        modifier = Modifier.padding(bottom = 12.dp)
+        onQuickReplySelected = onQuickReplySelected
       )
+    } else if (partnerObservations.isNotEmpty()) {
+      val latestObs = partnerObservations.firstOrNull()
+      val sweetMsg = latestObs?.sweetMessage
+      val careAction = latestObs?.careActionTaken
+      if (!sweetMsg.isNullOrBlank() || !careAction.isNullOrBlank()) {
+        Spacer(modifier = Modifier.height(16.dp))
+        Surface(
+          shape = RoundedCornerShape(16.dp),
+          color = if (isDark) LunaDarkSurface else LunaSageSoft,
+          border = BorderStroke(1.dp, if (isDark) LunaDarkBorder else LunaSageSoft),
+          modifier = Modifier.fillMaxWidth().testTag("partner_message_card")
+        ) {
+          Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = LunaSageText,
+                modifier = Modifier.size(20.dp)
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = "Un mensaje de tu pareja",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground
+              )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            val textContent = sweetMsg ?: careAction ?: ""
+            Text(
+              text = "“$textContent”",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+      }
     }
 
-    // Spotting Suggestion Card (if partner noted verbal spotting)
+    // 7. Tarjeta de Sugerencia de Manchado (si la pareja reportó observación)
     if (activeSpottingSuggestion != null) {
+      Spacer(modifier = Modifier.height(16.dp))
       SpottingSuggestionCard(
         onAccept = onAcceptSpotting,
-        onDismiss = onDismissSpotting,
-        modifier = Modifier.padding(bottom = 12.dp)
+        onDismiss = onDismissSpotting
       )
-    }
-
-    // Fast Action Bar (3 acciones adaptativas con escalado fluido para texto ampliado)
-    FlowRow(
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Button(
-        onClick = { if (cycleStatus == null) onOpenPeriodDialog() else onOpenSymptomDialog() },
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
-        modifier = Modifier
-          .weight(1f)
-          .heightIn(min = 48.dp)
-          .testTag("log_symptoms_cta")
-      ) {
-        Icon(if (cycleStatus == null) Icons.Default.CalendarMonth else Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(if (cycleStatus == null) "Periodo" else "Registrar", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-      }
-
-      OutlinedButton(
-        onClick = onNavigateToCalendar,
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = ButtonDefaults.outlinedButtonColors(
-          containerColor = MaterialTheme.colorScheme.surface,
-          contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        modifier = Modifier
-          .weight(1f)
-          .heightIn(min = 48.dp)
-          .testTag("open_calendar_cta")
-      ) {
-        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = PhaseFertileSage, modifier = Modifier.size(16.dp))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text("Calendario", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-      }
-
-      FilledTonalButton(
-        onClick = onOpenIntimacyDialog,
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(
-          containerColor = MaterialTheme.colorScheme.surface,
-          contentColor = PhaseMenstrualRose
-        ),
-        modifier = Modifier
-          .weight(1f)
-          .heightIn(min = 48.dp)
-          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
-          .testTag("log_intimacy_cta")
-      ) {
-        Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp), tint = PhaseMenstrualRose)
-        Spacer(modifier = Modifier.width(4.dp))
-        Text("Intimidad", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-      }
-    }
-
-    Spacer(modifier = Modifier.height(14.dp))
-
-    // Hormonal & Cycle Wisdom Card (Empathetic female health card)
-    val isNull = cycleStatus == null
-    val phase = cycleStatus?.currentPhase ?: CyclePhase.FOLLICULAR
-    val dayNum = cycleStatus?.currentDay ?: 0
-    val delayedDays = cycleStatus?.delayedDays ?: 0
-    val (wisdomTitle, wisdomText, wisdomIconTint, wisdomBg) = if (isNull) {
-      Quad(
-        "Tu ciclo con base en datos reales",
-        "Registra la fecha de inicio de tu periodo para activar estimaciones orientativas de tus fases y sugerencias de autocuidado.",
-        BrandTerracottaRose,
-        PhaseFollicularSubtle
-      )
-    } else if (cycleStatus?.isDelayed == true || phase == CyclePhase.DELAYED) {
-      Quad(
-        "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de variación)",
-        "Tu ciclo actual continúa abierto sin reinicios artificiales. Se ha superado la fecha estimada para el próximo periodo. Es natural que el ciclo varíe según descanso o cambios hormonales. Tu registro se mantendrá exacto hasta confirmar un nuevo sangrado.",
-        PhaseLutealLavender,
-        PhaseLutealSubtle
-      )
-    } else {
-      when (phase) {
-        CyclePhase.MENSTRUAL -> Quad(
-          "Fase Menstrual • Renovación y Pausa",
-          "Durante el sangrado muchas personas experimentan menor energía física o mayor sensibilidad. Las bebidas tibias, las pausas y el descanso pueden resultar reconfortantes según lo que tu cuerpo pida hoy.",
-          PhaseMenstrualRose,
-          PhaseMenstrualSubtle
-        )
-        CyclePhase.FOLLICULAR -> Quad(
-          "Fase Folicular • Transición y Actividad",
-          "El estrógeno suele aumentar en esta fase, lo que en muchas personas se acompaña de mayor energía física o disposición para retomar proyectos.",
-          PhaseFollicularPeach,
-          PhaseFollicularSubtle
-        )
-        CyclePhase.OVULATORY -> Quad(
-          "Fase Ovulatoria • Ventana Fértil Estimada",
-          "Ventana fértil estimada del ciclo. Alrededor de la ovulación suele observarse moco cervical más elástico y fluido. Cada cuerpo experimenta esta etapa de forma particular.",
-          PhaseFertileSage,
-          PhaseFertileSubtle
-        )
-        CyclePhase.LUTEAL -> Quad(
-          "Fase Lútea • Calma & Escucha",
-          "La progesterona suele predominar en esta etapa. Algunas personas sienten mayor necesidad de descanso, comidas reconfortantes o pausas en su rutina.",
-          PhaseLutealLavender,
-          PhaseLutealSubtle
-        )
-        CyclePhase.DELAYED -> Quad(
-          "Fecha Estimada Superada • Día $dayNum (${delayedDays}d de variación)",
-          "Tu ciclo actual continúa abierto sin reinicios artificiales. Se ha superado la fecha estimada para el próximo periodo. Mantén la calma y escucha a tu cuerpo.",
-          PhaseLutealLavender,
-          PhaseLutealSubtle
-        )
-      }
-    }
-
-    LunaCard(
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-          contentAlignment = Alignment.Center,
-          modifier = Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(wisdomBg)
-        ) {
-          Icon(Icons.Default.Spa, contentDescription = null, tint = wisdomIconTint, modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.width(10.dp))
-        Column {
-          Text(
-            text = if (isNull) "INFORMACIÓN BIOLÓGICA ORIENTATIVA" else "ORIENTACIÓN BIOLÓGICA (DÍA $dayNum)",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = wisdomIconTint,
-            letterSpacing = 0.5.sp
-          )
-          Text(
-            text = wisdomTitle,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-          )
-        }
-      }
-
-      Spacer(modifier = Modifier.height(10.dp))
-
-      Text(
-        text = wisdomText,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface,
-        lineHeight = 19.sp
-      )
-
-      if (cycleStatus != null) {
-        Spacer(modifier = Modifier.height(10.dp))
-        LunaBadge(
-          text = if (cycleStatus.isBasedOnHistory) "Estimación basada en tu historial" else "Estimación basada en configuración estándar (${cycleStatus.totalDays}d)",
-          style = LunaBadgeStyle.ESTIMATE
-        )
-      }
-    }
-
-    Spacer(modifier = Modifier.height(14.dp))
-
-    // Partner Sweet Message or Care Action (if logged)
-    val latestObservationWithCare = partnerObservations.firstOrNull {
-      !it.careActionTaken.isNullOrBlank() || !it.sweetMessage.isNullOrBlank()
-    }
-    if (latestObservationWithCare != null) {
-      LunaCard(
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-              .size(34.dp)
-              .clip(RoundedCornerShape(10.dp))
-              .background(PhaseFertileSubtle)
-          ) {
-            Icon(Icons.Default.VolunteerActivism, contentDescription = null, tint = PhaseFertileSage, modifier = Modifier.size(18.dp))
-          }
-          Spacer(modifier = Modifier.width(10.dp))
-          Column {
-            Text(
-              text = "DETALLE DE TU PAREJA",
-              style = MaterialTheme.typography.labelSmall,
-              fontWeight = FontWeight.Bold,
-              color = PhaseFertileSage,
-              letterSpacing = 0.5.sp
-            )
-            Text(
-              text = "Acompañamiento registrado",
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.SemiBold
-            )
-          }
-        }
-
-        if (!latestObservationWithCare.careActionTaken.isNullOrBlank()) {
-          Text(
-            text = "• Acción: ${latestObservationWithCare.careActionTaken}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = 8.dp)
-          )
-        }
-
-        if (!latestObservationWithCare.sweetMessage.isNullOrBlank()) {
-          Text(
-            text = "\"${latestObservationWithCare.sweetMessage}\"",
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = PhaseLutealLavender,
-            modifier = Modifier.padding(top = 4.dp)
-          )
-        }
-      }
-      Spacer(modifier = Modifier.height(14.dp))
-    }
-
-    // Today's Registered Symptoms Summary
-    LunaCard(
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column {
-          Text(
-            text = "REGISTRO DE HOY",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 0.5.sp
-          )
-          Text(
-            text = if (todaySymptom != null) "Síntomas y sensaciones" else "Sin registro de hoy aún",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
-          )
-        }
-
-        if (todaySymptom?.isPrivate == true) {
-          LunaBadge(
-            text = "Privado",
-            style = LunaBadgeStyle.FACT,
-            icon = Icons.Default.Lock
-          )
-        }
-      }
-
-      if (todaySymptom != null) {
-        Spacer(modifier = Modifier.height(12.dp))
-
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          if (todaySymptom.flowLevel != "NONE") {
-            SymptomBadge(label = "Flujo: ${todaySymptom.flowLevel}", color = PhaseMenstrualRose)
-          }
-          if (todaySymptom.cramps) {
-            SymptomBadge(label = "Cólicos", color = PhaseMenstrualRose)
-          }
-          if (todaySymptom.tenderBreasts) {
-            SymptomBadge(label = "Senos sensibles", color = PhaseLutealLavender)
-          }
-          if (todaySymptom.cravings) {
-            SymptomBadge(label = "Antojos", color = PhaseFollicularPeach)
-          }
-          if (todaySymptom.cervicalMucus != "NONE") {
-            SymptomBadge(label = "Moco: ${todaySymptom.cervicalMucus}", color = PhaseFertileSage)
-          }
-          if (todaySymptom.headache) {
-            SymptomBadge(label = "Cefalea", color = BrandTerracottaRose)
-          }
-          if (todaySymptom.backPain) {
-            SymptomBadge(label = "Espalda baja", color = BrandTerracottaRose)
-          }
-          if (todaySymptom.bloating) {
-            SymptomBadge(label = "Hinchazón", color = BrandTerracottaRose)
-          }
-          if (todaySymptom.acne) {
-            SymptomBadge(label = "Acné/Piel", color = PhaseFollicularPeach)
-          }
-          SymptomBadge(label = "Ánimo: ${todaySymptom.mood}", color = BrandTerracottaRose)
-          SymptomBadge(label = "Energía: ${todaySymptom.energyLevel}/5", color = PhaseFollicularPeach)
-        }
-
-        if (!todaySymptom.publicNote.isNullOrBlank()) {
-          Spacer(modifier = Modifier.height(10.dp))
-          Text(
-            text = "Nota compartida: \"${todaySymptom.publicNote}\"",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      } else {
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-          text = "Toca 'Registrar' arriba para anotar cómo te sientes hoy.",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      }
-    }
-
-    Spacer(modifier = Modifier.height(14.dp))
-
-    // Intimacy Log Overview
-    LunaCard(
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Text(
-          text = "REGISTRO DE INTIMIDAD",
-          style = MaterialTheme.typography.labelSmall,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          letterSpacing = 0.5.sp
-        )
-        Text(
-          text = "${intimacyLogs.size} registrados",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      }
-
-      if (intimacyLogs.isEmpty()) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-          text = "No hay encuentros íntimos registrados recientemente.",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      } else {
-        intimacyLogs.take(3).forEach { log ->
-          Spacer(modifier = Modifier.height(10.dp))
-          Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.Favorite, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(14.dp))
-              Spacer(modifier = Modifier.width(8.dp))
-              val typeLabel = when (log.encounterType) {
-                "PROTECTED" -> "Con protección"
-                "UNPROTECTED" -> "Sin protección"
-                "OUTERCOURSE" -> "Caricias / Tocamientos"
-                else -> log.encounterType
-              }
-              Text(
-                text = "${log.date}: $typeLabel",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-              )
-              if (log.isPrivate) {
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(Icons.Default.Lock, contentDescription = "Privado", tint = PhaseLutealLavender, modifier = Modifier.size(12.dp))
-              }
-            }
-
-            // Physiological tags (Lube, Orgasm, Post Contact Effect)
-            FlowRow(
-              horizontalArrangement = Arrangement.spacedBy(4.dp),
-              modifier = Modifier.padding(start = 22.dp, top = 4.dp)
-            ) {
-              if (log.hadOrgasm) {
-                SymptomBadge("Orgasmo ✨", BrandTerracottaRose)
-              }
-              if (log.usedLubricant) {
-                SymptomBadge("Con lubricante", PhaseFertileSage)
-              }
-              if (log.postContactEffect != "NONE") {
-                val effectLabel = when (log.postContactEffect) {
-                  "AROUSAL_FLUID" -> "Fluido de excitación (trasudado)"
-                  "PH_SHIFT" -> "Flujo acuoso (semen/pH)"
-                  "CONTACT_SPOTTING" -> "Manchado leve por roce"
-                  "FRICTION_SENSITIVITY" -> "Sensibilidad por fricción"
-                  else -> log.postContactEffect
-                }
-                SymptomBadge(effectLabel, PhaseFollicularPeach)
-              }
-            }
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-        Surface(
-          shape = RoundedCornerShape(10.dp),
-          color = PhaseFertileSubtle,
-          modifier = Modifier
-            .fillMaxWidth()
-            .border(0.5.dp, PhaseFertileSage.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
-        ) {
-          Text(
-            text = "🧬 Recuerda: El fluido de excitación y el semen alteran temporalmente la consistencia del flujo y el pH durante 24-48 horas.",
-            fontSize = 11.sp,
-            color = PhaseFertileSage,
-            lineHeight = 15.sp,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-          )
-        }
-      }
     }
   }
 }
-
-@Composable
-private fun SymptomBadge(label: String, color: Color) {
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = color.copy(alpha = 0.12f),
-    modifier = Modifier.border(0.5.dp, color.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-  ) {
-    Text(
-      text = label,
-      fontSize = 11.sp,
-      fontWeight = FontWeight.SemiBold,
-      color = color,
-      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-    )
-  }
-}
-
-private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

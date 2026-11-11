@@ -2,84 +2,93 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Warm Organic Harmonic Palette (Inspired by Flo, Natural Cycles & Apple Health)
-// Natural, warm, calming and feminine tones — not cold AI monochrome
+// ============================================================================
+// LunaSync Official Design System (Figma: LunaSync / Sistema visual)
+// Base: Azul marino (#173E68, #14365A, #102943)
+// Interacción y superficies: Azul hielo (#A9CEFA, #DCE4EE, #E6EFF9, #F5F7FA)
+// Acentos discretos: Salvia (#376C59), Arena (#795D36), Coral (#AD4C5D, #A33345)
+// ============================================================================
 
-// Brand & Accent Colors
-val BrandTerracottaRose = Color(0xFFB84A5C) // Warm harmonic hero rose (contrast ratio 5.06:1 with white, passes WCAG AA)
-val BrandTerracottaSoft = Color(0xFFFBECEF)
-val BrandRoseGold = Color(0xFFD48B80)
-val BrandWarmRose = Color(0xFFD48B80)
-val BrandDustyRose = Color(0xFFBA6B75)
+// --- Brand & Marine Hero Tones ---
+val LunaNavyPrimary = Color(0xFF173E68)       // Color principal interactivo / botones primarios
+val LunaNavyDarkCard = Color(0xFF14365A)      // Fondo de tarjeta hero "TU CICLO" / "Su ciclo"
+val LunaNavyDeep = Color(0xFF102943)          // Azul marino profundo para contrastes altos
+val LunaNavySurfaceDark = Color(0xFF172231)   // Fondo de navegación y tarjetas en modo oscuro
+val LunaNavyBorderDark = Color(0xFF304156)    // Bordes y divisores en modo oscuro
 
-// Phase Specific Organic Tones
-val PhaseMenstrualRose = Color(0xFFE26D77) // Soft rosewood / terracotta blush
-val PhaseMenstrualSubtle = Color(0xFFFDF0F1)
+// --- Ice Blue & Interaction Surfaces ---
+val LunaBackgroundLight = Color(0xFFF5F7FA)   // Fondo base en modo claro
+val LunaSurfaceLight = Color(0xFFFFFFFF)      // Superficie de tarjetas en modo claro
+val LunaBorderLight = Color(0xFFDCE4EE)       // Borde tenue / separadores en modo claro
+val LunaIceBlueSubtle = Color(0xFFE6EFF9)     // Superficie tenue azul hielo (chips seleccionados, badges)
+val LunaIceBlueSurface = Color(0xFFF2F6FC)    // Superficie suave secundaria
+val LunaIceBlueAccent = Color(0xFFA9CEFA)     // Acento azul hielo interactivo / tabs activos oscuro
+val LunaIceBlueText = Color(0xFFC2D6EC)       // Texto secundario sobre fondos marinos oscuros
 
-val PhaseFollicularPeach = Color(0xFFE58C65) // Warm radiant apricot
-val PhaseFollicularSubtle = Color(0xFFFDF3ED)
+// --- Harmonic Subtle Accents ---
+// Salvia (Cuidado, éxito, registros confirmados)
+val LunaSageSoft = Color(0xFFEAF2EC)          // Fondo insignia registrado / mensaje apoyo
+val LunaSageText = Color(0xFF376C59)          // Texto insignia registrado / indicador
 
-val PhaseFertileSage = Color(0xFF4A9B6F) // Botanical sage / eucalyptus green
-val PhaseFertileSubtle = Color(0xFFEFF8F3)
-val PhaseOvulationGold = Color(0xFFECC265) // Soft golden star
+// Arena (Estimaciones, advertencias sutiles)
+val LunaSandSoft = Color(0xFFF4EEE4)          // Fondo insignia estimado
+val LunaSandText = Color(0xFF795D36)          // Texto insignia estimado
 
-val PhaseLutealLavender = Color(0xFF8B6FA8) // Serene mauve lavender
-val PhaseLutealSubtle = Color(0xFFF6F2FA)
+// Coral (Menstruación, sangrado, peligro/desvincular)
+val LunaCoralSoft = Color(0xFFFAE9ED)         // Fondo botón peligro / periodo registrado
+val LunaCoralText = Color(0xFFA33345)         // Texto botón peligro / acción destructiva
+val LunaPeriodRed = Color(0xFFAD4C5D)         // Indicador y borde de menstruación
 
-// Neutral Grouped Backgrounds (Warm Alabaster & Milk Silk)
-val AppleBackground = Color(0xFFFAF7F2) // Warm alabaster / non-sterile
-val AppleSurface = Color(0xFFFFFFFF) // Pure warm card surface
-val AppleSurfaceElevated = Color(0xFFFFFFFF)
-val AppleHairlineBorder = Color(0xFFEDE6DE) // Warm whisper border
-val AppleTextPrimary = Color(0xFF2C2523) // Warm deep espresso/slate
-val AppleTextSecondary = Color(0xFF756863) // Cocoa slate
-val AppleTextTertiary = Color(0xFFA39690)
+// --- Typography & Neutral Slate ---
+// Modo Claro
+val LunaTextPrimary = Color(0xFF162638)       // Títulos y textos principales
+val LunaTextSecondary = Color(0xFF5F7185)     // Subtítulos y textos de soporte
+val LunaTextTertiary = Color(0xFF8E9CAE)      // Indicadores deshabilitados / placeholders
 
-// Dark Surfaces (Warm OLED Noir)
-val AppleDarkBackground = Color(0xFF141211)
-val AppleDarkSurface = Color(0xFF1E1A19)
-val AppleDarkSurfaceElevated = Color(0xFF2A2524)
-val AppleDarkHairlineBorder = Color(0xFF383230)
-val AppleDarkTextPrimary = Color(0xFFFDFBF7)
-val AppleDarkTextSecondary = Color(0xFFA89F9B)
-val AppleDarkTextTertiary = Color(0xFF6B6360)
+// Modo Oscuro
+val LunaDarkBackground = Color(0xFF101B26)    // Fondo base modo oscuro
+val LunaDarkSurface = Color(0xFF172231)       // Tarjetas modo oscuro
+val LunaDarkSurfaceCard = Color(0xFF1E2D3E)   // Superficie elevada modo oscuro
+val LunaDarkTextPrimary = Color(0xFFF5F7FA)   // Texto principal modo oscuro
+val LunaDarkTextSecondary = Color(0xFFABBACD) // Texto secundario modo oscuro
+val LunaDarkBorder = Color(0xFF2A3D52)        // Bordes modo oscuro
 
-// Status & Semantic Colors
-val StatusSuccess = Color(0xFF2E7D32)
-val StatusSuccessSubtle = Color(0xFFE8F5E9)
-val StatusWarning = Color(0xFFD97706)
-val StatusWarningSubtle = Color(0xFFFEF3C7)
-val StatusError = Color(0xFFC62828)
-val StatusErrorSubtle = Color(0xFFFFEBEE)
-
-// System & Component Compatibilities
-val AppleSystemBlue = BrandTerracottaRose
-val AppleSystemIndigo = PhaseLutealLavender
-val AppleSystemTeal = PhaseFertileSage
-val AppleSystemGray = Color(0xFF9E928D)
-val AppleSystemGray2 = Color(0xFFBEB4AF)
-val AppleSystemGray5 = Color(0xFFEDE7E1)
-val AppleSystemGray6 = Color(0xFFFAF7F2)
-
-// Phase mappings for Cycle Dial and cards
-val AppleHealthMenstrual = PhaseMenstrualRose
-val AppleHealthMenstrualSubtle = PhaseMenstrualSubtle
-val AppleHealthFollicular = PhaseFollicularPeach
-val AppleHealthFollicularSubtle = PhaseFollicularSubtle
-val AppleHealthFertile = PhaseFertileSage
-val AppleHealthFertileSubtle = PhaseFertileSubtle
-val AppleHealthLuteal = PhaseLutealLavender
-val AppleHealthLutealSubtle = PhaseLutealSubtle
-
-// Aliases
-val PhaseMenstrual = PhaseMenstrualRose
-val PhaseFollicular = PhaseFollicularPeach
-val PhaseOvulatory = PhaseFertileSage
-val PhaseLuteal = PhaseLutealLavender
-val IceBlue = PhaseFollicularSubtle
-val IceBlueSubtle = AppleBackground
-val SoftCerulean = BrandTerracottaRose.copy(alpha = 0.5f)
-val CeruleanMid = BrandTerracottaRose
-val DeepOceanBlue = BrandTerracottaRose
-val SlateNavy = AppleTextPrimary
-val DarkNavyMidnight = AppleDarkBackground
+// --- Backward Compatibility Aliases ---
+val BrandTerracottaRose = LunaNavyPrimary
+val BrandTerracottaSoft = LunaIceBlueSubtle
+val BrandWarmRose = LunaNavyPrimary
+val PhaseMenstrualRose = LunaPeriodRed
+val PhaseMenstrualSubtle = LunaCoralSoft
+val PhaseFertileSage = LunaSageText
+val PhaseFertileSubtle = LunaSageSoft
+val PhaseFollicularPeach = LunaSandText
+val PhaseFollicularSubtle = LunaSandSoft
+val PhaseLutealLavender = LunaNavyPrimary
+val PhaseLutealSubtle = LunaIceBlueSubtle
+val AppleBackground = LunaBackgroundLight
+val AppleSurface = LunaSurfaceLight
+val AppleHairlineBorder = LunaBorderLight
+val AppleTextPrimary = LunaTextPrimary
+val AppleTextSecondary = LunaTextSecondary
+val AppleDarkBackground = LunaDarkBackground
+val AppleDarkSurface = LunaDarkSurface
+val AppleDarkHairlineBorder = LunaDarkBorder
+val AppleDarkTextPrimary = LunaDarkTextPrimary
+val AppleDarkTextSecondary = LunaDarkTextSecondary
+val AppleSystemBlue = LunaNavyPrimary
+val AppleSystemGray = LunaTextSecondary
+val AppleSystemGray5 = LunaBorderLight
+val AppleSystemGray6 = LunaBackgroundLight
+val PhaseMenstrual = LunaPeriodRed
+val PhaseFollicular = LunaSandText
+val PhaseOvulatory = LunaSageText
+val PhaseLuteal = LunaNavyPrimary
+val IceBlue = LunaIceBlueAccent
+val IceBlueSubtle = LunaIceBlueSubtle
+val DeepOceanBlue = LunaNavyPrimary
+val SlateNavy = LunaTextPrimary
+val DarkNavyMidnight = LunaNavyDarkCard
+val StatusSuccess = LunaSageText
+val StatusSuccessSubtle = LunaSageSoft
+val StatusError = LunaCoralText
+val StatusErrorSubtle = LunaCoralSoft

@@ -7,46 +7,46 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val AppleLightColorScheme = lightColorScheme(
-  primary = BrandTerracottaRose,
+private val LunaLightColorScheme = lightColorScheme(
+  primary = LunaNavyPrimary,
   onPrimary = Color.White,
-  primaryContainer = BrandTerracottaRose.copy(alpha = 0.12f),
-  onPrimaryContainer = BrandTerracottaRose,
-  secondary = BrandWarmRose,
+  primaryContainer = LunaIceBlueSubtle,
+  onPrimaryContainer = LunaNavyPrimary,
+  secondary = LunaNavyPrimary,
   onSecondary = Color.White,
-  secondaryContainer = AppleSystemGray5,
-  onSecondaryContainer = AppleTextPrimary,
-  tertiary = PhaseFertileSage,
+  secondaryContainer = LunaIceBlueSurface,
+  onSecondaryContainer = LunaNavyDeep,
+  tertiary = LunaSageText,
   onTertiary = Color.White,
-  background = AppleBackground,
-  onBackground = AppleTextPrimary,
-  surface = AppleSurface,
-  onSurface = AppleTextPrimary,
-  surfaceVariant = AppleSystemGray6,
-  onSurfaceVariant = AppleTextSecondary,
-  outline = AppleHairlineBorder,
-  outlineVariant = AppleHairlineBorder
+  background = LunaBackgroundLight,
+  onBackground = LunaTextPrimary,
+  surface = LunaSurfaceLight,
+  onSurface = LunaTextPrimary,
+  surfaceVariant = LunaIceBlueSurface,
+  onSurfaceVariant = LunaTextSecondary,
+  outline = LunaBorderLight,
+  outlineVariant = LunaBorderLight
 )
 
-private val AppleDarkColorScheme = darkColorScheme(
-  primary = BrandTerracottaRose,
-  onPrimary = Color.White,
-  primaryContainer = BrandTerracottaRose.copy(alpha = 0.25f),
+private val LunaDarkColorScheme = darkColorScheme(
+  primary = LunaIceBlueAccent,
+  onPrimary = LunaNavyDeep,
+  primaryContainer = LunaNavyBorderDark,
   onPrimaryContainer = Color.White,
-  secondary = BrandWarmRose,
-  onSecondary = Color.White,
-  secondaryContainer = AppleDarkSurfaceElevated,
-  onSecondaryContainer = AppleDarkTextPrimary,
-  tertiary = PhaseFertileSage,
-  onTertiary = Color.White,
-  background = AppleDarkBackground,
-  onBackground = AppleDarkTextPrimary,
-  surface = AppleDarkSurface,
-  onSurface = AppleDarkTextPrimary,
-  surfaceVariant = AppleDarkSurfaceElevated,
-  onSurfaceVariant = AppleDarkTextSecondary,
-  outline = AppleDarkHairlineBorder,
-  outlineVariant = AppleDarkHairlineBorder
+  secondary = LunaIceBlueText,
+  onSecondary = LunaNavyDeep,
+  secondaryContainer = LunaDarkSurfaceCard,
+  onSecondaryContainer = LunaDarkTextPrimary,
+  tertiary = LunaSageSoft,
+  onTertiary = LunaSageText,
+  background = LunaDarkBackground,
+  onBackground = LunaDarkTextPrimary,
+  surface = LunaDarkSurface,
+  onSurface = LunaDarkTextPrimary,
+  surfaceVariant = LunaDarkSurfaceCard,
+  onSurfaceVariant = LunaDarkTextSecondary,
+  outline = LunaNavyBorderDark,
+  outlineVariant = LunaNavyBorderDark
 )
 
 @Composable
@@ -54,7 +54,7 @@ fun LunaSyncTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
   content: @Composable () -> Unit,
 ) {
-  val colorScheme = if (darkTheme) AppleDarkColorScheme else AppleLightColorScheme
+  val colorScheme = if (darkTheme) LunaDarkColorScheme else LunaLightColorScheme
   MaterialTheme(
     colorScheme = colorScheme,
     typography = Typography,
