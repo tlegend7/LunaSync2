@@ -53,6 +53,16 @@ val LunaDarkTextPrimary = Color(0xFFF5F7FA)   // Texto principal modo oscuro
 val LunaDarkTextSecondary = Color(0xFFABBACD) // Texto secundario modo oscuro
 val LunaDarkBorder = Color(0xFF2A3D52)        // Bordes modo oscuro
 
+// --- Acentos Modo Oscuro (Tokens oficiales Figma #03) ---
+val LunaSageDarkSoft = Color(0xFF22382D)      // Fondo salvia oscuro
+val LunaSageDarkText = Color(0xFFA8D4BC)      // Texto salvia oscuro
+val LunaSandDarkSoft = Color(0xFF3B3329)      // Fondo arena oscuro
+val LunaSandDarkText = Color(0xFFE4C595)      // Texto arena oscuro
+val LunaIceDarkSoft = Color(0xFF213C59)       // Fondo azul hielo oscuro
+val LunaIceDarkText = Color(0xFFA9CEFA)       // Texto azul hielo oscuro
+val LunaCoralDarkSoft = Color(0xFF412632)     // Fondo coral oscuro
+val LunaCoralDarkText = Color(0xFFF1A4AF)     // Texto coral oscuro
+
 // --- Backward Compatibility Aliases ---
 val BrandTerracottaRose = LunaNavyPrimary
 val BrandTerracottaSoft = LunaIceBlueSubtle

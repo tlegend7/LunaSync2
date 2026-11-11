@@ -224,11 +224,12 @@ fun LunaBadge(
   icon: ImageVector? = null,
   shape: Shape = RoundedCornerShape(12.dp)
 ) {
+  val isDark = MaterialTheme.colorScheme.background.red < 0.2f
   val (bgColor, txtColor) = when (style) {
-    LunaBadgeStyle.FACT -> Pair(LunaSageSoft, LunaSageText)
-    LunaBadgeStyle.ESTIMATE -> Pair(LunaSandSoft, LunaSandText)
-    LunaBadgeStyle.PRIVATE -> Pair(LunaIceBlueSubtle, LunaNavyPrimary)
-    LunaBadgeStyle.CORAL -> Pair(LunaCoralSoft, LunaPeriodRed)
+    LunaBadgeStyle.FACT -> if (isDark) Pair(LunaSageDarkSoft, LunaSageDarkText) else Pair(LunaSageSoft, LunaSageText)
+    LunaBadgeStyle.ESTIMATE -> if (isDark) Pair(LunaSandDarkSoft, LunaSandDarkText) else Pair(LunaSandSoft, LunaSandText)
+    LunaBadgeStyle.PRIVATE -> if (isDark) Pair(LunaIceDarkSoft, LunaIceDarkText) else Pair(LunaIceBlueSubtle, LunaNavyPrimary)
+    LunaBadgeStyle.CORAL -> if (isDark) Pair(LunaCoralDarkSoft, LunaCoralDarkText) else Pair(LunaCoralSoft, LunaPeriodRed)
     LunaBadgeStyle.NEUTRAL -> Pair(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
   }
 

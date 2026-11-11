@@ -234,7 +234,7 @@ fun CycleCalendarView(
           text = label,
           style = MaterialTheme.typography.labelSmall,
           fontWeight = FontWeight.Medium,
-          color = LunaTextSecondary,
+          color = if (isDark) LunaDarkTextSecondary else LunaTextSecondary,
           textAlign = TextAlign.Center,
           modifier = Modifier.weight(1f)
         )
@@ -305,23 +305,17 @@ fun CycleCalendarView(
     ) {
       LunaBadge(
         text = "Registrado",
-        backgroundColor = LunaCoralSoft,
-        textColor = LunaPeriodRed,
-        shape = RoundedCornerShape(12.dp)
+        style = LunaBadgeStyle.CORAL
       )
 
       LunaBadge(
         text = "Estimado",
-        backgroundColor = LunaSandSoft,
-        textColor = LunaSandText,
-        shape = RoundedCornerShape(12.dp)
+        style = LunaBadgeStyle.ESTIMATE
       )
 
       LunaBadge(
         text = "Solo tú",
-        backgroundColor = LunaIceBlueSubtle,
-        textColor = LunaNavyPrimary,
-        shape = RoundedCornerShape(12.dp)
+        style = LunaBadgeStyle.PRIVATE
       )
     }
 
@@ -455,21 +449,21 @@ private fun CalendarFigmaCell(
 
   val cellBg = when {
     isSelected -> if (isDark) LunaIceBlueAccent else LunaNavyPrimary
-    isActualPeriod -> LunaCoralSoft
+    isActualPeriod -> if (isDark) LunaCoralDarkSoft else LunaCoralSoft
     isPredictedPeriod -> Color.Transparent
     else -> Color.Transparent
   }
 
   val textColor = when {
     isSelected -> if (isDark) LunaNavyPrimary else Color.White
-    isActualPeriod -> LunaPeriodRed
-    isPredictedPeriod -> LunaPeriodRed
-    else -> if (isDark) LunaTextPrimary else MaterialTheme.colorScheme.onBackground
+    isActualPeriod -> if (isDark) LunaCoralDarkText else LunaPeriodRed
+    isPredictedPeriod -> if (isDark) LunaCoralDarkText else LunaPeriodRed
+    else -> if (isDark) LunaDarkTextPrimary else LunaTextPrimary
   }
 
   val border = when {
     isSelected -> null
-    isPredictedPeriod -> BorderStroke(1.dp, LunaPeriodRed)
+    isPredictedPeriod -> BorderStroke(1.dp, if (isDark) LunaCoralDarkText else LunaPeriodRed)
     isToday -> BorderStroke(1.dp, if (isDark) LunaIceBlueAccent else LunaNavyPrimary)
     else -> null
   }
