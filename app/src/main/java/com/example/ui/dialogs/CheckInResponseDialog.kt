@@ -44,15 +44,7 @@ import com.example.ui.components.LunaBadgeStyle
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaOptionChip
-import com.example.ui.theme.LunaBorderLight
-import com.example.ui.theme.LunaDarkBorder
-import com.example.ui.theme.LunaDarkSurface
-import com.example.ui.theme.LunaIceBlueAccent
-import com.example.ui.theme.LunaNavyPrimary
-import com.example.ui.theme.LunaSageSoft
-import com.example.ui.theme.LunaSageText
-import com.example.ui.theme.LunaSurfaceLight
-import com.example.ui.theme.StatusError
+import com.example.ui.theme.*
 
 /**
  * Diálogo de respuesta a un mensaje o check-in de la pareja (Figma: reply · Un mensaje de Dani #8:26)
@@ -171,12 +163,11 @@ fun CheckInResponseDialog(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        val options = listOf(
-          Pair(QuickResponseOption.NEED_SPACE, "Un rato para mí"),
-          Pair(QuickResponseOption.NEED_REST, "Descansar en silencio"),
-          Pair(QuickResponseOption.BRING_SNACK, "Una infusión o comida rica"),
-          Pair(QuickResponseOption.FEELING_GOOD, "Me siento con energía"),
-          Pair(QuickResponseOption.JUST_HUG, "Un abrazo y compañía")
+        val options: List<Pair<QuickResponseOption, String>> = listOf(
+          Pair(QuickResponseOption.ALL_GOOD_JUST_CRAMPS, "Todo bien, solo cólicos"),
+          Pair(QuickResponseOption.NEED_SILENCE, "Descansar en silencio"),
+          Pair(QuickResponseOption.LET_US_TALK, "Hablemos un ratito"),
+          Pair(QuickResponseOption.CUDDLES_PLEASE, "Un abrazo y compañía")
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -231,7 +222,7 @@ fun CheckInResponseDialog(
         LunaButton(
           text = "Enviar respuesta",
           onClick = {
-            val opt = selectedOption ?: QuickResponseOption.NEED_REST
+            val opt = selectedOption ?: QuickResponseOption.ALL_GOOD_JUST_CRAMPS
             isSending = true
             onSendResponse(opt, customNote.ifBlank { null })
             onDismiss()

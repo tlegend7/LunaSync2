@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -151,11 +152,11 @@ fun PartnerDashboardView(
         Spacer(modifier = Modifier.height(8.dp))
 
         if (cycleStatus != null) {
-          val nextPeriodEstimate = cycleStatus.estimatedNextPeriodStart
-          val nextPeriodStr = if (nextPeriodEstimate != null) {
+          val nextPeriodEstimate = cycleStatus.nextPeriodDate
+          val nextPeriodStr = try {
             val formatterShort = DateTimeFormatter.ofPattern("d 'de' MMMM", localeEs)
             nextPeriodEstimate.format(formatterShort)
-          } else {
+          } catch (e: Exception) {
             "En cálculo"
           }
 

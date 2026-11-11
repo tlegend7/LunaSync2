@@ -239,11 +239,11 @@ fun EllaDashboardView(
       }
     } else {
       val dayNum = cycleStatus.currentDay
-      val nextPeriodEstimate = cycleStatus.estimatedNextPeriodStart
-      val nextPeriodStr = if (nextPeriodEstimate != null) {
+      val nextPeriodEstimate = cycleStatus.nextPeriodDate
+      val nextPeriodStr = try {
         val formatterShort = DateTimeFormatter.ofPattern("d 'de' MMMM", localeEs)
         nextPeriodEstimate.format(formatterShort)
-      } else {
+      } catch (e: Exception) {
         "En cálculo"
       }
 

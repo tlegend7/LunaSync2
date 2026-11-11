@@ -70,10 +70,7 @@ import com.example.ui.dialogs.PrivacySettingsDialog
 import com.example.ui.dialogs.SendCheckInDialog
 import com.example.ui.dialogs.SettingsDialog
 import com.example.ui.dialogs.SymptomLogDialog
-import com.example.ui.theme.LunaBorderLight
-import com.example.ui.theme.LunaDarkBorder
-import com.example.ui.theme.LunaNavyPrimary
-import com.example.ui.theme.LunaSyncTheme
+import com.example.ui.theme.*
 import com.example.ui.viewmodel.MainViewModel
 import java.time.LocalDate
 import kotlinx.coroutines.launch
