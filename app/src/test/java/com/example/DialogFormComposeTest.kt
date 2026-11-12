@@ -60,7 +60,7 @@ class DialogFormComposeTest {
       SymptomLogDialog(
         initialSymptom = null,
         onDismiss = { onDismissCalled = true },
-        onSave = { _, _, _, _, _, _, _, _, _, _, _, _, publicNote, privateNote, _, onComplete ->
+        onSave = { _, _, _, _, _, _, _, _, _, _, _, _, publicNote, privateNote, _, _, onComplete ->
           capturedPublicNote = publicNote
           capturedPrivateNote = privateNote
           onSaveCallbackHolder = onComplete
@@ -69,7 +69,8 @@ class DialogFormComposeTest {
     }
 
     // 1. Verificar que el diálogo se renderiza
-    composeTestRule.onNodeWithText("Registro Holístico Diario").assertIsDisplayed()
+    composeTestRule.onNodeWithText("¿Cómo te sientes?").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("symptom_details_button").performScrollTo().performClick()
 
     // 2. Introducir texto en la nota pública
     val inputPublic = "Dolor lumbar persistente y fatiga moderada"
@@ -103,7 +104,7 @@ class DialogFormComposeTest {
 
     // 7. Verificar que el diálogo NO se cerró y el error está visible
     assertFalse("Dialog must NOT be dismissed on error", onDismissCalled)
-    composeTestRule.onNodeWithText(serverErrorMsg).performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText(serverErrorMsg).assertIsDisplayed()
 
     // 8. CRÍTICO: Verificar que los inputs introducidos por la usuaria se conservan intactos
     composeTestRule.onNodeWithTag("symptom_public_note_input").performScrollTo().assertTextContains(inputPublic)
@@ -145,7 +146,7 @@ class DialogFormComposeTest {
     }
 
     // 1. Verificar renderizado
-    composeTestRule.onNodeWithText("Registro Íntimo & Contacto").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Un registro íntimo").assertIsDisplayed()
 
     // 2. Introducir notas íntimas
     val inputNotes = "Encuentro cariñoso y relajado con uso de preservativo"
@@ -172,7 +173,7 @@ class DialogFormComposeTest {
 
     // 6. Verificar persistencia de campos y mensaje de error
     assertFalse("Dialog must remain open on error", onDismissCalled)
-    composeTestRule.onNodeWithText(networkError).performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText(networkError).assertIsDisplayed()
     composeTestRule.onNodeWithTag("intimacy_notes_input").performScrollTo().assertTextContains(inputNotes)
 
     // 7. Reintentar guardado
@@ -219,7 +220,7 @@ class DialogFormComposeTest {
     }
 
     // 1. Verificar renderizado del diálogo de periodo
-    composeTestRule.onNodeWithText("Registrar Menstruación").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Tu menstruación").assertIsDisplayed()
 
     // 2. Activar switch de sangrado finalizado
     composeTestRule.onNodeWithTag("period_finished_switch")
@@ -245,7 +246,7 @@ class DialogFormComposeTest {
 
     // 6. Verificar que el diálogo permanece abierto y el error es visible
     assertFalse("Dialog must remain open on error", onDismissCalled)
-    composeTestRule.onNodeWithText(serverError).performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText(serverError).assertIsDisplayed()
 
     // 7. Reintentar guardado
     composeTestRule.onNodeWithTag("save_period_button")
@@ -293,13 +294,14 @@ class DialogFormComposeTest {
     }
 
     // 1. Verificar renderizado
-    composeTestRule.onNodeWithText("Registrar Observación y Apoyo").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Un gesto de cuidado").assertIsDisplayed()
 
     // 2. Elegir un estado de ánimo distinto del predeterminado (por defecto es TIRED)
-    composeTestRule.onNodeWithTag("mood_chip_${PerceivedMood.CALM.name}").performClick()
+    composeTestRule.onNodeWithTag("observation_details_button").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("mood_chip_${PerceivedMood.CALM.name}").performScrollTo().performClick()
 
     // 3. Modificar manchado mediante el switch
-    composeTestRule.onNodeWithTag("spotting_switch").performClick()
+    composeTestRule.onNodeWithTag("spotting_switch").performScrollTo().performClick()
 
     // 4. Escribir acción de cuidado
     val expectedAction = "Le preparé infusión de jengibre y ventilé la habitación"
@@ -389,11 +391,11 @@ class DialogFormComposeTest {
     }
 
     // 1. Verificar renderizado
-    composeTestRule.onNodeWithText("Enviar Check-in Afectivo").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Una pregunta,\nsin presión.").assertIsDisplayed()
 
     // 2. Seleccionar una pregunta cariñosa distinta de la predeterminada
     composeTestRule.onNodeWithTag("prompt_${CheckInPromptType.CAN_I_BRING_YOU_SOMETHING.name}")
-      .performClick()
+      .performScrollTo().performClick()
 
     // 3. Escribir nota personalizada
     val expectedNote = "¿Quieres una infusión tibia o algo rico para picar?"

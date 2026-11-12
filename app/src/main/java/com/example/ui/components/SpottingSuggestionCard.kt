@@ -45,15 +45,15 @@ fun SpottingSuggestionCard(
     tonalElevation = 2.dp,
     modifier = modifier
       .fillMaxWidth()
-      .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(20.dp))
+      .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
       .testTag("spotting_suggestion_card")
   ) {
     Column(modifier = Modifier.padding(18.dp)) {
       Row(verticalAlignment = Alignment.Top) {
         Icon(
-          imageVector = Icons.Default.Info,
+          imageVector = LunaIcons.Shield,
           contentDescription = null,
-          tint = AppleHealthMenstrual,
+          tint = MaterialTheme.colorScheme.primary,
           modifier = Modifier.size(20.dp).padding(top = 2.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
@@ -62,7 +62,7 @@ fun SpottingSuggestionCard(
             text = "SUGERENCIA DE REGISTRO",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = AppleHealthMenstrual,
+            color = MaterialTheme.colorScheme.primary,
             letterSpacing = 0.5.sp
           )
           Spacer(modifier = Modifier.height(3.dp))
@@ -85,7 +85,7 @@ fun SpottingSuggestionCard(
           onClick = onDismiss,
           shape = RoundedCornerShape(12.dp),
           colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = AppleSystemGray5.copy(alpha = 0.6f),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             contentColor = MaterialTheme.colorScheme.onSurface
           ),
           modifier = Modifier.testTag("dismiss_spotting_button")
@@ -96,7 +96,7 @@ fun SpottingSuggestionCard(
         Button(
           onClick = onAccept,
           shape = RoundedCornerShape(12.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = AppleSystemBlue),
+          colors = ButtonDefaults.buttonColors(),
           modifier = Modifier.testTag("accept_spotting_button")
         ) {
           Text("Añadir al registro", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)

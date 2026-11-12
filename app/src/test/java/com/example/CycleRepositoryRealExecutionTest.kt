@@ -3,11 +3,16 @@ package com.example
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.CycleEntry
+import com.example.data.model.DailySymptom
+import com.example.data.repository.CoupleSpaceRepository
+import com.example.data.repository.FirestoreProvider
 import com.example.data.repository.CycleRepository
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -95,6 +100,105 @@ class CycleRepositoryRealExecutionTest {
     )
     db.collection("couple_spaces").document(spaceId).set(spaceData).await()
     return ellaUid
+  }
+
+  @Test
+  fun sharedIntimacyRequiresBothIndividualAndGlobalConsentAndRevocationStopsServerReads() = runWithLooper {
+    val spaceId = "intimacy_consent_${UUID.randomUUID()}"
+    val ownerUid = createSpaceWithElla(spaceId)
+    val ownerEmail = auth.currentUser!!.email!!
+    val intimacy = com.example.data.repository.IntimacyRepository(application, db)
+    for (private in listOf(false, true)) intimacy.saveIntimacyLog(spaceId, "2026-06-04",
+      com.example.data.model.EncounterType.PROTECTED, notes = if (private) "Reservada" else "Compartida",
+      isPrivate = private, userId = ownerUid)
+    val ownerRecords = intimacy.observeIntimacyLogs(spaceId, true, false).first { it.size == 2 }
+    assertEquals(1, ownerRecords.count { it.isPrivate })
+    val ref = db.collection("couple_spaces").document(spaceId)
+    ref.update("sharingPermissions.shareIntimacy", true).await()
+    FirestoreProvider.setAuthForTesting(auth)
+    val couples = CoupleSpaceRepository(application, db)
+    val code = couples.generateInviteCode(spaceId, ownerUid)
+    val partnerEmail = "intimacy_${UUID.randomUUID()}@test.com"
+    val partner = auth.createUserWithEmailAndPassword(partnerEmail, "password123").await().user!!
+    couples.joinWithCode(code, partner.uid).getOrThrow()
+    val shared = intimacy.observeIntimacyLogs(spaceId, false, true).first { it.isNotEmpty() }
+    assertEquals(listOf("Compartida"), shared.map { it.notes })
+    auth.signInWithEmailAndPassword(ownerEmail, "password123").await()
+    ref.update("sharingPermissions.shareIntimacy", false).await()
+    auth.signInWithEmailAndPassword(partnerEmail, "password123").await()
+    assertTrue(intimacy.observeIntimacyLogs(spaceId, false, false).first().isEmpty())
+    var denied = false
+    try { ref.collection("intimacy_logs").whereEqualTo("isPrivate", false).get(Source.SERVER).await() }
+    catch (error: FirebaseFirestoreException) { denied = error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED }
+    assertTrue("Revocation must block even a server query for an individually shared record", denied)
+  }
+
+  @Test
+  fun partnerLeavesAtomicallyLosesAccessAndOwnerKeepsHistory() = runWithLooper {
+    val spaceId = "leave_${UUID.randomUUID()}"
+    val ownerUid = createSpaceWithElla(spaceId)
+    val ownerEmail = auth.currentUser!!.email!!
+    cycleRepo.recordPeriodStart(spaceId, "2026-06-01").getOrThrow()
+    FirestoreProvider.setAuthForTesting(auth)
+    val couples = CoupleSpaceRepository(application, db)
+    val code = couples.generateInviteCode(spaceId, ownerUid)
+    val partner = auth.createUserWithEmailAndPassword("leave_${UUID.randomUUID()}@test.com", "password123").await().user!!
+    couples.joinWithCode(code, partner.uid).getOrThrow()
+    val ref = db.collection("couple_spaces").document(spaceId)
+    val version = ref.get(Source.SERVER).await().getLong("activeInviteVersion")!!
+    assertEquals(1, ref.collection("cycles").get(Source.SERVER).await().size())
+    couples.leavePairing(spaceId)
+    var denied = false
+    try { ref.collection("cycles").get(Source.SERVER).await() }
+    catch (error: FirebaseFirestoreException) { denied = error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED }
+    assertTrue("Former partner must lose server access", denied)
+    auth.signInWithEmailAndPassword(ownerEmail, "password123").await()
+    val after = ref.get(Source.SERVER).await()
+    assertNull(after.getString("partnerId"))
+    assertEquals("UNPAIRED", after.getString("status"))
+    assertEquals(version + 1, after.getLong("activeInviteVersion"))
+    assertEquals(1, ref.collection("cycles").get(Source.SERVER).await().size())
+  }
+
+  @Test
+  fun testIndependentPhysicalAndMoodPrivacySurvivesPersistenceAndRealPartnerQueries() = runWithLooper {
+    val spaceId = "independent_privacy_${UUID.randomUUID()}"
+    val ownerUid = createSpaceWithElla(spaceId)
+    val base = DailySymptom(spaceId = spaceId, date = "2026-06-04", loggedBy = ownerUid,
+      flowLevel = "LIGHT", mood = "HAPPY", privateNote = "Solo la dueña")
+    cycleRepo.saveDailySymptom(base.copy(isPrivate = true, isMoodPrivate = false))
+    cycleRepo.saveDailySymptom(base.copy(date = "2026-06-05", isPrivate = false, isMoodPrivate = true))
+    cycleRepo.saveDailySymptom(base.copy(date = "2026-06-06", isPrivate = true, isMoodPrivate = null))
+    val space = db.collection("couple_spaces").document(spaceId)
+    assertEquals(false, space.collection("mood_records").document("2026-06-04").get(Source.SERVER).await().getBoolean("isPrivate"))
+    assertEquals(true, space.collection("physical_symptoms").document("2026-06-04").get(Source.SERVER).await().getBoolean("isPrivate"))
+    assertEquals(true, space.collection("mood_records").document("2026-06-06").get(Source.SERVER).await().getBoolean("isPrivate"))
+    val ownerRecords = cycleRepo.observeDailySymptoms(spaceId, isElla = true).first { it.size == 3 }
+    assertEquals(false, ownerRecords.first { it.date == "2026-06-04" }.isMoodPrivate)
+    assertEquals(true, ownerRecords.first { it.date == "2026-06-05" }.isMoodPrivate)
+
+    FirestoreProvider.setAuthForTesting(auth)
+    val coupleRepo = CoupleSpaceRepository(application, db)
+    val code = coupleRepo.generateInviteCode(spaceId, ownerUid)
+    val partner = auth.createUserWithEmailAndPassword("privacy_partner_${UUID.randomUUID()}@test.com", "password123").await().user!!
+    coupleRepo.joinWithCode(code, partner.uid).getOrThrow()
+    val physical = space.collection("physical_symptoms").whereEqualTo("isPrivate", false).get(Source.SERVER).await()
+    val moods = space.collection("mood_records").whereEqualTo("isPrivate", false).get(Source.SERVER).await()
+    assertEquals(listOf("2026-06-05"), physical.documents.map { it.id })
+    assertEquals(listOf("2026-06-04"), moods.documents.map { it.id })
+    val partnerRecords = cycleRepo.observeDailySymptoms(spaceId, isElla = false).first { records ->
+      records.any { it.date == "2026-06-04" } && records.any { it.date == "2026-06-05" }
+    }
+    assertTrue(partnerRecords.all { it.privateNote == null })
+    assertFalse(partnerRecords.first { it.date == "2026-06-04" }.hasPhysicalRecord)
+    assertFalse(partnerRecords.first { it.date == "2026-06-05" }.hasMoodRecord)
+    var privateNoteDenied = false
+    try {
+      space.collection("private_notes").document("2026-06-04").get(Source.SERVER).await()
+    } catch (error: FirebaseFirestoreException) {
+      privateNoteDenied = error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+    }
+    assertTrue("A real partner must never read the private note", privateNoteDenied)
   }
 
   @Test

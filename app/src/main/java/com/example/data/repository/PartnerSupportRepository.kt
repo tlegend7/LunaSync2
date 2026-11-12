@@ -32,20 +32,21 @@ open class PartnerSupportRepository(
   open suspend fun logObservation(
     spaceId: String,
     date: String,
-    perceivedMood: PerceivedMood,
-    apparentPainLevel: Int,
+    perceivedMood: PerceivedMood?,
+    apparentPainLevel: Int?,
     unloggedSpottingReported: Boolean,
     careActionTaken: String?,
     sweetMessage: String?,
     userId: String
   ) {
+    require(apparentPainLevel == null || apparentPainLevel in 0..5) { "La molestia debe estar entre 0 y 5." }
     val docRef = db.collection("couple_spaces").document(spaceId)
       .collection("observations").document()
 
     val payload = mapOf(
       "spaceId" to spaceId,
       "date" to date,
-      "perceivedMood" to perceivedMood.name,
+      "perceivedMood" to perceivedMood?.name,
       "apparentPainLevel" to apparentPainLevel,
       "unloggedSpottingReported" to unloggedSpottingReported,
       "spottingSuggestionStatus" to SpottingSuggestionStatus.PENDING.name,

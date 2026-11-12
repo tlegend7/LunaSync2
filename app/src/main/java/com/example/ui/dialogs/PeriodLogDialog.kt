@@ -1,434 +1,185 @@
 package com.example.ui.dialogs
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.example.R
 import com.example.data.model.CycleEntry
-import com.example.ui.theme.AppleHairlineBorder
-import com.example.ui.theme.BrandTerracottaRose
-import com.example.ui.theme.PhaseMenstrualRose
+import com.example.ui.components.*
+import com.example.ui.theme.*
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PeriodLogDialog(
   initialDate: LocalDate = LocalDate.now(),
   existingCycle: CycleEntry? = null,
   today: LocalDate = LocalDate.now(),
   onDismiss: () -> Unit,
-  onSave: (
-    startDate: LocalDate,
-    endDate: LocalDate?,
-    onComplete: (Boolean, String?) -> Unit
-  ) -> Unit,
+  onSave: (startDate: LocalDate, endDate: LocalDate?, onComplete: (Boolean, String?) -> Unit) -> Unit,
   onDelete: ((onComplete: (Boolean, String?) -> Unit) -> Unit)? = null
 ) {
-  var startDate by remember {
-    mutableStateOf(
-      existingCycle?.let {
-        try { LocalDate.parse(it.startDate) } catch (e: Exception) { initialDate }
-      } ?: initialDate
-    )
-  }
+  var startDate by remember { mutableStateOf(existingCycle?.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: initialDate) }
+  var hasFinished by remember { mutableStateOf(existingCycle?.endDate != null) }
+  var endDate by remember { mutableStateOf(existingCycle?.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today) }
+  var saving by remember { mutableStateOf(false) }
+  var deleting by remember { mutableStateOf(false) }
+  var error by remember { mutableStateOf<String?>(null) }
+  var deleteError by remember { mutableStateOf<String?>(null) }
+  var showDelete by remember { mutableStateOf(false) }
+  var pickStart by remember { mutableStateOf(false) }
+  var pickEnd by remember { mutableStateOf(false) }
+  val busy = saving || deleting
+  val formatter = remember { DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM yyyy", Locale.forLanguageTag("es-ES")) }
+  val days = ChronoUnit.DAYS.between(startDate, endDate) + 1
 
-  var hasFinishedBleeding by remember {
-    mutableStateOf(existingCycle?.endDate != null)
-  }
-
-  var endDate by remember {
-    mutableStateOf(
-      existingCycle?.endDate?.let {
-        try { LocalDate.parse(it) } catch (e: Exception) { startDate.plusDays(4) }
-      } ?: startDate.plusDays(4).coerceAtMost(today)
-    )
-  }
-
-  var isSubmitting by remember { mutableStateOf(false) }
-  var dialogError by remember { mutableStateOf<String?>(null) }
-  var showDeleteConfirm by remember { mutableStateOf(false) }
-
-  // Date picker dialog states
-  var showStartDatePicker by remember { mutableStateOf(false) }
-  var showEndDatePicker by remember { mutableStateOf(false) }
-
-  val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM yyyy", Locale("es", "ES")) }
-
-  if (showStartDatePicker) {
-    val datePickerState = rememberDatePickerState(
-      initialSelectedDateMillis = startDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
-    )
-    DatePickerDialog(
-      onDismissRequest = { showStartDatePicker = false },
-      confirmButton = {
-        TextButton(onClick = {
-          datePickerState.selectedDateMillis?.let { millis ->
-            val picked = Instant.ofEpochMilli(millis).atZone(ZoneId.of("UTC")).toLocalDate()
-            startDate = picked
-            if (hasFinishedBleeding && endDate.isBefore(picked)) {
-              endDate = picked.plusDays(4).coerceAtMost(today)
-            }
+  LunaFlowDialog("Tu menstruación", "Registra lo que ocurrió. Las estimaciones no crean registros.",
+    onDismiss, "period_log_dialog", busy = busy, actions = {
+      error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.testTag("period_error")) }
+      LunaButton("Guardar fechas", {
+        error = when {
+          startDate.isAfter(today) -> "La fecha de inicio no puede ser una fecha futura."
+          hasFinished && endDate.isAfter(today) -> "La fecha de fin no puede ser una fecha futura."
+          hasFinished && endDate.isBefore(startDate) -> "La fecha de fin no puede ser anterior a la fecha de inicio."
+          else -> null
+        }
+        if (!busy && error == null) {
+          saving = true
+          onSave(startDate, if (hasFinished) endDate else null) { success, failure ->
+            saving = false
+            if (success) onDismiss() else error = failure ?: "No se pudieron guardar las fechas. Intenta nuevamente."
           }
-          showStartDatePicker = false
-        }) {
-          Text("Aceptar")
         }
-      },
-      dismissButton = {
-        TextButton(onClick = { showStartDatePicker = false }) {
-          Text("Cancelar")
-        }
+      }, Modifier.testTag("save_period_button"), enabled = !deleting, loading = saving)
+    }) {
+    PeriodDateField("Primer día de sangrado", startDate.format(formatter), "period_dialog_start_date_text",
+      "pick_start_date_button", !busy, { pickStart = true })
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("El sangrado terminó", style = MaterialTheme.typography.titleMedium)
+        Text("Activa para confirmar la fecha final.", style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
-    ) {
-      DatePicker(state = datePickerState)
+      LunaToggle(hasFinished, { hasFinished = it }, Modifier.testTag("period_finished_switch"), !busy, "El sangrado terminó")
     }
-  }
-
-  if (showEndDatePicker) {
-    val datePickerState = rememberDatePickerState(
-      initialSelectedDateMillis = endDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
-    )
-    DatePickerDialog(
-      onDismissRequest = { showEndDatePicker = false },
-      confirmButton = {
-        TextButton(onClick = {
-          datePickerState.selectedDateMillis?.let { millis ->
-            val picked = Instant.ofEpochMilli(millis).atZone(ZoneId.of("UTC")).toLocalDate()
-            endDate = picked
-          }
-          showEndDatePicker = false
-        }) {
-          Text("Aceptar")
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { showEndDatePicker = false }) {
-          Text("Cancelar")
-        }
-      }
-    ) {
-      DatePicker(state = datePickerState)
+    if (hasFinished) {
+      PeriodDateField("Último día de sangrado", endDate.format(formatter), "period_dialog_end_date_text",
+        "pick_end_date_button", !busy, { pickEnd = true })
     }
-  }
-
-  if (showDeleteConfirm && onDelete != null) {
-    AlertDialog(
-      onDismissRequest = { showDeleteConfirm = false },
-      title = { Text("¿Eliminar este registro de periodo?") },
-      text = { Text("Esta acción eliminará el ciclo registrado y recalculará la duración entre los periodos adyacentes.") },
-      confirmButton = {
-        Button(
-          onClick = {
-            showDeleteConfirm = false
-            isSubmitting = true
-            onDelete { success, err ->
-              isSubmitting = false
-              if (success) {
-                onDismiss()
-              } else {
-                dialogError = err ?: "Error al eliminar el ciclo."
-              }
-            }
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-          modifier = Modifier.testTag("confirm_delete_period_button")
-        ) {
-          Text("Eliminar")
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { showDeleteConfirm = false }) {
-          Text("Cancelar")
-        }
-      }
-    )
-  }
-
-  AlertDialog(
-    onDismissRequest = { if (!isSubmitting) onDismiss() },
-    shape = RoundedCornerShape(26.dp),
-    title = {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Default.Spa, contentDescription = null, tint = PhaseMenstrualRose, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-          text = if (existingCycle != null) "Editar Menstruación" else "Registrar Menstruación",
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface
-        )
-      }
-    },
-    text = {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .verticalScroll(rememberScrollState())
-          .padding(vertical = 4.dp)
-      ) {
-        if (dialogError != null) {
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.errorContainer,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-          ) {
-            Text(
-              text = dialogError!!,
-              color = MaterialTheme.colorScheme.onErrorContainer,
-              style = MaterialTheme.typography.bodySmall,
-              modifier = Modifier.padding(10.dp)
-            )
-          }
-        }
-
-        Text(
-          text = "Fecha de inicio del sangrado (Día 1):",
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = MaterialTheme.colorScheme.surface,
-          modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, AppleHairlineBorder, RoundedCornerShape(12.dp))
-        ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.padding(12.dp)
-          ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = startDate.format(dateFormatter),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.testTag("period_dialog_start_date_text")
-              )
-              Text(
-                text = "Inicio del periodo menstrual",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
-            OutlinedButton(
-              onClick = { showStartDatePicker = true },
-              shape = RoundedCornerShape(10.dp),
-              modifier = Modifier.testTag("pick_start_date_button")
-            ) {
-              Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(4.dp))
-              Text("Cambiar", fontSize = 12.sp)
-            }
-          }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Bleeding Finished Switch
-        Surface(
-          shape = RoundedCornerShape(14.dp),
-          color = MaterialTheme.colorScheme.surface,
-          modifier = Modifier
-            .fillMaxWidth()
-            .border(0.5.dp, AppleHairlineBorder, RoundedCornerShape(14.dp))
-        ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-          ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = "¿Ya terminó el sangrado?",
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.bodyMedium
-              )
-              Text(
-                text = if (hasFinishedBleeding) "Registrar fecha de fin de sangrado" else "El periodo sigue en curso",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
-            Switch(
-              checked = hasFinishedBleeding,
-              onCheckedChange = {
-                hasFinishedBleeding = it
-                if (it && endDate.isBefore(startDate)) {
-                  endDate = startDate.plusDays(4).coerceAtMost(today)
-                }
-              },
-              colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = PhaseMenstrualRose
-              ),
-              modifier = Modifier.testTag("period_finished_switch")
-            )
-          }
-        }
-
-        AnimatedVisibility(visible = hasFinishedBleeding) {
-          Column(modifier = Modifier.padding(top = 12.dp)) {
-            Text(
-              text = "Fecha de fin del sangrado:",
-              style = MaterialTheme.typography.labelMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = MaterialTheme.colorScheme.surface,
-              modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, AppleHairlineBorder, RoundedCornerShape(12.dp))
-            ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.padding(12.dp)
-              ) {
-                Column(modifier = Modifier.weight(1f)) {
-                  Text(
-                    text = endDate.format(dateFormatter),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                  )
-                  val daysCount = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1
-                  Text(
-                    text = "Duración del sangrado: $daysCount días",
-                    fontSize = 11.sp,
-                    color = PhaseMenstrualRose,
-                    fontWeight = FontWeight.SemiBold
-                  )
-                }
-                OutlinedButton(
-                  onClick = { showEndDatePicker = true },
-                  shape = RoundedCornerShape(10.dp),
-                  modifier = Modifier.testTag("pick_end_date_button")
-                ) {
-                  Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text("Cambiar", fontSize = 12.sp)
-                }
-              }
-            }
-          }
-        }
-
-        if (existingCycle != null && onDelete != null) {
-          Spacer(modifier = Modifier.height(16.dp))
-          OutlinedButton(
-            onClick = { showDeleteConfirm = true },
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().testTag("delete_period_button")
-          ) {
-            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Eliminar este ciclo")
-          }
-        }
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          if (startDate.isAfter(today)) {
-            dialogError = "La fecha de inicio no puede ser una fecha futura."
-            return@Button
-          }
-          if (hasFinishedBleeding) {
-            if (endDate.isAfter(today)) {
-              dialogError = "La fecha de fin no puede ser una fecha futura."
-              return@Button
-            }
-            if (endDate.isBefore(startDate)) {
-              dialogError = "La fecha de fin no puede ser anterior a la fecha de inicio."
-              return@Button
-            }
-          }
-
-          if (!isSubmitting) {
-            isSubmitting = true
-            dialogError = null
-            onSave(startDate, if (hasFinishedBleeding) endDate else null) { success, err ->
-              isSubmitting = false
-              if (success) {
-                onDismiss()
-              } else {
-                dialogError = err ?: "Error al guardar el periodo."
-              }
-            }
-          }
-        },
-        enabled = !isSubmitting,
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = PhaseMenstrualRose),
-        modifier = Modifier.testTag("save_period_button")
-      ) {
-        if (isSubmitting) {
-          CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-        } else {
-          Text(if (existingCycle != null) "Actualizar" else "Guardar Periodo", fontWeight = FontWeight.SemiBold)
-        }
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss, enabled = !isSubmitting) {
-        Text("Cancelar")
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    Surface(shape = RoundedCornerShape(16.dp), color = if (dark) LunaCoralDarkSoft else LunaCoralSoft,
+      contentColor = MaterialTheme.colorScheme.onBackground) {
+      Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(painterResource(R.drawable.luna_period_droplets), null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(when {
+          !hasFinished -> "Periodo en curso"
+          days == 1L -> "1 día registrado"
+          days > 1 -> "$days días registrados"
+          else -> "Revisa las fechas"
+        }, style = MaterialTheme.typography.titleMedium)
+        Text(if (hasFinished) "La duración corresponde a las fechas que confirmas."
+          else "Confirma el último día cuando termine.", style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
-  )
+    if (existingCycle != null && onDelete != null) {
+      LunaButton("Eliminar este registro", { showDelete = true; deleteError = null }, Modifier.testTag("delete_period_button"),
+        type = LunaButtonType.DANGER, enabled = !busy)
+      Text("Eliminar siempre requiere confirmación.", style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
+  if (pickStart) PeriodDatePicker(startDate, today, onDismiss = { pickStart = false }) { picked ->
+    startDate = picked
+    if (endDate.isBefore(picked)) endDate = picked
+    pickStart = false
+  }
+  if (pickEnd) PeriodDatePicker(endDate, today, minimum = startDate, onDismiss = { pickEnd = false }) { picked ->
+    endDate = picked
+    pickEnd = false
+  }
+  if (showDelete && onDelete != null) {
+    Dialog(onDismissRequest = { if (!deleting) showDelete = false },
+      properties = DialogProperties(dismissOnBackPress = !deleting, dismissOnClickOutside = !deleting, usePlatformDefaultWidth = false)) {
+      Surface(Modifier.padding(24.dp).widthIn(max = 393.dp).fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+          Text("¿Eliminar este registro?", style = MaterialTheme.typography.titleLarge)
+          // Describe the persisted record, even if its unsaved draft dates have been changed.
+          val storedStart = existingCycle?.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: initialDate
+          Text("Se quitará la menstruación registrada desde ${storedStart.format(formatter)} y se actualizarán las estimaciones relacionadas.",
+            style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          deleteError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("period_delete_error")) }
+          LunaButton("Eliminar registro", {
+            if (!deleting) {
+              deleting = true
+              deleteError = null
+              onDelete { success, failure ->
+                deleting = false
+                if (success) onDismiss()
+                else deleteError = failure ?: "No se pudo eliminar el registro. Intenta nuevamente."
+              }
+            }
+          }, Modifier.testTag("confirm_delete_period_button"), type = LunaButtonType.DANGER,
+            loading = deleting, loadingText = "Eliminando…")
+          LunaButton("Conservar registro", { showDelete = false }, Modifier.testTag("cancel_delete_period_button"),
+            type = LunaButtonType.SECONDARY, enabled = !deleting)
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun PeriodDateField(label: String, value: String, valueTag: String, buttonTag: String,
+  enabled: Boolean, onClick: () -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface,
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+      Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled, role = Role.Button, onClick = onClick)
+        .testTag(buttonTag).padding(16.dp)) {
+        Text(value, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag(valueTag))
+      }
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PeriodDatePicker(current: LocalDate, today: LocalDate, minimum: LocalDate? = null,
+  onDismiss: () -> Unit, onPicked: (LocalDate) -> Unit) {
+  val state = rememberDatePickerState(initialSelectedDateMillis = current.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+    selectableDates = object : SelectableDates {
+      override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+        val date = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
+        return !date.isAfter(today) && (minimum == null || !date.isBefore(minimum))
+      }
+    })
+  DatePickerDialog(onDismissRequest = onDismiss, confirmButton = {
+    TextButton({ state.selectedDateMillis?.let { onPicked(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) } },
+      enabled = state.selectedDateMillis != null) { Text("Aceptar") }
+  }, dismissButton = { TextButton(onDismiss) { Text("Cancelar") } }) {
+    DatePicker(state, title = { Text("Elige una fecha", modifier = Modifier.padding(24.dp)) })
+  }
 }

@@ -383,8 +383,8 @@ open class CycleRepository(
             headache = phys?.headache ?: false,
             backPain = phys?.backPain ?: false,
             bloating = phys?.bloating ?: false,
-            mood = mood?.mood ?: Mood.CALM.name,
-            energyLevel = mood?.energyLevel ?: 3,
+            mood = mood?.mood.orEmpty(),
+            energyLevel = mood?.energyLevel ?: 0,
             cervicalMucus = phys?.cervicalMucus ?: "NONE",
             tenderBreasts = phys?.tenderBreasts ?: false,
             cravings = phys?.cravings ?: false,
@@ -392,8 +392,11 @@ open class CycleRepository(
             publicNote = phys?.publicNote,
             privateNote = note?.privateNote,
             isPrivate = phys?.isPrivate ?: (mood?.isPrivate ?: false),
+            isMoodPrivate = mood?.isPrivate,
             loggedBy = phys?.loggedBy ?: (mood?.loggedBy ?: ""),
-            updatedAt = phys?.updatedAt ?: mood?.updatedAt
+            updatedAt = phys?.updatedAt ?: mood?.updatedAt,
+            hasPhysicalRecord = phys != null,
+            hasMoodRecord = mood != null
           )
         }
       }
@@ -446,7 +449,9 @@ open class CycleRepository(
             privateNote = null, // PARTNER NEVER SEES PRIVATE NOTE UNDER ANY CIRCUMSTANCES
             isPrivate = false,
             loggedBy = phys?.loggedBy ?: (mood?.loggedBy ?: ""),
-            updatedAt = phys?.updatedAt ?: mood?.updatedAt
+            updatedAt = phys?.updatedAt ?: mood?.updatedAt,
+            hasPhysicalRecord = phys != null,
+            hasMoodRecord = mood != null
           )
         }
       }
@@ -490,7 +495,7 @@ open class CycleRepository(
       "date" to symptom.date,
       "mood" to symptom.mood,
       "energyLevel" to symptom.energyLevel,
-      "isPrivate" to symptom.isPrivate,
+      "isPrivate" to (symptom.isMoodPrivate ?: symptom.isPrivate),
       "loggedBy" to symptom.loggedBy,
       "updatedAt" to FieldValue.serverTimestamp()
     )

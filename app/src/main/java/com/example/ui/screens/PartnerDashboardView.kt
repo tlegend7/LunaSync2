@@ -45,10 +45,16 @@ import com.example.data.model.PartnerObservation
 import com.example.ui.components.CheckInBannerComponent
 import com.example.ui.components.DailyCareCheatSheetCard
 import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaIcons
 import com.example.ui.components.LunaBadgeStyle
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaNavigationRow
+import com.example.ui.components.LunaCard
+import com.example.ui.components.physicalRecordText
+import com.example.ui.components.moodRecordText
+import com.example.ui.components.intimacyRecordText
+import com.example.ui.components.cycleEstimationText
 import com.example.ui.theme.*
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -79,8 +85,8 @@ fun PartnerDashboardView(
   val formattedDate = selectedDate.format(dateTitleFormatter)
     .replaceFirstChar { if (it.isLowerCase()) it.titlecase(localeEs) else it.toString() }
 
-  val shareSymptomsAllowed = space?.sharingPermissions?.shareSymptoms ?: true
-  val shareMoodAllowed = space?.sharingPermissions?.shareMood ?: true
+  val shareSymptomsAllowed = space?.sharingPermissions?.shareSymptoms ?: false
+  val shareMoodAllowed = space?.sharingPermissions?.shareMood ?: false
   val shareIntimacyAllowed = space?.sharingPermissions?.shareIntimacy ?: false
 
   Column(
@@ -112,7 +118,7 @@ fun PartnerDashboardView(
     // 2. Resumen compartido Hero card (Figma #5:727)
     Surface(
       shape = RoundedCornerShape(24.dp),
-      color = LunaNavyDarkCard,
+      color = MaterialTheme.colorScheme.lunaHero,
       modifier = Modifier.fillMaxWidth()
     ) {
       Column(modifier = Modifier.padding(20.dp)) {
@@ -120,7 +126,7 @@ fun PartnerDashboardView(
           text = "INFORMACIÓN COMPARTIDA",
           style = MaterialTheme.typography.labelSmall,
           fontWeight = FontWeight.SemiBold,
-          color = LunaIceBlueText,
+          color = MaterialTheme.colorScheme.lunaHeroMuted,
           letterSpacing = 0.5.sp
         )
 
@@ -130,7 +136,7 @@ fun PartnerDashboardView(
           text = "Su ciclo,\na su manera.",
           style = MaterialTheme.typography.headlineMedium,
           fontWeight = FontWeight.Bold,
-          color = Color.White,
+          color = MaterialTheme.colorScheme.lunaOnHero,
           lineHeight = 36.sp
         )
 
@@ -139,7 +145,7 @@ fun PartnerDashboardView(
         if (cycleStatus != null) {
           val nextPeriodEstimate = cycleStatus.nextPeriodDate
           val nextPeriodStr = try {
-            val formatterShort = DateTimeFormatter.ofPattern("d 'de' MMMM", localeEs)
+            val formatterShort = DateTimeFormatter.ofPattern("d MMM", localeEs)
             nextPeriodEstimate.format(formatterShort)
           } catch (e: Exception) {
             "En cálculo"
@@ -151,9 +157,10 @@ fun PartnerDashboardView(
             modifier = Modifier.fillMaxWidth()
           ) {
             Text(
-              text = "Día ${cycleStatus.currentDay} · Próximo periodo estimado: $nextPeriodStr",
+              text = if (cycleStatus.isDelayed) "Día ${cycleStatus.currentDay} · ${cycleStatus.delayedDays} días desde la fecha estimada"
+                else "Día ${cycleStatus.currentDay} · Próximo periodo estimado: $nextPeriodStr",
               style = MaterialTheme.typography.bodySmall,
-              color = LunaIceBlueText,
+              color = MaterialTheme.colorScheme.lunaHeroMuted,
               modifier = Modifier.weight(1f)
             )
 
@@ -162,11 +169,13 @@ fun PartnerDashboardView(
               style = LunaBadgeStyle.ESTIMATE
             )
           }
+          Spacer(Modifier.height(8.dp))
+          Text(cycleEstimationText(cycleStatus), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.lunaHeroMuted)
         } else {
           Text(
             text = "Sin estimaciones activas. Tu pareja aún no ha registrado el inicio de su ciclo.",
             style = MaterialTheme.typography.bodySmall,
-            color = LunaIceBlueText
+            color = MaterialTheme.colorScheme.lunaHeroMuted
           )
         }
       }
@@ -182,59 +191,31 @@ fun PartnerDashboardView(
       modifier = Modifier.fillMaxWidth()
     ) {
       Column(modifier = Modifier.padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(
-            modifier = Modifier
-              .size(32.dp)
-              .clip(RoundedCornerShape(8.dp))
-              .background(if (isDark) LunaDarkBorder else LunaSageSoft),
-            contentAlignment = Alignment.Center
-          ) {
             Icon(
-              imageVector = Icons.Default.Check,
+              imageVector = LunaIcons.Check,
               contentDescription = null,
-              tint = LunaSageText,
-              modifier = Modifier.size(18.dp)
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(22.dp)
             )
-          }
-          Spacer(modifier = Modifier.width(10.dp))
+          Spacer(modifier = Modifier.height(8.dp))
           Text(
             text = "Lo que sabes hoy",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground
           )
-        }
-
         Spacer(modifier = Modifier.height(8.dp))
 
-        val symptomSummary = buildString {
-          if (!shareSymptomsAllowed) {
-            append("Los síntomas físicos no están compartidos según la privacidad elegida.")
-          } else if (todaySymptom != null) {
-            val items = mutableListOf<String>()
-            if (todaySymptom.cramps) items.add("Cólicos leves")
-            if (todaySymptom.headache) items.add("Dolor de cabeza")
-            if (todaySymptom.backPain) items.add("Molestia lumbar")
-            if (todaySymptom.bloating) items.add("Inflamación")
-            if (todaySymptom.painLevel > 0) items.add("Dolor ${todaySymptom.painLevel}/5")
-            if (!todaySymptom.publicNote.isNullOrBlank()) items.add(todaySymptom.publicNote!!)
-            if (items.isNotEmpty()) {
-              append(items.joinToString(" · "))
-              append(" · Registro compartido.")
-            } else {
-              append("Sin molestias físicas registradas para hoy.")
-            }
-          } else {
-            append("Sin registros de síntomas ingresados para hoy.")
-          }
-        }
-
         Text(
-          text = symptomSummary,
+          text = physicalRecordText(todaySymptom, isOwner = false, canRead = shareSymptomsAllowed),
           style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.testTag("partner_physical_record")
         )
+        Spacer(Modifier.height(8.dp))
+        Text(moodRecordText(todaySymptom, isOwner = false, canRead = shareMoodAllowed),
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.testTag("partner_mood_record"))
       }
     }
 
@@ -245,7 +226,6 @@ fun PartnerDashboardView(
       text = "Preguntarle cómo está",
       onClick = onOpenCheckInDialog,
       type = LunaButtonType.PRIMARY,
-      icon = Icons.Default.QuestionAnswer,
       modifier = Modifier.testTag("send_check_in_cta")
     )
 
@@ -274,8 +254,8 @@ fun PartnerDashboardView(
       title = "Anotar un gesto de cuidado",
       subtitle = "Tus observaciones no cambian su registro.",
       onClick = onOpenObservationDialog,
-      icon = Icons.Default.Favorite,
-      iconTint = LunaSageText,
+      icon = LunaIcons.Heart,
+      iconTint = MaterialTheme.colorScheme.onBackground,
       modifier = Modifier.testTag("log_observation_cta")
     )
 
@@ -287,6 +267,20 @@ fun PartnerDashboardView(
         isElla = false,
         onQuickReplySelected = {}
       )
+    }
+
+    if (shareIntimacyAllowed) {
+      val sharedLogs = intimacyLogs.filter { !it.isPrivate }
+      Spacer(Modifier.height(16.dp))
+      LunaCard(modifier = Modifier.testTag("partner_shared_intimacy")) {
+        Text("Intimidad compartida", style = MaterialTheme.typography.titleMedium)
+        if (sharedLogs.isEmpty()) Text("Sin registros de intimidad compartidos.", style = MaterialTheme.typography.bodySmall)
+        sharedLogs.forEach { record ->
+          Spacer(Modifier.height(12.dp))
+          Text(record.date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(intimacyRecordText(record), style = MaterialTheme.typography.bodySmall)
+        }
+      }
     }
 
     // 7. Tarjeta contextual de sugerencias de cuidado diario
@@ -311,10 +305,10 @@ fun PartnerDashboardView(
         modifier = Modifier.padding(16.dp)
       ) {
         Icon(
-          imageVector = Icons.Default.Lock,
+          imageVector = LunaIcons.Lock,
           contentDescription = null,
-          tint = LunaNavyPrimary,
-          modifier = Modifier.size(20.dp)
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(22.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
@@ -330,7 +324,7 @@ fun PartnerDashboardView(
       Text(
         text = errorMessage,
         style = MaterialTheme.typography.bodySmall,
-        color = StatusError
+        color = MaterialTheme.colorScheme.error
       )
     }
   }

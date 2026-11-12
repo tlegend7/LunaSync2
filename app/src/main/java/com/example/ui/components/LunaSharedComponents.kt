@@ -1,11 +1,13 @@
 package com.example.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,12 +46,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.ui.theme.*
 import com.example.ui.theme.LunaSandText
 import com.example.ui.theme.LunaSurfaceLight
@@ -83,7 +88,8 @@ fun LunaButton(
   type: LunaButtonType = LunaButtonType.PRIMARY,
   enabled: Boolean = true,
   loading: Boolean = false,
-  icon: ImageVector? = null
+  icon: ImageVector? = null,
+  loadingText: String = "Guardando…"
 ) {
   val isDark = MaterialTheme.colorScheme.background.red < 0.2f
   val actualEnabled = enabled && !loading && type != LunaButtonType.DISABLED
@@ -91,14 +97,14 @@ fun LunaButton(
   val containerColor = when (type) {
     LunaButtonType.PRIMARY -> if (isDark) LunaIceBlueAccent else LunaNavyPrimary
     LunaButtonType.SECONDARY -> if (isDark) LunaDarkSurface else LunaSurfaceLight
-    LunaButtonType.DANGER -> LunaCoralSoft
+    LunaButtonType.DANGER -> MaterialTheme.colorScheme.errorContainer
     LunaButtonType.DISABLED -> if (isDark) LunaDarkBorder else Color(0xFFEDF2F7)
   }
 
   val contentColor = when (type) {
-    LunaButtonType.PRIMARY -> if (isDark) LunaNavyPrimary else Color.White
-    LunaButtonType.SECONDARY -> if (isDark) Color.White else LunaNavyPrimary
-    LunaButtonType.DANGER -> LunaCoralText
+    LunaButtonType.PRIMARY -> MaterialTheme.colorScheme.onPrimary
+    LunaButtonType.SECONDARY -> MaterialTheme.colorScheme.primary
+    LunaButtonType.DANGER -> MaterialTheme.colorScheme.onErrorContainer
     LunaButtonType.DISABLED -> LunaTextSecondary
   }
 
@@ -116,7 +122,7 @@ fun LunaButton(
       containerColor = containerColor,
       contentColor = contentColor,
       disabledContainerColor = if (isDark) LunaDarkBorder else Color(0xFFEDF2F7),
-      disabledContentColor = LunaTextSecondary
+      disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
     ),
     modifier = modifier
       .fillMaxWidth()
@@ -130,7 +136,7 @@ fun LunaButton(
       )
       Spacer(modifier = Modifier.width(8.dp))
       Text(
-        text = "Guardando…",
+        text = loadingText,
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold
       )
@@ -308,46 +314,30 @@ fun LunaToggle(
   checked: Boolean,
   onCheckedChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
-  enabled: Boolean = true
+  enabled: Boolean = true,
+  label: String? = null
 ) {
   val isDark = MaterialTheme.colorScheme.background.red < 0.2f
-  val trackColor by animateColorAsState(
-    targetValue = if (checked) {
-      if (isDark) LunaIceBlueAccent else LunaNavyPrimary
-    } else {
-      if (isDark) LunaNavyBorderDark else LunaBorderLight
-    },
-    label = "trackColor"
-  )
-
-  val thumbOffset by animateDpAsState(
-    targetValue = if (checked) 23.dp else 3.dp,
-    label = "thumbOffset"
-  )
-
-  val thumbColor = if (checked && isDark) LunaNavyPrimary else Color.White
+  val drawable = when {
+    isDark && checked -> R.drawable.luna_toggle_dark_on
+    isDark -> R.drawable.luna_toggle_dark_off
+    checked -> R.drawable.luna_toggle_light_on
+    else -> R.drawable.luna_toggle_light_off
+  }
 
   Box(
     modifier = modifier
-      .size(width = 51.dp, height = 31.dp)
-      .clip(RoundedCornerShape(100.dp))
-      .background(trackColor)
-      .clickable(
+      .size(width = 51.dp, height = 48.dp)
+      .semantics { if (label != null) contentDescription = label }
+      .toggleable(
+        value = checked,
         enabled = enabled,
         role = Role.Switch,
-        interactionSource = remember { MutableInteractionSource() },
-        indication = null,
-        onClick = { onCheckedChange(!checked) }
+        onValueChange = onCheckedChange
       ),
-    contentAlignment = Alignment.CenterStart
+    contentAlignment = Alignment.Center
   ) {
-    Box(
-      modifier = Modifier
-        .offset(x = thumbOffset)
-        .size(25.dp)
-        .clip(CircleShape)
-        .background(thumbColor)
-    )
+    Image(painterResource(drawable), null, Modifier.size(width = 51.dp, height = 31.dp))
   }
 }
 
@@ -386,7 +376,7 @@ fun LunaNavigationRow(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
   icon: ImageVector? = null,
-  iconTint: Color = LunaNavyPrimary,
+  iconTint: Color = MaterialTheme.colorScheme.onBackground,
   trailingText: String? = null,
   enabled: Boolean = true
 ) {
@@ -399,20 +389,12 @@ fun LunaNavigationRow(
       .padding(vertical = 12.dp)
   ) {
     if (icon != null) {
-      Box(
-        modifier = Modifier
-          .size(40.dp)
-          .clip(RoundedCornerShape(12.dp))
-          .background(if (isDark) LunaDarkSurface else LunaIceBlueSubtle),
-        contentAlignment = Alignment.Center
-      ) {
         Icon(
           imageVector = icon,
           contentDescription = null,
-          tint = if (isDark) LunaIceBlueAccent else iconTint,
+          tint = iconTint,
           modifier = Modifier.size(22.dp)
         )
-      }
       Spacer(modifier = Modifier.width(12.dp))
     }
 
@@ -441,10 +423,10 @@ fun LunaNavigationRow(
     }
 
     Icon(
-      imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+      imageVector = LunaIcons.ChevronRight,
       contentDescription = null,
-      tint = LunaTextSecondary,
-      modifier = Modifier.size(20.dp)
+      tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.size(16.dp)
     )
   }
 }
@@ -472,23 +454,26 @@ fun LunaContextTopBar(
       style = MaterialTheme.typography.labelSmall,
       fontWeight = FontWeight.SemiBold,
       color = if (isDark) LunaDarkTextSecondary else LunaTextSecondary,
-      letterSpacing = 1.sp
+      letterSpacing = 1.sp,
+      modifier = Modifier.weight(1f)
     )
 
     Box(
       modifier = Modifier
-        .size(36.dp)
-        .clip(CircleShape)
-        .background(if (isDark) LunaNavyBorderDark else Color(0xFFEDF2F7))
-        .clickable(onClick = onAvatarClick),
+        .size(48.dp)
+        .semantics { contentDescription = "Abrir ajustes" }
+        .clickable(role = Role.Button, onClick = onAvatarClick),
       contentAlignment = Alignment.Center
     ) {
+      Box(Modifier.size(36.dp).clip(CircleShape)
+        .background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
       Text(
         text = avatarInitials,
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
         color = if (isDark) Color.White else LunaNavyPrimary
       )
+      }
     }
   }
 }
@@ -501,11 +486,12 @@ fun LunaOptionChip(
   text: String,
   selected: Boolean,
   onSelect: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  enabled: Boolean = true
 ) {
   val isDark = MaterialTheme.colorScheme.background.red < 0.2f
   val bgColor = if (selected) {
-    if (isDark) LunaNavyBorderDark else LunaIceBlueSubtle
+    MaterialTheme.colorScheme.primaryContainer
   } else {
     if (isDark) LunaDarkSurface else LunaSurfaceLight
   }
@@ -527,11 +513,12 @@ fun LunaOptionChip(
     color = bgColor,
     border = BorderStroke(1.dp, borderColor),
     modifier = modifier
-      .clickable(onClick = onSelect)
+      .heightIn(min = 48.dp)
+      .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect)
   ) {
     Box(
       contentAlignment = Alignment.Center,
-      modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+      modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
       Text(
         text = text,
@@ -561,21 +548,22 @@ fun LunaBottomNavPill(
     shape = RoundedCornerShape(24.dp),
     color = navBg,
     border = BorderStroke(1.dp, navBorder),
-    shadowElevation = 4.dp,
+    shadowElevation = 0.dp,
     modifier = modifier
       .fillMaxWidth()
-      .height(64.dp)
+      .heightIn(min = 64.dp)
   ) {
     Row(
       horizontalArrangement = Arrangement.SpaceEvenly,
       verticalAlignment = Alignment.CenterVertically,
       modifier = Modifier
         .fillMaxWidth()
+        .selectableGroup()
         .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
       LunaNavTabItem(
         label = "Hoy",
-        icon = Icons.Default.Home,
+        icon = LunaIcons.Home,
         selected = selectedTab == 0,
         onClick = { onTabSelected(0) },
         isDark = isDark,
@@ -584,7 +572,7 @@ fun LunaBottomNavPill(
 
       LunaNavTabItem(
         label = "Calendario",
-        icon = Icons.Default.CalendarMonth,
+        icon = LunaIcons.Calendar,
         selected = selectedTab == 1,
         onClick = { onTabSelected(1) },
         isDark = isDark,
@@ -593,7 +581,7 @@ fun LunaBottomNavPill(
 
       LunaNavTabItem(
         label = "Nosotros",
-        icon = Icons.Default.Favorite,
+        icon = LunaIcons.Space,
         selected = selectedTab == 2,
         onClick = { onTabSelected(2) },
         isDark = isDark,
@@ -620,12 +608,13 @@ private fun LunaNavTabItem(
     verticalArrangement = Arrangement.Center,
     modifier = modifier
       .clip(RoundedCornerShape(16.dp))
-      .clickable(onClick = onClick)
+      .heightIn(min = 48.dp)
+      .selectable(selected = selected, role = Role.Tab, onClick = onClick)
       .padding(vertical = 6.dp)
   ) {
     Icon(
       imageVector = icon,
-      contentDescription = label,
+      contentDescription = null,
       tint = if (selected) activeColor else inactiveColor,
       modifier = Modifier.size(22.dp)
     )

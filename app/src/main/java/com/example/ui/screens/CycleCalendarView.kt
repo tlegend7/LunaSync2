@@ -44,6 +44,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -58,10 +67,14 @@ import com.example.data.model.DayHighlightType
 import com.example.data.model.IntimacyLog
 import com.example.data.model.PredictedCycle
 import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaIcons
 import com.example.ui.components.LunaBadgeStyle
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaCard
+import com.example.ui.components.physicalRecordText
+import com.example.ui.components.moodRecordText
+import com.example.ui.components.intimacyRecordText
 import com.example.ui.theme.*
 import java.time.LocalDate
 import java.time.YearMonth
@@ -89,7 +102,10 @@ fun CycleCalendarView(
   onOpenSymptomDialogForDate: (LocalDate) -> Unit,
   onOpenPeriodDialog: (() -> Unit)? = null,
   onOpenPeriodDialogForDate: ((LocalDate) -> Unit)? = null,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  canReadSymptoms: Boolean = true,
+  canReadMood: Boolean = true,
+  canReadIntimacy: Boolean = true
 ) {
   val isDark = MaterialTheme.colorScheme.background.red < 0.2f
   val localeEs = Locale("es", "ES")
@@ -98,25 +114,25 @@ fun CycleCalendarView(
     mutableStateOf(YearMonth.from(selectedDate))
   }
 
-  val symptomDates = remember(symptoms) {
-    symptoms.mapNotNull {
+  val symptomDates = remember(symptoms, canReadSymptoms, canReadMood) {
+    symptoms.filter { (canReadSymptoms && it.hasPhysicalRecord) || (canReadMood && it.hasMoodRecord) }.mapNotNull {
       try { LocalDate.parse(it.date) } catch (e: Exception) { null }
     }.toSet()
   }
 
-  val intimacyDates = remember(intimacyLogs) {
-    intimacyLogs.mapNotNull {
+  val intimacyDates = remember(intimacyLogs, canReadIntimacy, canLogSymptoms) {
+    intimacyLogs.filter { canReadIntimacy && (canLogSymptoms || !it.isPrivate) }.mapNotNull {
       try { LocalDate.parse(it.date) } catch (e: Exception) { null }
     }.toSet()
   }
 
-  val confirmedBleedingDates = remember(symptoms) {
-    symptoms.filter { it.flowLevel in listOf("LIGHT", "MEDIUM", "HEAVY") }.mapNotNull {
+  val confirmedBleedingDates = remember(symptoms, canReadSymptoms) {
+    symptoms.filter { canReadSymptoms && it.hasPhysicalRecord && it.flowLevel in listOf("LIGHT", "MEDIUM", "HEAVY") }.mapNotNull {
       try { LocalDate.parse(it.date) } catch (e: Exception) { null }
     }.toSet()
   }
 
-  val selectedDayDetail by remember(selectedDate, lastPeriodStart, pastCycles, symptoms, intimacyLogs) {
+  val selectedDayDetail by remember(selectedDate, lastPeriodStart, pastCycles, symptoms, intimacyLogs, averagePeriodLength, averageCycleLength, today, canReadSymptoms, canReadMood, canReadIntimacy) {
     derivedStateOf {
       CycleCalculationEngine.getDayDetail(
         date = selectedDate,
@@ -176,16 +192,17 @@ fun CycleCalendarView(
         text = "$monthTitle $yearTitle",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onBackground
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.weight(1f)
       )
 
       Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(
           onClick = { displayedMonth = displayedMonth.minusMonths(1) },
-          modifier = Modifier.size(36.dp).testTag("prev_month_button")
+          modifier = Modifier.size(48.dp).testTag("prev_month_button")
         ) {
           Icon(
-            Icons.AutoMirrored.Filled.ArrowBack,
+            LunaIcons.CalendarPrevious,
             contentDescription = "Mes anterior",
             tint = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.size(20.dp)
@@ -194,10 +211,10 @@ fun CycleCalendarView(
 
         IconButton(
           onClick = { displayedMonth = displayedMonth.plusMonths(1) },
-          modifier = Modifier.size(36.dp).testTag("next_month_button")
+          modifier = Modifier.size(48.dp).testTag("next_month_button")
         ) {
           Icon(
-            Icons.AutoMirrored.Filled.ArrowForward,
+            LunaIcons.CalendarNext,
             contentDescription = "Mes siguiente",
             tint = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.size(20.dp)
@@ -248,7 +265,7 @@ fun CycleCalendarView(
             val isSelected = cellDate == selectedDate
             val isTodayDate = cellDate == today
 
-            val cellDetail = remember(cellDate, lastPeriodStart, pastCycles, symptoms, intimacyLogs) {
+            val cellDetail = remember(cellDate, lastPeriodStart, pastCycles, symptoms, intimacyLogs, averagePeriodLength, averageCycleLength, today, canReadSymptoms, canReadMood, canReadIntimacy) {
               CycleCalculationEngine.getDayDetail(
                 date = cellDate,
                 lastPeriodStart = lastPeriodStart,
@@ -329,14 +346,14 @@ fun CycleCalendarView(
       Column(modifier = Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Icon(
-            imageVector = Icons.Default.Tune,
+            imageVector = LunaIcons.Sliders,
             contentDescription = null,
             tint = if (isDark) LunaIceBlueAccent else LunaNavyPrimary,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(22.dp)
           )
           Spacer(modifier = Modifier.width(8.dp))
           Text(
-            text = "Cómo te sentiste",
+            text = if (canLogSymptoms) "Cómo te sentiste" else "Registros compartidos",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground
@@ -345,39 +362,72 @@ fun CycleCalendarView(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (selectedDateSymptom != null) {
-          val symptomItems = mutableListOf<String>()
-          if (selectedDateSymptom.cramps) symptomItems.add("Cólicos leves")
-          if (selectedDateSymptom.headache) symptomItems.add("Cefalea")
-          if (selectedDateSymptom.backPain) symptomItems.add("Dolor lumbar")
-          if (selectedDateSymptom.bloating) symptomItems.add("Inflamación")
-          if (selectedDateSymptom.painLevel > 0) symptomItems.add("Dolor ${selectedDateSymptom.painLevel}/5")
-          if (selectedDateSymptom.energyLevel > 0) symptomItems.add("Energía ${selectedDateSymptom.energyLevel}/5")
-          if (!selectedDateSymptom.publicNote.isNullOrBlank()) symptomItems.add(selectedDateSymptom.publicNote!!)
-
-          val summaryText = if (symptomItems.isNotEmpty()) symptomItems.joinToString(" · ") else "Sin molestias físicas registradas"
-          Text(
-            text = summaryText,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground
-          )
-
-          Spacer(modifier = Modifier.height(4.dp))
-
-          Text(
-            text = "Solo tú puedes ver tu nota privada.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        } else {
-          Text(
-            text = "Sin síntomas registrados para esta fecha.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+        Text(physicalRecordText(selectedDateSymptom, canLogSymptoms, canReadSymptoms),
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.testTag("selected_physical_record"))
+        Spacer(Modifier.height(8.dp))
+        Text(moodRecordText(selectedDateSymptom, canLogSymptoms, canReadMood),
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.testTag("selected_mood_record"))
+        if (canLogSymptoms) selectedDateSymptom?.privateNote?.takeIf { it.isNotBlank() }?.let { note ->
+          Spacer(Modifier.height(12.dp))
+          Text("Nota privada · Solo tú", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+          Text(note, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag("selected_private_note"))
         }
       }
+    }
+
+    if (selectedDayDetail.cycleDay != null) {
+      Spacer(Modifier.height(16.dp))
+      LunaCard {
+        LunaBadge(if (selectedDayDetail.isPeriodConfirmed) "Sangrado confirmado" else "Estimación del ciclo",
+          style = if (selectedDayDetail.isPeriodConfirmed) LunaBadgeStyle.FACT else LunaBadgeStyle.ESTIMATE)
+        Spacer(Modifier.height(8.dp))
+        Text("Día ${selectedDayDetail.cycleDay} · ${selectedDayDetail.phaseName}", style = MaterialTheme.typography.titleMedium,
+          modifier = Modifier.testTag("selected_cycle_detail"))
+        Text(selectedDayDetail.hormoneInsight, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    }
+
+    val visiblePredictions = predictedCycles.filter {
+      !it.expectedStartDate.isBefore(today) && YearMonth.from(it.expectedStartDate) == displayedMonth
+    }
+    if (lastPeriodStart != null && visiblePredictions.isNotEmpty()) {
+      Spacer(Modifier.height(16.dp))
+      LunaCard {
+        Text("Fechas orientativas", style = MaterialTheme.typography.titleMedium)
+        Text("Son estimaciones; no confirman ovulación ni sirven como método anticonceptivo.",
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        visiblePredictions.forEach { prediction ->
+          Spacer(Modifier.height(8.dp))
+          Text("Inicio estimado · " + prediction.expectedStartDate.format(DateTimeFormatter.ofPattern("d MMM", localeEs)),
+            style = MaterialTheme.typography.bodyMedium)
+          Text(if (CycleCalculationEngine.calculateStandardDeviation(pastCycles,
+              CycleCalculationEngine.calculateWeightedAverage(pastCycles, averageCycleLength)) != null)
+            "Variabilidad orientativa ±" + String.format(localeEs, "%.1f", prediction.confidenceDays) + " días. Las fechas pueden variar más."
+            else "La variabilidad personal todavía no puede establecerse con estos registros.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    }
+
+    val selectedIntimacy = intimacyLogs.filter { it.date == selectedDate.toString() && (canLogSymptoms || !it.isPrivate) }
+    if (selectedIntimacy.isNotEmpty() && canReadIntimacy) {
+      Spacer(Modifier.height(16.dp))
+      LunaCard {
+        Text("Intimidad", style = MaterialTheme.typography.titleMedium)
+        selectedIntimacy.forEach { record ->
+          Spacer(Modifier.height(8.dp))
+          Text(intimacyRecordText(record), style = MaterialTheme.typography.bodySmall)
+          Text(if (record.isPrivate) "Solo tú" else if (canLogSymptoms) "Según tus permisos de intimidad" else "Registro compartido",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    } else if (!canLogSymptoms && !canReadIntimacy) {
+      Spacer(Modifier.height(8.dp))
+      Text("Los registros de intimidad no se comparten contigo.", style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     Spacer(modifier = Modifier.height(16.dp))
@@ -448,7 +498,6 @@ private fun CalendarFigmaCell(
 
   val border = when {
     isSelected -> null
-    isPredictedPeriod -> BorderStroke(1.dp, if (isDark) LunaCoralDarkText else LunaPeriodRed)
     isToday -> BorderStroke(1.dp, if (isDark) LunaIceBlueAccent else LunaNavyPrimary)
     else -> null
   }
@@ -459,6 +508,27 @@ private fun CalendarFigmaCell(
       .aspectRatio(1f)
       .clip(shape)
       .background(cellBg)
+      .drawWithContent {
+        drawContent()
+        if (isPredictedPeriod && !isSelected) {
+          val stroke = 1.dp.toPx()
+          drawRoundRect(if (isDark) LunaCoralDarkText else LunaPeriodRed,
+            topLeft = Offset(stroke / 2, stroke / 2), size = Size(size.width - stroke, size.height - stroke),
+            cornerRadius = CornerRadius(12.dp.toPx()),
+            style = Stroke(stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx()))))
+        }
+      }
+      .semantics {
+        selected = isSelected
+        contentDescription = buildList {
+          add(detail.date.format(DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", Locale.forLanguageTag("es-ES"))))
+          if (isToday) add("Hoy")
+          if (isActualPeriod) add("Menstruación registrada")
+          if (isPredictedPeriod) add("Menstruación estimada")
+          if (detail.hasSymptomLogged) add("Con registro de síntomas o ánimo")
+          if (detail.hasIntimacyLogged) add("Con registro de intimidad")
+        }.joinToString(". ")
+      }
       .then(if (border != null) Modifier.border(border, shape) else Modifier)
       .clickable(onClick = onClick)
       .testTag("calendar_day_$dayNumber")

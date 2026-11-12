@@ -98,8 +98,8 @@ service cloud.firestore {
       return data.keys().hasOnly(['spaceId', 'date', 'perceivedMood', 'apparentPainLevel', 'unloggedSpottingReported', 'spottingSuggestionStatus', 'careActionTaken', 'sweetMessage', 'loggedBy', 'createdAt']) &&
              data.spaceId is string &&
              data.date is string &&
-             data.perceivedMood in ['CALM', 'TIRED', 'SAD', 'IRRITABLE', 'LOVING'] &&
-             data.apparentPainLevel is int && data.apparentPainLevel >= 0 && data.apparentPainLevel <= 5 &&
+             (data.perceivedMood == null || data.perceivedMood in ['CALM', 'TIRED', 'SAD', 'IRRITABLE', 'LOVING']) &&
+             (data.apparentPainLevel == null || (data.apparentPainLevel is int && data.apparentPainLevel >= 0 && data.apparentPainLevel <= 5)) &&
              data.unloggedSpottingReported is bool &&
              data.spottingSuggestionStatus in ['PENDING', 'ACCEPTED', 'DISMISSED'] &&
              data.loggedBy is string &&
@@ -159,6 +159,15 @@ service cloud.firestore {
           // REGLA ATÓMICA OBLIGATORIA (getAfter): La invitación DEBE quedar CONSUMED por este usuario al final de la transacción
           getAfter(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.status == 'CONSUMED' &&
           getAfter(/databases/$(database)/documents/pairing_invites/$(request.resource.data.claimedInviteCode)).data.consumedBy == request.auth.uid
+        ) ||
+        // Caso 3: La pareja actual puede finalizar únicamente su propio vínculo.
+        (
+          resource.data.partnerId == request.auth.uid && resource.data.status == 'PAIRED' &&
+          request.resource.data.partnerId == null && request.resource.data.status == 'UNPAIRED' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['partnerId', 'status', 'activeInviteVersion', 'updatedAt']) &&
+          request.resource.data.updatedAt == request.time &&
+          (('activeInviteVersion' in resource.data && request.resource.data.activeInviteVersion == resource.data.activeInviteVersion + 1) ||
+           (!('activeInviteVersion' in resource.data) && request.resource.data.activeInviteVersion == 2))
         )
       );
 

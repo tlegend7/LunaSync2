@@ -49,12 +49,14 @@ import com.example.data.model.PartnerObservation
 import com.example.data.model.QuickResponseOption
 import com.example.ui.components.CheckInBannerComponent
 import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaIcons
 import com.example.ui.components.LunaBadgeStyle
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaCard
 import com.example.ui.components.LunaNavigationRow
 import com.example.ui.components.SpottingSuggestionCard
+import com.example.ui.components.cycleEstimationText
 import com.example.ui.theme.*
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -82,8 +84,14 @@ fun EllaDashboardView(
   onDismissSpotting: () -> Unit,
   selectedDate: LocalDate = LocalDate.now(),
   onSelectDate: (LocalDate) -> Unit = {},
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onOpenReply: ((CheckIn) -> Unit)? = null,
+  onOpenPrivacy: () -> Unit = {}
 ) {
+  if (cycleStatus == null) {
+    EmptyCycleHistory(onOpenPeriodDialog, onOpenSymptomDialog, onOpenPrivacy, onOpenIntimacyDialog, latestCheckIn, onOpenReply, onQuickReplySelected, modifier)
+    return
+  }
   val isDark = MaterialTheme.colorScheme.background.red < 0.2f
   val localeEs = Locale("es", "ES")
 
@@ -182,49 +190,11 @@ fun EllaDashboardView(
     Spacer(modifier = Modifier.height(20.dp))
 
     // 3. Hero Card: Resumen del ciclo (Figma #5:161)
-    if (cycleStatus == null) {
-      // Estado sin historial (Figma #5:1091: empty · Tu historia empieza contigo)
-      Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = LunaNavyDarkCard,
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-          Text(
-            text = "TU HISTORIA EMPIEZA CONTIGO",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = LunaIceBlueText,
-            letterSpacing = 0.5.sp
-          )
-          Spacer(modifier = Modifier.height(8.dp))
-          Text(
-            text = "Sin fechas inventadas",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-          )
-          Spacer(modifier = Modifier.height(6.dp))
-          Text(
-            text = "Registra el primer día de tu última menstruación para calcular tus fases reales con base biológica.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = LunaIceBlueText
-          )
-          Spacer(modifier = Modifier.height(16.dp))
-          LunaButton(
-            text = "Registrar inicio menstrual",
-            onClick = onOpenPeriodDialog,
-            type = LunaButtonType.PRIMARY,
-            icon = Icons.Default.CalendarMonth,
-            modifier = Modifier.testTag("register_period_start_cta")
-          )
-        }
-      }
-    } else {
+    run {
       val dayNum = cycleStatus.currentDay
       val nextPeriodEstimate = cycleStatus.nextPeriodDate
       val nextPeriodStr = try {
-        val formatterShort = DateTimeFormatter.ofPattern("d 'de' MMMM", localeEs)
+        val formatterShort = DateTimeFormatter.ofPattern("d MMM", localeEs)
         nextPeriodEstimate.format(formatterShort)
       } catch (e: Exception) {
         "En cálculo"
@@ -232,7 +202,7 @@ fun EllaDashboardView(
 
       Surface(
         shape = RoundedCornerShape(24.dp),
-        color = LunaNavyDarkCard,
+        color = MaterialTheme.colorScheme.lunaHero,
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -245,7 +215,7 @@ fun EllaDashboardView(
               text = "TU CICLO",
               style = MaterialTheme.typography.labelSmall,
               fontWeight = FontWeight.SemiBold,
-              color = LunaIceBlueText,
+              color = MaterialTheme.colorScheme.lunaHeroMuted,
               letterSpacing = 0.5.sp
             )
 
@@ -261,24 +231,24 @@ fun EllaDashboardView(
             text = "Día $dayNum",
             style = MaterialTheme.typography.displayLarge,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.lunaOnHero
           )
 
           Spacer(modifier = Modifier.height(4.dp))
 
           Text(
-            text = "Próximo periodo estimado · $nextPeriodStr",
+            text = if (cycleStatus.isDelayed) "${cycleStatus.delayedDays} días desde la fecha estimada" else "Próximo periodo estimado · $nextPeriodStr",
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
-            color = Color.White
+            color = MaterialTheme.colorScheme.lunaOnHero
           )
 
           Spacer(modifier = Modifier.height(4.dp))
 
           Text(
-            text = "Las fechas pueden variar. Basado en tus registros.",
+            text = cycleEstimationText(cycleStatus),
             style = MaterialTheme.typography.bodySmall,
-            color = LunaIceBlueText
+            color = MaterialTheme.colorScheme.lunaHeroMuted
           )
         }
       }
@@ -288,12 +258,9 @@ fun EllaDashboardView(
 
     // 4. Botón principal: Registrar cómo me siento (Figma #5:166)
     LunaButton(
-      text = if (cycleStatus == null) "Registrar inicio de ciclo" else "Registrar cómo me siento",
-      onClick = {
-        if (cycleStatus == null) onOpenPeriodDialog() else onOpenSymptomDialog()
-      },
+      text = "Registrar cómo me siento",
+      onClick = onOpenSymptomDialog,
       type = LunaButtonType.PRIMARY,
-      icon = Icons.Default.Edit,
       modifier = Modifier.testTag("log_symptoms_cta")
     )
 
@@ -314,8 +281,8 @@ fun EllaDashboardView(
       title = "Menstruación",
       subtitle = if (cycleStatus != null) "Ciclo en curso · Día ${cycleStatus.currentDay}" else "Sin registros de inicio",
       onClick = onOpenPeriodDialog,
-      icon = Icons.Default.WaterDrop,
-      iconTint = LunaPeriodRed,
+      icon = LunaIcons.Droplets,
+      iconTint = MaterialTheme.colorScheme.onBackground,
       modifier = Modifier.testTag("open_period_dialog_row")
     )
 
@@ -327,21 +294,9 @@ fun EllaDashboardView(
       title = "Intimidad",
       subtitle = if (intimacyCount > 0) "$intimacyCount registros íntimos protegidos" else "Un registro que tú controlas.",
       onClick = onOpenIntimacyDialog,
-      icon = Icons.Default.Lock,
-      iconTint = LunaNavyPrimary,
+      icon = LunaIcons.Lock,
+      iconTint = MaterialTheme.colorScheme.onBackground,
       modifier = Modifier.testTag("log_intimacy_cta")
-    )
-
-    // Fila: Calendario de acceso rápido
-    HorizontalDivider(color = if (isDark) LunaDarkBorder else LunaBorderLight, thickness = 1.dp)
-
-    LunaNavigationRow(
-      title = "Tu calendario",
-      subtitle = "Consulta tu historial de ciclos y registros",
-      onClick = onNavigateToCalendar,
-      icon = Icons.Default.CalendarMonth,
-      iconTint = LunaSageText,
-      modifier = Modifier.testTag("open_calendar_cta")
     )
 
     // 6. Mensaje de apoyo de la pareja o Check-In activo (Figma Patrón 07 #15:124)
@@ -350,7 +305,8 @@ fun EllaDashboardView(
       CheckInBannerComponent(
         checkIn = latestCheckIn,
         isElla = true,
-        onQuickReplySelected = onQuickReplySelected
+        onQuickReplySelected = onQuickReplySelected,
+        onOpenReply = onOpenReply
       )
     } else if (partnerObservations.isNotEmpty()) {
       val latestObs = partnerObservations.firstOrNull()
@@ -367,10 +323,10 @@ fun EllaDashboardView(
           Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Icon(
-                imageVector = Icons.Default.Favorite,
+                imageVector = LunaIcons.Message,
                 contentDescription = null,
-                tint = LunaSageText,
-                modifier = Modifier.size(20.dp)
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(22.dp)
               )
               Spacer(modifier = Modifier.width(8.dp))
               Text(
@@ -399,6 +355,41 @@ fun EllaDashboardView(
         onAccept = onAcceptSpotting,
         onDismiss = onDismissSpotting
       )
+    }
+  }
+}
+
+@Composable
+private fun EmptyCycleHistory(onPeriod: () -> Unit, onSymptoms: () -> Unit, onPrivacy: () -> Unit,
+  onIntimacy: () -> Unit, checkIn: CheckIn?, onOpenReply: ((CheckIn) -> Unit)?,
+  onQuickReply: (QuickResponseOption) -> Unit, modifier: Modifier = Modifier) {
+  Column(modifier.fillMaxSize()) {
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      Text("Tu historia\nempieza contigo.", style = MaterialTheme.typography.headlineMedium)
+      Text("Todavía no hay registros de menstruación.", style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Icon(LunaIcons.Calendar, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+          Text("Sin fechas inventadas", style = MaterialTheme.typography.titleMedium)
+          Text("Añade un inicio real cuando quieras. Hasta entonces, no mostraremos predicciones personales.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+      Text("Puedes empezar por aquí", style = MaterialTheme.typography.titleLarge)
+      LunaNavigationRow("Registrar síntomas de hoy", "No necesitas un ciclo previo.", onSymptoms,
+        modifier = Modifier.testTag("log_symptoms_cta"), icon = LunaIcons.Plus)
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+      LunaNavigationRow("Conocer la privacidad", "Tú decides si invitas a alguien.", onPrivacy, icon = LunaIcons.Shield)
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+      LunaNavigationRow("Intimidad", "Un registro que tú controlas.", onIntimacy,
+        modifier = Modifier.testTag("log_intimacy_cta"), icon = LunaIcons.Lock)
+      if (checkIn != null) CheckInBannerComponent(checkIn, true, onQuickReply, onOpenReply = onOpenReply)
+
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+      LunaButton("Registrar mi último inicio", onPeriod, modifier = Modifier.testTag("register_period_start_cta"))
     }
   }
 }

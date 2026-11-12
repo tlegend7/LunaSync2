@@ -1,239 +1,95 @@
 package com.example.ui.dialogs
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.model.CheckIn
+import com.example.data.model.CheckInPromptType
 import com.example.data.model.QuickResponseOption
-import com.example.ui.components.LunaBadge
-import com.example.ui.components.LunaBadgeStyle
-import com.example.ui.components.LunaButton
-import com.example.ui.components.LunaButtonType
-import com.example.ui.components.LunaOptionChip
-import com.example.ui.theme.*
+import com.example.ui.components.*
+import com.example.ui.theme.LunaSageSoft
+import com.example.ui.theme.LunaSageDarkSoft
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-/**
- * Diálogo de respuesta a un mensaje o check-in de la pareja (Figma: reply · Un mensaje de Dani #8:26)
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckInResponseDialog(
   checkIn: CheckIn,
-  onSendResponse: (QuickResponseOption, String?) -> Unit,
+  onSendResponse: (QuickResponseOption, String?, (Boolean, String?) -> Unit) -> Unit,
   onDismiss: () -> Unit
 ) {
-  val isDark = MaterialTheme.colorScheme.background.red < 0.2f
-  var selectedOption by remember { mutableStateOf<QuickResponseOption?>(null) }
-  var customNote by remember { mutableStateOf("") }
+  var selectedOption by remember(checkIn.id) { mutableStateOf<QuickResponseOption?>(null) }
+  var customNote by remember(checkIn.id) { mutableStateOf("") }
   var isSending by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf<String?>(null) }
+  val needsSpaceChoice = checkIn.promptType == CheckInPromptType.NEED_SPACE_OR_CUDDLES.name
+  val options = checkInResponseOptions(checkIn.promptType)
 
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 8.dp)
-      .testTag("checkin_response_dialog")
-  ) {
-    Surface(
-      shape = RoundedCornerShape(24.dp),
-      color = if (isDark) LunaDarkSurface else LunaSurfaceLight,
-      border = BorderStroke(1.dp, if (isDark) LunaDarkBorder else LunaBorderLight),
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Column(
-        modifier = Modifier
-          .padding(20.dp)
-          .verticalScroll(rememberScrollState())
-      ) {
-        // 1. Contexto superior "Volver"
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier
-            .clickable(onClick = onDismiss)
-            .padding(bottom = 8.dp)
-        ) {
-          Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Volver",
-            tint = LunaNavyPrimary,
-            modifier = Modifier.size(18.dp)
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            text = "Volver",
-            style = MaterialTheme.typography.bodySmall,
-            color = LunaNavyPrimary
-          )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 2. Título
-        Text(
-          text = "Un mensaje de tu pareja",
-          style = MaterialTheme.typography.headlineMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 3. Tarjeta de la pregunta recibida
-        Surface(
-          shape = RoundedCornerShape(16.dp),
-          color = if (isDark) LunaDarkSurface else LunaSageSoft,
-          border = BorderStroke(1.dp, if (isDark) LunaDarkBorder else LunaSageSoft),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(16.dp)) {
-            LunaBadge(
-              text = "Pregunta de apoyo",
-              backgroundColor = LunaSageText.copy(alpha = 0.15f),
-              textColor = LunaSageText
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            val promptQuestion = when (checkIn.promptType) {
-              "HOW_ARE_YOU_FEELING" -> "¿Cómo te sientes hoy?"
-              "NEED_COMPANY_OR_SPACE" -> "¿Prefieres compañía o un rato para ti?"
-              "CAN_I_BRING_YOU_SOMETHING" -> "¿Puedo prepararte algo o ayudarte con una tarea?"
-              "TOUCH_BASE" -> "Solo quería recordarte que aquí estoy para ti."
-              else -> checkIn.customNote ?: "¿Cómo te sientes hoy?"
-            }
-            Text(
-              text = "“$promptQuestion”",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.SemiBold,
-              color = MaterialTheme.colorScheme.onBackground
-            )
-            if (!checkIn.customNote.isNullOrBlank() && checkIn.promptType != "TOUCH_BASE") {
-              Spacer(modifier = Modifier.height(4.dp))
-              Text(
-                text = "Nota: ${checkIn.customNote}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
-          }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // 4. Opciones de respuesta rápida
-        Text(
-          text = "¿Qué te gustaría responder?",
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        val options: List<Pair<QuickResponseOption, String>> = listOf(
-          Pair(QuickResponseOption.ALL_GOOD_JUST_CRAMPS, "Todo bien, solo cólicos"),
-          Pair(QuickResponseOption.NEED_SILENCE, "Descansar en silencio"),
-          Pair(QuickResponseOption.LET_US_TALK, "Hablemos un ratito"),
-          Pair(QuickResponseOption.CUDDLES_PLEASE, "Un abrazo y compañía")
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          options.forEach { (opt, label) ->
-            val isSelected = selectedOption == opt
-            LunaOptionChip(
-              text = label,
-              selected = isSelected,
-              onSelect = { selectedOption = opt },
-              modifier = Modifier.fillMaxWidth().testTag("reply_option_${opt.name}")
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 5. Nota opcional
-        Text(
-          text = "Mensaje opcional",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        OutlinedTextField(
-          value = customNote,
-          onValueChange = { customNote = it },
-          placeholder = { Text("Escribe una respuesta corta si lo deseas...") },
-          singleLine = false,
-          maxLines = 3,
-          shape = RoundedCornerShape(12.dp),
-          colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = LunaNavyPrimary,
-            unfocusedBorderColor = if (isDark) LunaDarkBorder else LunaBorderLight
-          ),
-          modifier = Modifier.fillMaxWidth().testTag("reply_note_input")
-        )
-
-        if (errorMessage != null) {
-          Spacer(modifier = Modifier.height(10.dp))
-          Text(
-            text = errorMessage!!,
-            style = MaterialTheme.typography.bodySmall,
-            color = StatusError
-          )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // 6. Botón Enviar respuesta
-        LunaButton(
-          text = "Enviar respuesta",
-          onClick = {
-            val opt = selectedOption ?: QuickResponseOption.ALL_GOOD_JUST_CRAMPS
+  LunaFlowDialog("Un mensaje de tu pareja", "Responder es opcional. Puedes hacerlo a tu ritmo.",
+    onDismiss, "checkin_response_dialog", busy = isSending,
+    actions = {
+      errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("reply_error")) }
+      LunaButton("Enviar respuesta", {
+        selectedOption?.let { option ->
+          if (!isSending) {
             isSending = true
-            onSendResponse(opt, customNote.ifBlank { null })
-            onDismiss()
-          },
-          loading = isSending,
-          enabled = !isSending,
-          type = LunaButtonType.PRIMARY,
-          modifier = Modifier.testTag("submit_reply_button")
-        )
+            errorMessage = null
+            onSendResponse(option, customNote.trim().takeIf { it.isNotEmpty() }) { success, error ->
+              isSending = false
+              if (success) onDismiss()
+              else errorMessage = error ?: "No se pudo enviar la respuesta. Intenta nuevamente."
+            }
+          }
+        }
+      }, Modifier.testTag("submit_reply_button"), enabled = selectedOption != null, loading = isSending, loadingText = "Enviando…")
+    }) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    Surface(shape = RoundedCornerShape(16.dp), color = if (dark) LunaSageDarkSoft else LunaSageSoft,
+      contentColor = MaterialTheme.colorScheme.onBackground) {
+      Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(painterResource(R.drawable.luna_message_circle), null, Modifier.size(22.dp),
+          tint = MaterialTheme.colorScheme.primary)
+        Text(checkInQuestion(checkIn.promptType), style = MaterialTheme.typography.titleMedium)
+        checkIn.customNote?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+        val sentAt = checkIn.createdAt?.toDate()?.toInstant()?.atZone(ZoneId.systemDefault())
+          ?.format(DateTimeFormatter.ofPattern("d MMM · HH:mm", Locale.forLanguageTag("es-ES")))
+        Text(if (sentAt == null) "Pregunta de apoyo" else "Tu pareja · $sentAt",
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
+    Text("Lo que te viene bien", style = MaterialTheme.typography.titleLarge)
+    if (needsSpaceChoice) Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      options.forEach { (option, label) ->
+        LunaOptionChip(label, selectedOption == option, { selectedOption = option },
+          Modifier.weight(1f).testTag("reply_option_${option.name}"), enabled = !isSending)
+      }
+    } else Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      options.forEach { (option, label) ->
+        LunaOptionChip(label, selectedOption == option, { selectedOption = option },
+          Modifier.fillMaxWidth().testTag("reply_option_${option.name}"), enabled = !isSending)
+      }
+    }
+    Text("Puedes añadir una nota", style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedTextField(customNote, { customNote = it }, enabled = !isSending,
+      placeholder = { Text("Escribe una respuesta si lo deseas…") },
+      minLines = 1, maxLines = 5, shape = RoundedCornerShape(12.dp),
+      colors = OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = MaterialTheme.colorScheme.surface,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant),
+      modifier = Modifier.fillMaxWidth().testTag("reply_note_input"))
+    Text("Esto comparte tu respuesta, no tus notas privadas.", style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
-

@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.data.model.CoupleSpace
+import com.example.data.model.PairingInvite
 import com.example.data.model.SharingPermissions
 import com.example.data.model.SpaceStatus
 import com.google.firebase.Timestamp
@@ -222,6 +223,11 @@ open class CoupleSpaceRepository(
     return generatedCode
   }
 
+  open suspend fun getInviteDetails(code: String): PairingInvite {
+    return db.collection("pairing_invites").document(code).get().await().toObject(PairingInvite::class.java)
+      ?: throw IllegalStateException("No se pudo consultar el código. Genera uno nuevo.")
+  }
+
   /**
    * Atomic join with code WITHOUT illegal prior read of private couple_space document:
    * - Reads pairing_invites document (authorized for get if authenticated).
@@ -322,6 +328,24 @@ open class CoupleSpaceRepository(
           "updatedAt" to FieldValue.serverTimestamp()
         )
       )
+    }.await()
+  }
+
+  open suspend fun leavePairing(spaceId: String) {
+    val userId = auth.currentUser?.uid ?: throw IllegalStateException("Inicia sesión para finalizar el vínculo.")
+    val spaceRef = db.collection("couple_spaces").document(spaceId)
+    db.runTransaction { transaction ->
+      val snapshot = transaction.get(spaceRef)
+      check(snapshot.getString("partnerId") == userId && snapshot.getString("status") == SpaceStatus.PAIRED.name) {
+        "Este vínculo ya no está activo."
+      }
+      val version = snapshot.getLong("activeInviteVersion") ?: 1L
+      transaction.update(spaceRef, mapOf(
+        "partnerId" to null,
+        "status" to SpaceStatus.UNPAIRED.name,
+        "activeInviteVersion" to version + 1L,
+        "updatedAt" to FieldValue.serverTimestamp()
+      ))
     }.await()
   }
 }

@@ -16,20 +16,16 @@ object FirestoreProvider {
 
   fun ensureInitialized(context: Context) {
     val appContext = context.applicationContext ?: context
-    if (FirebaseApp.getApps(appContext).isEmpty()) {
-      try {
-        FirebaseApp.initializeApp(appContext)
-      } catch (_: Exception) {
-        try {
-          val pkg = appContext.packageName.ifBlank { "com.aistudio.lunasync" }
-          val options = FirebaseOptions.Builder()
-            .setApplicationId(pkg)
-            .setProjectId("demo-no-project")
-            .setApiKey("AIzaSyDummyKeyForFallbackInit1234567")
-            .build()
-          FirebaseApp.initializeApp(appContext, options)
-        } catch (_: Exception) {}
-      }
+    if (FirebaseApp.getApps(appContext).any { it.name == FirebaseApp.DEFAULT_APP_NAME }) return
+    val configuredApp = FirebaseApp.initializeApp(appContext)
+    if (configuredApp == null) {
+      // Sin configuración externa solo se permite explorar la demo; no hay credenciales reales.
+      val options = FirebaseOptions.Builder()
+        .setApplicationId("1:123456789012:android:0000000000000000")
+        .setProjectId("demo-no-project")
+        .setApiKey("AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        .build()
+      FirebaseApp.initializeApp(appContext, options)
     }
   }
 

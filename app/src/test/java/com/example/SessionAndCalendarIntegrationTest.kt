@@ -27,9 +27,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -98,6 +100,55 @@ class SessionAndCalendarIntegrationTest {
     testAuthRepo = TestControlledAuthRepository(application)
   }
 
+  @Test
+  fun demoCycleEditsAndDeletionStayInMemoryAndRecalculateNeighbours() {
+    val vm = createVm()
+    vm.enterGuestDemoMode()
+    val newest = vm.uiState.value.pastCycles.maxBy { it.startDate }
+    vm.recordPeriodStart(LocalDate.parse(newest.startDate).minusDays(28))
+    val editedStart = LocalDate.parse(newest.startDate).minusDays(1)
+    var result: Boolean? = null
+    vm.updateCycleDates(newest.id, editedStart, editedStart) { success, _ -> result = success }
+    assertEquals(true, result)
+    assertEquals(1, vm.uiState.value.pastCycles.first { it.id == newest.id }.periodDuration)
+    assertNull(vm.uiState.value.pastCycles.first().cycleLength)
+    val beforeDuplicate = vm.uiState.value.pastCycles
+    vm.recordPeriodStart(editedStart) { success, _ -> result = success }
+    assertEquals(false, result)
+    assertEquals(beforeDuplicate, vm.uiState.value.pastCycles)
+    vm.deleteCycle(newest.id) { success, _ -> result = success }
+    assertEquals(true, result)
+    assertFalse(vm.uiState.value.pastCycles.any { it.id == newest.id })
+    assertNull(vm.uiState.value.pastCycles.first().cycleLength)
+    vm.switchRole(UserRole.SUPPORT_PARTNER)
+    val count = vm.uiState.value.pastCycles.size
+    vm.deleteCycle(vm.uiState.value.pastCycles.first().id) { success, _ -> result = success }
+    assertEquals(false, result)
+    assertEquals(count, vm.uiState.value.pastCycles.size)
+  }
+
+  @Test
+  fun demoInviteRequiresAValidCodeAndActuallyChangesOnlyTheMockLink() {
+    val vm = createVm()
+    vm.enterGuestDemoMode()
+    val initialInvite = vm.uiState.value.activePairingInvite
+    vm.generatePairingCode()
+    assertEquals(initialInvite, vm.uiState.value.activePairingInvite)
+    vm.revokePairing()
+    assertEquals(SpaceStatus.UNPAIRED.name, vm.uiState.value.space?.status)
+    vm.generatePairingCode()
+    val invite = vm.uiState.value.activePairingInvite!!
+    assertEquals(vm.uiState.value.space?.activeInviteVersion, invite.version)
+    vm.switchRole(UserRole.SUPPORT_PARTNER)
+    vm.joinWithCode("INVALIDO")
+    assertEquals(SpaceStatus.UNPAIRED.name, vm.uiState.value.space?.status)
+    vm.joinWithCode("  luna-demo  ")
+    assertEquals(SpaceStatus.PAIRED.name, vm.uiState.value.space?.status)
+    assertNull(vm.uiState.value.activePairingInvite)
+    assertNull(vm.uiState.value.currentUser)
+    assertTrue(vm.uiState.value.isGuestMode)
+  }
+
   private fun createVm(): MainViewModel {
     return MainViewModel(
       application = application,
@@ -150,7 +201,7 @@ class SessionAndCalendarIntegrationTest {
         space = space,
         isGuestMode = false,
         todaySymptom = null,
-        activePairingCode = null,
+        activePairingInvite = null,
         errorMessage = null,
         successMessage = null
       )
@@ -513,6 +564,8 @@ class SessionAndCalendarIntegrationTest {
     }
     vm.selectDate(fixedDate)
 
+    // Updating injected history requires an explicit refresh; calendar navigation must not refresh Today.
+    vm.refreshCycleCalculations()
     // Initially on Day 11 post-period: Phase should be FOLLICULAR
     assertNotNull(vm.uiState.value.cycleStatus)
     assertEquals(com.example.data.model.CyclePhase.FOLLICULAR, vm.uiState.value.cycleStatus!!.currentPhase)
@@ -586,6 +639,7 @@ class SessionAndCalendarIntegrationTest {
     val partnerAuth = auth.createUserWithEmailAndPassword(partnerEmail, "password123").await()
     val partnerUser = partnerAuth.user!!
 
+    auth.signInWithEmailAndPassword(ellaEmail, "password123").await()
     val spaceId = coupleRepo.createSpace(ellaUser.uid, 28, 5)
 
     // Ella logs a shared symptom (public) and a private symptom (isPrivate = true)
@@ -613,26 +667,27 @@ class SessionAndCalendarIntegrationTest {
       )
     )
 
+    // Establish a real authorized pairing; reads must not depend on a forged local role.
+    val inviteCode = coupleRepo.generateInviteCode(spaceId, ellaUser.uid)
+    auth.signInWithEmailAndPassword(partnerEmail, "password123").await()
+    coupleRepo.joinWithCode(inviteCode, partnerUser.uid).getOrThrow()
+
     // 1. Partner with shareSymptoms = false receives empty list
-    val partnerSymptomsNoShare = kotlinx.coroutines.flow.first(
-      cycleRepo.observeDailySymptoms(
+    val partnerSymptomsNoShare = cycleRepo.observeDailySymptoms(
         spaceId = spaceId,
         isElla = false,
         shareSymptoms = false,
         shareMood = false
-      )
-    )
+      ).first()
     assertTrue("Partner without shareSymptoms permission must receive empty list", partnerSymptomsNoShare.isEmpty())
 
     // 2. Partner with shareSymptoms = true receives ONLY the public symptom
-    val partnerSymptomsWithShare = kotlinx.coroutines.flow.first(
-      cycleRepo.observeDailySymptoms(
+    val partnerSymptomsWithShare = cycleRepo.observeDailySymptoms(
         spaceId = spaceId,
         isElla = false,
         shareSymptoms = true,
         shareMood = false
-      )
-    )
+      ).first()
     assertEquals(1, partnerSymptomsWithShare.size)
     assertEquals(publicDate, partnerSymptomsWithShare[0].date)
     assertNull("Partner must never receive privateNote", partnerSymptomsWithShare[0].privateNote)

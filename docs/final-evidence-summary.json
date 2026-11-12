@@ -1,0 +1,19 @@
+{
+  "android": {
+    "tests": 116,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "rules": {
+    "tests": 38,
+    "passed": 38
+  },
+  "visual_states": 20,
+  "themes": 2,
+  "screenshots": 80,
+  "apk_sha256": "99ed18ca1760be6f0ac434d6b23b8dcdf4a1d3aa1a19677d970cac52a7f3fbfe",
+  "production_deployed": false,
+  "github_pushed": false,
+  "external_login": "Requires real Firebase/OAuth config; not verified"
+}

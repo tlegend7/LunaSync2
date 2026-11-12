@@ -55,7 +55,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.SpaceStatus
 import com.example.data.model.UserRole
+import com.example.data.model.PairingInvite
+import com.example.data.model.SharingPermissions
+import java.time.Clock
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import com.example.ui.components.LunaBadge
+import com.example.ui.components.LunaIcons
 import com.example.ui.components.LunaBadgeStyle
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
@@ -68,17 +74,22 @@ import com.example.ui.theme.*
 @Composable
 fun PairingScreen(
   currentRole: UserRole,
-  activeCode: String?,
+  activeInvite: PairingInvite?,
   spaceStatus: String?,
   partnerId: String?,
   isLoading: Boolean,
   onGenerateCode: () -> Unit,
   onJoinCode: (String) -> Unit,
-  onRevokePairing: () -> Unit = {},
+  onRevokePairing: ((Boolean, String?) -> Unit) -> Unit = {},
   onOpenPrivacySettings: () -> Unit = {},
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  activeInviteVersion: Long = 1L,
+  inviteError: String? = null,
+  isGuestMode: Boolean = false,
+  clock: Clock = Clock.systemDefaultZone(),
+  sharingPermissions: SharingPermissions = SharingPermissions(),
+  onOpenSharedRecords: () -> Unit = {}
 ) {
-  val context = LocalContext.current
   val isDark = MaterialTheme.colorScheme.background.red < 0.2f
   var inputCode by remember { mutableStateOf("") }
   var showUnlinkDialog by remember { mutableStateOf(false) }
@@ -122,28 +133,28 @@ fun PairingScreen(
         // Tarjeta Vínculo Activo
         Surface(
           shape = RoundedCornerShape(24.dp),
-          color = LunaNavyDarkCard,
+          color = MaterialTheme.colorScheme.lunaHero,
           modifier = Modifier.fillMaxWidth()
         ) {
           Column(modifier = Modifier.padding(20.dp)) {
             Icon(
-              imageVector = Icons.Default.Favorite,
+              imageVector = LunaIcons.HeroHeart,
               contentDescription = null,
               tint = LunaIceBlueAccent,
-              modifier = Modifier.size(28.dp)
+              modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
               text = "Espacio Compartido Activo",
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold,
-              color = Color.White
+              color = MaterialTheme.colorScheme.lunaOnHero
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
               text = "Conectado al ciclo de tu pareja. Tienes acceso a recomendaciones y resúmenes autorizados.",
               style = MaterialTheme.typography.bodyMedium,
-              color = LunaIceBlueText
+              color = MaterialTheme.colorScheme.lunaHeroMuted
             )
           }
         }
@@ -162,9 +173,9 @@ fun PairingScreen(
             modifier = Modifier.padding(16.dp)
           ) {
             Icon(
-              imageVector = Icons.Default.Lock,
+              imageVector = LunaIcons.Lock,
               contentDescription = null,
-              tint = LunaNavyPrimary,
+              tint = MaterialTheme.colorScheme.primary,
               modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -177,7 +188,7 @@ fun PairingScreen(
               )
               Spacer(modifier = Modifier.height(2.dp))
               Text(
-                text = "Las notas privadas y los registros íntimos de tu pareja están reservados exclusivamente para ella.",
+                text = "Sus notas privadas nunca se comparten. Los registros de intimidad solo aparecen si ella los autoriza.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -186,6 +197,21 @@ fun PairingScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        Text("Lo que tu pareja comparte", style = MaterialTheme.typography.titleLarge)
+        listOf("Síntomas físicos" to sharingPermissions.shareSymptoms, "Ánimo y energía" to sharingPermissions.shareMood,
+          "Intimidad" to sharingPermissions.shareIntimacy).forEach { (title, shared) ->
+          LunaNavigationRow(title, if (shared) "Solo los registros compartidos." else "No compartido.",
+            onClick = if (shared) onOpenSharedRecords else onOpenPrivacySettings,
+            icon = if (shared) LunaIcons.Check else LunaIcons.Lock,
+            iconTint = if (shared) { if (isDark) LunaSageDarkText else LunaSageText }
+              else MaterialTheme.colorScheme.onSurfaceVariant)
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("No compartido no significa que no exista información. Sus notas privadas nunca aparecen aquí.",
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(24.dp))
 
         LunaButton(
           text = "Desvincularme del espacio",
@@ -210,10 +236,10 @@ fun PairingScreen(
               contentAlignment = Alignment.Center
             ) {
               Icon(
-                imageVector = Icons.Default.Key,
+                imageVector = LunaIcons.Link,
                 contentDescription = null,
-                tint = LunaNavyPrimary,
-                modifier = Modifier.size(24.dp)
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
               )
             }
 
@@ -244,7 +270,7 @@ fun PairingScreen(
               singleLine = true,
               shape = RoundedCornerShape(12.dp),
               colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = LunaNavyPrimary,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = if (isDark) LunaDarkBorder else LunaBorderLight
               ),
               modifier = Modifier
@@ -260,7 +286,6 @@ fun PairingScreen(
               enabled = inputCode.isNotBlank(),
               loading = isLoading,
               type = LunaButtonType.PRIMARY,
-              icon = Icons.Default.Favorite,
               modifier = Modifier.testTag("submit_join_code_button")
             )
           }
@@ -271,22 +296,22 @@ fun PairingScreen(
       // Panel de estado de pareja (Figma Patrón 17 #15:237)
       Surface(
         shape = RoundedCornerShape(24.dp),
-        color = LunaNavyDarkCard,
+        color = MaterialTheme.colorScheme.lunaHero,
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(20.dp)) {
           Icon(
-            imageVector = Icons.Default.Favorite,
+            imageVector = LunaIcons.HeroHeart,
             contentDescription = null,
             tint = LunaIceBlueAccent,
-            modifier = Modifier.size(28.dp)
+            modifier = Modifier.size(22.dp)
           )
           Spacer(modifier = Modifier.height(10.dp))
           Text(
             text = if (isPaired) "Espacio de Pareja Activo" else "Tu Espacio Personal",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.lunaOnHero
           )
           Spacer(modifier = Modifier.height(4.dp))
           Text(
@@ -296,7 +321,7 @@ fun PairingScreen(
               "Aún no tienes una pareja vinculada. Puedes invitarla cuando lo desees."
             },
             style = MaterialTheme.typography.bodySmall,
-            color = LunaIceBlueText
+            color = MaterialTheme.colorScheme.lunaHeroMuted
           )
         }
       }
@@ -308,8 +333,8 @@ fun PairingScreen(
         title = "Privacidad y permisos",
         subtitle = "Revisa qué puede ver tu pareja.",
         onClick = onOpenPrivacySettings,
-        icon = Icons.Default.Shield,
-        iconTint = LunaNavyPrimary,
+        icon = LunaIcons.Shield,
+        iconTint = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.testTag("open_privacy_settings_row")
       )
 
@@ -320,13 +345,10 @@ fun PairingScreen(
         title = "Invitar o revisar el vínculo",
         subtitle = "La conexión no comparte todo automáticamente.",
         onClick = {
-          if (activeCode.isNullOrBlank()) {
-            onGenerateCode()
-          }
           showInviteDialog = true
         },
-        icon = Icons.Default.Link,
-        iconTint = LunaNavyPrimary,
+        icon = LunaIcons.Link,
+        iconTint = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.testTag("open_invite_row")
       )
 
@@ -374,121 +396,9 @@ fun PairingScreen(
     }
   }
 
-  // DIÁLOGO DE INVITACIÓN (Figma #8:73: invite · Invitar, sin compartir de más)
-  if (showInviteDialog) {
-    AlertDialog(
-      onDismissRequest = { showInviteDialog = false },
-      title = {
-        Text("Invitar a tu pareja", fontWeight = FontWeight.Bold)
-      },
-      text = {
-        Column {
-          Text(
-            text = "Comparte este código para que tu pareja pueda conectarse a tu espacio desde su aplicación:",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-
-          Spacer(modifier = Modifier.height(16.dp))
-
-          Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = if (isDark) LunaDarkSurface else LunaIceBlueSubtle,
-            border = BorderStroke(1.dp, LunaNavyPrimary),
-            modifier = Modifier.fillMaxWidth()
-          ) {
-            Column(
-              horizontalAlignment = Alignment.CenterHorizontally,
-              modifier = Modifier.padding(16.dp)
-            ) {
-              Text(
-                text = activeCode ?: "GENERANDO…",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 3.sp,
-                color = LunaNavyPrimary
-              )
-              Spacer(modifier = Modifier.height(6.dp))
-              Text(
-                text = "Válido por 48 horas",
-                style = MaterialTheme.typography.labelSmall,
-                color = LunaTextSecondary
-              )
-            }
-          }
-
-          Spacer(modifier = Modifier.height(12.dp))
-
-          LunaButton(
-            text = "Copiar código",
-            onClick = {
-              if (!activeCode.isNullOrBlank()) {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("LunaSync Code", activeCode)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, "Código copiado", Toast.LENGTH_SHORT).show()
-              }
-            },
-            type = LunaButtonType.SECONDARY,
-            icon = Icons.Default.ContentCopy,
-            modifier = Modifier.testTag("copy_pairing_code_button")
-          )
-        }
-      },
-      confirmButton = {
-        LunaButton(
-          text = "Listo",
-          onClick = { showInviteDialog = false },
-          type = LunaButtonType.PRIMARY,
-          modifier = Modifier.width(100.dp)
-        )
-      }
-    )
-  }
-
-  // DIÁLOGO DE CONFIRMACIÓN DE DESVINCULACIÓN (Figma #8:121: confirm · ¿Desvincular a tu pareja?)
-  if (showUnlinkDialog) {
-    AlertDialog(
-      onDismissRequest = { showUnlinkDialog = false },
-      title = {
-        Text("¿Desvincular a tu pareja?", fontWeight = FontWeight.Bold)
-      },
-      text = {
-        Column {
-          Text(
-            text = "Se detiene el acceso compartido",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground
-          )
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(
-            text = "Tu pareja dejará de acceder a este espacio. Esto no puede borrar información que ya haya visto o guardado.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      },
-      confirmButton = {
-        LunaButton(
-          text = "Desvincular",
-          onClick = {
-            showUnlinkDialog = false
-            onRevokePairing()
-          },
-          type = LunaButtonType.DANGER,
-          modifier = Modifier.testTag("confirm_unlink_button")
-        )
-      },
-      dismissButton = {
-        TextButton(
-          onClick = { showUnlinkDialog = false },
-          modifier = Modifier.testTag("cancel_unlink_button")
-        ) {
-          Text("Cancelar", color = LunaNavyPrimary)
-        }
-      }
-    )
-  }
+  if (showInviteDialog) InviteDetailsDialog(activeInvite, activeInviteVersion, isPaired, isLoading,
+    inviteError, isGuestMode, clock, onGenerateCode,
+    onPrivacy = { showInviteDialog = false; onOpenPrivacySettings() },
+    onDismiss = { showInviteDialog = false })
+  if (showUnlinkDialog) UnlinkPairingDialog(currentRole, onRevokePairing, { showUnlinkDialog = false })
 }

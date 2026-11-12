@@ -25,20 +25,24 @@ private val LunaLightColorScheme = lightColorScheme(
   surfaceVariant = LunaIceBlueSurface,
   onSurfaceVariant = LunaTextSecondary,
   outline = LunaBorderLight,
-  outlineVariant = LunaBorderLight
+  outlineVariant = LunaBorderLight,
+  error = LunaCoralText,
+  onError = Color.White,
+  errorContainer = LunaDangerSoft,
+  onErrorContainer = LunaCoralText
 )
 
 private val LunaDarkColorScheme = darkColorScheme(
   primary = LunaIceBlueAccent,
   onPrimary = LunaNavyDeep,
-  primaryContainer = LunaNavyBorderDark,
-  onPrimaryContainer = Color.White,
+  primaryContainer = LunaIceDarkSoft,
+  onPrimaryContainer = LunaIceBlueAccent,
   secondary = LunaIceBlueText,
   onSecondary = LunaNavyDeep,
   secondaryContainer = LunaDarkSurfaceCard,
   onSecondaryContainer = LunaDarkTextPrimary,
-  tertiary = LunaSageSoft,
-  onTertiary = LunaSageText,
+  tertiary = LunaSageDarkText,
+  onTertiary = LunaSageDarkSoft,
   background = LunaDarkBackground,
   onBackground = LunaDarkTextPrimary,
   surface = LunaDarkSurface,
@@ -46,7 +50,11 @@ private val LunaDarkColorScheme = darkColorScheme(
   surfaceVariant = LunaDarkSurfaceCard,
   onSurfaceVariant = LunaDarkTextSecondary,
   outline = LunaNavyBorderDark,
-  outlineVariant = LunaNavyBorderDark
+  outlineVariant = LunaNavyBorderDark,
+  error = LunaDangerDarkText,
+  onError = LunaDangerDarkSoft,
+  errorContainer = LunaDangerDarkSoft,
+  onErrorContainer = LunaDangerDarkText
 )
 
 @Composable

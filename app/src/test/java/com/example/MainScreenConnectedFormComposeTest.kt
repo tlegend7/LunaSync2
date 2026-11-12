@@ -1,11 +1,13 @@
 package com.example
 
 import android.app.Application
+import androidx.lifecycle.ViewModelStore
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.CoupleSpace
 import com.example.data.model.SharingPermissions
@@ -25,13 +27,16 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,6 +65,12 @@ class MainScreenConnectedFormComposeTest {
   private lateinit var partnerRepo: PartnerSupportRepository
   private lateinit var intimacyRepo: IntimacyRepository
   private lateinit var testAuthRepo: TestControlledAuthRepository
+  private val viewModels = ViewModelStore()
+
+  @After fun closeSessionObservers() {
+    viewModels.clear()
+    ShadowLooper.idleMainLooper()
+  }
 
   // Deterministic reference date: Monday, June 15, 2026 UTC
   private val fixedDate = LocalDate.of(2026, 6, 15)
@@ -106,7 +117,7 @@ class MainScreenConnectedFormComposeTest {
       partnerRepo = partnerRepo
     ).apply {
       this.clock = controlledClock
-    }
+    }.also { viewModels.put("main", it) }
   }
 
   private fun <T> runWithLooper(timeoutMs: Long = 25000, block: suspend () -> T): T {
@@ -140,36 +151,14 @@ class MainScreenConnectedFormComposeTest {
     spaceId: String,
     referenceDate: LocalDate = vm.getToday()
   ): CoupleSpace {
-    val space = CoupleSpace(
-      id = spaceId,
-      ownerId = user.uid,
-      partnerId = null,
-      status = SpaceStatus.UNPAIRED.name,
-      averageCycleLength = 28,
-      averagePeriodLength = 5,
-      sharingPermissions = SharingPermissions()
-    )
     testAuthRepo.emitUser(user)
-
-    val sessionId = UUID.randomUUID().toString()
-    vm.currentSessionId = sessionId
-    vm.activeObservedUserId = user.uid
-
-    vm.setUiStateForTesting { state ->
-      state.copy(
-        currentUser = user,
-        currentRole = UserRole.PRIMARY_ELLA,
-        space = space,
-        isGuestMode = false,
-        selectedDate = referenceDate,
-        todaySymptom = null,
-        activePairingCode = null,
-        errorMessage = null,
-        successMessage = null
-      )
+    val ready = withTimeout(15000) {
+      vm.uiState.first { state ->
+        state.currentUser?.uid == user.uid && state.space?.id == spaceId && !state.isResolvingSpace
+      }
     }
-    vm.updateSelectedDayDetail()
-    return space
+    vm.selectDate(referenceDate)
+    return ready.space!!
   }
 
   /**
@@ -211,7 +200,7 @@ class MainScreenConnectedFormComposeTest {
     composeTestRule.onNodeWithTag("nav_tab_dashboard").performClick()
 
     // 4. Click 'Registrar' (log_symptoms_cta)
-    composeTestRule.onNodeWithTag("log_symptoms_cta").performClick()
+    composeTestRule.onNodeWithTag("log_symptoms_cta").performScrollTo().performClick()
 
     // 5. Verify the dialog displays Today's date (June 15, 2026)
     val todayFormatted = fixedDate.format(dateFormatter)
@@ -219,7 +208,8 @@ class MainScreenConnectedFormComposeTest {
     composeTestRule.onNodeWithTag("symptom_dialog_date_text").assertTextContains(todayFormatted, substring = true, ignoreCase = true)
 
     // 6. Select a flow chip and Save
-    composeTestRule.onNodeWithTag("flow_chip_LIGHT").performClick()
+    composeTestRule.onNodeWithTag("flow_has_bleeding").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("flow_chip_LIGHT").performScrollTo().performClick()
     composeTestRule.onNodeWithTag("save_symptom_button").performClick()
 
     // Wait until symptom is persisted
@@ -274,7 +264,7 @@ class MainScreenConnectedFormComposeTest {
     composeTestRule.onNodeWithTag("nav_tab_dashboard").performClick()
 
     // 4. Click 'Intimidad' CTA
-    composeTestRule.onNodeWithTag("log_intimacy_cta").performClick()
+    composeTestRule.onNodeWithTag("log_intimacy_cta").performScrollTo().performClick()
 
     // 5. Verify the dialog displays Today's date
     val todayFormatted = fixedDate.format(dateFormatter)
@@ -330,7 +320,7 @@ class MainScreenConnectedFormComposeTest {
     assertEquals(targetSelectedDate, vm.uiState.value.selectedDate)
 
     // 3. Click 'Registrar síntomas de este día' in the day detail card
-    composeTestRule.onNodeWithTag("log_symptoms_for_selected_date_button").performClick()
+    composeTestRule.onNodeWithTag("log_symptoms_for_date_cta").performScrollTo().performClick()
 
     // 4. Verify dialog displays the selected date (June 4, 2026)
     val formattedSelectedDate = targetSelectedDate.format(dateFormatter)
@@ -338,7 +328,8 @@ class MainScreenConnectedFormComposeTest {
     composeTestRule.onNodeWithTag("symptom_dialog_date_text").assertTextContains(formattedSelectedDate, substring = true, ignoreCase = true)
 
     // 5. Select flow MEDIUM and Save
-    composeTestRule.onNodeWithTag("flow_chip_MEDIUM").performClick()
+    composeTestRule.onNodeWithTag("flow_has_bleeding").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("flow_chip_MEDIUM").performScrollTo().performClick()
     composeTestRule.onNodeWithTag("save_symptom_button").performClick()
 
     // Wait until symptom is saved for June 4
@@ -382,7 +373,7 @@ class MainScreenConnectedFormComposeTest {
     val capturedDate = LocalDate.of(2026, 6, 3)
 
     // 2. Open Symptom Dialog for Day 3
-    composeTestRule.onNodeWithTag("log_symptoms_for_selected_date_button").performClick()
+    composeTestRule.onNodeWithTag("log_symptoms_for_date_cta").performScrollTo().performClick()
 
     // 3. In the background / ViewModel, externally mutate selectedDate to Day 10 on UI thread
     val backgroundMutatedDate = LocalDate.of(2026, 6, 10)
@@ -392,7 +383,7 @@ class MainScreenConnectedFormComposeTest {
     assertEquals(backgroundMutatedDate, vm.uiState.value.selectedDate)
 
     // 4. Save the open dialog
-    composeTestRule.onNodeWithTag("flow_chip_SPOTTING").performClick()
+    composeTestRule.onNodeWithTag("flow_chip_SPOTTING").performScrollTo().performClick()
     composeTestRule.onNodeWithTag("save_symptom_button").performClick()
 
     // Wait until symptom is saved for capturedDate June 3
@@ -434,13 +425,13 @@ class MainScreenConnectedFormComposeTest {
     }
 
     // Part 1: Open Period Dialog from Hoy (onboarding CTA when no cycles exist)
-    composeTestRule.onNodeWithTag("register_period_start_cta").performClick()
+    composeTestRule.onNodeWithTag("register_period_start_cta").assertIsDisplayed().performClick()
 
     // Verify it opened with Today's date (June 15, 2026)
     val periodDateFormatter = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM yyyy", Locale("es", "ES"))
     val todayFormatted = fixedDate.format(periodDateFormatter)
-    composeTestRule.onNodeWithTag("period_dialog_start_date_text").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("period_dialog_start_date_text").assertTextContains(todayFormatted, substring = true, ignoreCase = true)
+    composeTestRule.onNodeWithTag("period_dialog_start_date_text", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("period_dialog_start_date_text", useUnmergedTree = true).assertTextContains(todayFormatted, substring = true, ignoreCase = true)
 
     // Save period for today
     composeTestRule.onNodeWithTag("save_period_button").performClick()
@@ -460,12 +451,12 @@ class MainScreenConnectedFormComposeTest {
     composeTestRule.onNodeWithTag("calendar_day_2").performClick()
     val pastSelectedDate = LocalDate.of(2026, 6, 2)
 
-    composeTestRule.onNodeWithTag("manage_period_from_calendar_button").performClick()
+    composeTestRule.onNodeWithTag("register_period_for_date_cta").performScrollTo().performClick()
 
     // Verify Period Dialog opens with the selected date (June 2, 2026)
     val pastFormatted = pastSelectedDate.format(periodDateFormatter)
-    composeTestRule.onNodeWithTag("period_dialog_start_date_text").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("period_dialog_start_date_text").assertTextContains(pastFormatted, substring = true, ignoreCase = true)
+    composeTestRule.onNodeWithTag("period_dialog_start_date_text", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("period_dialog_start_date_text", useUnmergedTree = true).assertTextContains(pastFormatted, substring = true, ignoreCase = true)
 
     // Save period for June 2
     composeTestRule.onNodeWithTag("save_period_button").performClick()
@@ -519,7 +510,7 @@ class MainScreenConnectedFormComposeTest {
     composeTestRule.onNodeWithTag("nav_tab_dashboard").performClick()
 
     // 4. Abrir diálogo de síntomas desde Hoy
-    composeTestRule.onNodeWithTag("log_symptoms_cta").performClick()
+    composeTestRule.onNodeWithTag("log_symptoms_cta").performScrollTo().performClick()
 
     // El diálogo debe mostrar la fecha controlada: 20 de octubre de 2027
     val expectedFormatted = controlledDate2027.format(octDateFormatter)
@@ -527,7 +518,8 @@ class MainScreenConnectedFormComposeTest {
     composeTestRule.onNodeWithTag("symptom_dialog_date_text").assertTextContains(expectedFormatted, substring = true, ignoreCase = true)
 
     // 5. Guardar síntoma
-    composeTestRule.onNodeWithTag("flow_chip_MEDIUM").performClick()
+    composeTestRule.onNodeWithTag("flow_has_bleeding").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("flow_chip_MEDIUM").performScrollTo().performClick()
     composeTestRule.onNodeWithTag("save_symptom_button").performClick()
 
     waitForCondition {

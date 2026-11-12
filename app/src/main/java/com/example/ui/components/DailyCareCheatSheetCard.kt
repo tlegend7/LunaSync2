@@ -56,7 +56,7 @@ fun DailyCareCheatSheetCard(
       text = "GUÍA DE CUIDADOS DIARIOS",
       style = MaterialTheme.typography.labelSmall,
       fontWeight = FontWeight.Bold,
-      color = LunaNavyPrimary,
+      color = MaterialTheme.colorScheme.primary,
       letterSpacing = 0.8.sp
     )
     Spacer(modifier = Modifier.height(2.dp))
@@ -70,34 +70,14 @@ fun DailyCareCheatSheetCard(
     Spacer(modifier = Modifier.height(14.dp))
 
     careTips.forEachIndexed { index, tip ->
-      val (icon, tintColor, bgTint) = when (tip.categoryIcon) {
-        "tea" -> Triple(Icons.Default.Spa, LunaSageText, LunaSageSoft)
-        "massage" -> Triple(Icons.Default.SelfImprovement, LunaNavyPrimary, LunaNavyPrimary.copy(alpha = 0.12f))
-        "food" -> Triple(Icons.Default.Restaurant, LunaSandText, LunaSandSoft)
-        "star" -> Triple(Icons.Default.Star, LunaNavyPrimary, LunaNavyPrimary.copy(alpha = 0.12f))
-        else -> Triple(Icons.Default.Favorite, LunaPeriodRed, LunaPeriodRed.copy(alpha = 0.12f))
-      }
-
       Row(
         verticalAlignment = Alignment.Top,
         modifier = Modifier
           .fillMaxWidth()
           .padding(vertical = 8.dp)
       ) {
-        Box(
-          contentAlignment = Alignment.Center,
-          modifier = Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(bgTint)
-        ) {
-          Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tintColor,
-            modifier = Modifier.size(20.dp)
-          )
-        }
+        Icon(LunaIcons.Heart, null, tint = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.size(22.dp))
 
         Spacer(modifier = Modifier.width(12.dp))
 
@@ -122,7 +102,7 @@ fun DailyCareCheatSheetCard(
         HorizontalDivider(
           color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
           thickness = 0.5.dp,
-          modifier = Modifier.padding(start = 48.dp, top = 4.dp, bottom = 4.dp)
+          modifier = Modifier.padding(start = 34.dp, top = 4.dp, bottom = 4.dp)
         )
       }
     }

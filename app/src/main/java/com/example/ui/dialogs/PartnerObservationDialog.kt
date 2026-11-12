@@ -1,279 +1,108 @@
 package com.example.ui.dialogs
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.model.PerceivedMood
-import com.example.ui.theme.AppleHairlineBorder
-import com.example.ui.theme.BrandTerracottaRose
-import com.example.ui.theme.PhaseFertileSage
-import com.example.ui.theme.StatusError
-import com.example.ui.theme.StatusErrorSubtle
-import kotlin.math.roundToInt
+import com.example.ui.components.*
+import com.example.ui.theme.*
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PartnerObservationDialog(
   onDismiss: () -> Unit,
-  onSave: (
-    perceivedMood: PerceivedMood,
-    apparentPainLevel: Int,
-    unloggedSpottingReported: Boolean,
-    careActionTaken: String?,
-    sweetMessage: String?,
-    onComplete: (Boolean, String?) -> Unit
-  ) -> Unit
+  onSave: (perceivedMood: PerceivedMood?, apparentPainLevel: Int?, unloggedSpottingReported: Boolean,
+    careActionTaken: String?, sweetMessage: String?, onComplete: (Boolean, String?) -> Unit) -> Unit,
+  date: LocalDate = LocalDate.now()
 ) {
-  var perceivedMood by remember { mutableStateOf(PerceivedMood.TIRED) }
-  var painFloat by remember { mutableFloatStateOf(1f) }
+  var perceivedMood by remember { mutableStateOf<PerceivedMood?>(null) }
+  var pain by remember { mutableStateOf<Int?>(null) }
   var unloggedSpotting by remember { mutableStateOf(false) }
   var careAction by remember { mutableStateOf("") }
   var sweetMessage by remember { mutableStateOf("") }
   var isSubmitting by remember { mutableStateOf(false) }
   var dialogError by remember { mutableStateOf<String?>(null) }
+  var showDetails by remember { mutableStateOf(false) }
+  val hasContent = careAction.isNotBlank() || sweetMessage.isNotBlank() || unloggedSpotting || perceivedMood != null || pain != null
+  val dateLabel = date.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM 'de' yyyy", Locale.forLanguageTag("es-ES")))
 
-  AlertDialog(
-    onDismissRequest = { if (!isSubmitting) onDismiss() },
-    shape = RoundedCornerShape(24.dp),
-    title = {
-      Text(
-        text = "Registrar Observación y Apoyo",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-      )
-    },
-    text = {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .verticalScroll(rememberScrollState())
-          .padding(vertical = 4.dp)
-      ) {
-        if (dialogError != null) {
-          Surface(
-            color = StatusErrorSubtle,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(bottom = 12.dp)
-              .border(0.5.dp, StatusError.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-          ) {
-            Text(
-              text = dialogError ?: "",
-              color = StatusError,
-              style = MaterialTheme.typography.bodySmall,
-              fontWeight = FontWeight.Medium,
-              modifier = Modifier.padding(12.dp)
-            )
+  LunaFlowDialog("Un gesto de cuidado", dateLabel, onDismiss, "partner_observation_dialog", busy = isSubmitting,
+    actions = {
+      dialogError?.let { Text(it, color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("observation_error")) }
+      LunaButton("Guardar observación", {
+        if (!isSubmitting && hasContent) {
+          isSubmitting = true
+          dialogError = null
+          onSave(perceivedMood, pain, unloggedSpotting, careAction.trim().takeIf { it.isNotEmpty() },
+            sweetMessage.trim().takeIf { it.isNotEmpty() }) { success, error ->
+            isSubmitting = false
+            if (success) onDismiss()
+            else dialogError = error ?: "No se pudo guardar la observación. Intenta nuevamente."
           }
         }
-        Text(
-          text = "Ánimo que percibes en tu pareja:",
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.padding(vertical = 6.dp)
-        ) {
-          PerceivedMood.entries.forEach { pm ->
-            FilterChip(
-              selected = perceivedMood == pm,
-              onClick = { perceivedMood = pm },
-              label = {
-                val text = when (pm) {
-                  PerceivedMood.CALM -> "Tranquila 😌"
-                  PerceivedMood.TIRED -> "Cansada 🥱"
-                  PerceivedMood.SAD -> "Sensible 🥺"
-                  PerceivedMood.IRRITABLE -> "Irritable ⚡"
-                  PerceivedMood.LOVING -> "Cariñosa 💕"
-                }
-                Text(text, fontSize = 12.sp)
-              },
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = BrandTerracottaRose.copy(alpha = 0.15f),
-                selectedLabelColor = BrandTerracottaRose
-              ),
-              border = FilterChipDefaults.filterChipBorder(
-                enabled = true,
-                selected = perceivedMood == pm,
-                borderColor = AppleHairlineBorder,
-                selectedBorderColor = BrandTerracottaRose
-              ),
-              modifier = Modifier.testTag("mood_chip_${pm.name}")
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Text(
-          text = "Nivel de molestia o cansancio percibido: ${painFloat.roundToInt()} / 5",
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Slider(
-          value = painFloat,
-          onValueChange = { painFloat = it },
-          valueRange = 0f..5f,
-          steps = 4,
-          colors = SliderDefaults.colors(
-            thumbColor = BrandTerracottaRose,
-            activeTrackColor = BrandTerracottaRose
-          ),
-          modifier = Modifier.testTag("partner_pain_slider")
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Verbal Spotting Toggle
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Icon(
-            imageVector = Icons.Default.Info,
-            contentDescription = null,
-            tint = BrandTerracottaRose
-          )
-          Spacer(modifier = Modifier.width(10.dp))
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = "Mencionó haber tenido manchado",
-              style = MaterialTheme.typography.bodyMedium,
-              fontWeight = FontWeight.Medium
-            )
-            Text(
-              text = "Le mostrará una sugerencia sutil para si desea agregarlo",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-          Switch(
-            checked = unloggedSpotting,
-            onCheckedChange = { unloggedSpotting = it },
-            colors = SwitchDefaults.colors(
-              checkedThumbColor = Color.White,
-              checkedTrackColor = BrandTerracottaRose
-            ),
-            modifier = Modifier.testTag("spotting_switch")
-          )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        OutlinedTextField(
-          value = careAction,
-          onValueChange = { careAction = it },
-          label = { Text("Acción de cuidado realizada") },
-          placeholder = { Text("Ej. Le preparé una infusión caliente...") },
-          modifier = Modifier.fillMaxWidth().testTag("observation_care_action_input"),
-          shape = RoundedCornerShape(14.dp)
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        OutlinedTextField(
-          value = sweetMessage,
-          onValueChange = { sweetMessage = it },
-          label = { Text("Mensaje cariñoso de apoyo") },
-          placeholder = { Text("Ej. Aquí estoy si me necesitas...") },
-          modifier = Modifier.fillMaxWidth().testTag("observation_sweet_message_input"),
-          shape = RoundedCornerShape(14.dp)
-        )
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          if (!isSubmitting) {
-            isSubmitting = true
-            dialogError = null
-            onSave(
-              perceivedMood,
-              painFloat.roundToInt(),
-              unloggedSpotting,
-              careAction.ifBlank { null },
-              sweetMessage.ifBlank { null }
-            ) { success, err ->
-              isSubmitting = false
-              if (success) {
-                onDismiss()
-              } else {
-                dialogError = err ?: "Error al registrar la observación. Intenta nuevamente."
-              }
-            }
-          }
-        },
-        enabled = !isSubmitting,
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
-        modifier = Modifier
-          .heightIn(min = 48.dp)
-          .testTag("save_observation_button")
-      ) {
-        if (isSubmitting) {
-          CircularProgressIndicator(
-            modifier = Modifier.size(16.dp),
-            color = Color.White,
-            strokeWidth = 2.dp
-          )
-        } else {
-          Text("Guardar Observación", fontWeight = FontWeight.SemiBold)
-        }
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss, enabled = !isSubmitting) {
-        Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }, Modifier.testTag("save_observation_button"), enabled = hasContent, loading = isSubmitting)
+    }) {
+    LunaFormField("¿Qué hiciste?", careAction, { careAction = it }, Modifier.testTag("observation_care_action_input"),
+      enabled = !isSubmitting, placeholder = "Un gesto de cuidado que hayas hecho.")
+    LunaFormField("Mensaje para tu pareja", sweetMessage, { sweetMessage = it }, Modifier.testTag("observation_sweet_message_input"),
+      enabled = !isSubmitting, placeholder = "Hoy puedes ir a tu ritmo.")
+    Text("Si ella te lo comentó", style = MaterialTheme.typography.titleLarge)
+    Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      LunaOptionChip("No indicó", !unloggedSpotting, { unloggedSpotting = false }, Modifier.weight(1f), enabled = !isSubmitting)
+      LunaOptionChip("Mencionó manchado", unloggedSpotting, { unloggedSpotting = true },
+        Modifier.weight(1f).testTag("spotting_switch"), enabled = !isSubmitting)
+    }
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    Surface(shape = RoundedCornerShape(16.dp), color = if (dark) LunaSandDarkSoft else LunaSandSoft,
+      contentColor = MaterialTheme.colorScheme.onBackground) {
+      Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(painterResource(R.drawable.luna_observation_shield), null, Modifier.size(22.dp),
+          tint = MaterialTheme.colorScheme.primary)
+        Text("Es una observación tuya", style = MaterialTheme.typography.titleMedium)
+        Text("No modifica su menstruación ni confirma síntomas. Ella decide si añade algo a su registro.",
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
-  )
+    TextButton({ showDetails = !showDetails }, enabled = !isSubmitting, modifier = Modifier.testTag("observation_details_button")) {
+      Text(if (showDetails) "Ocultar detalles de tu percepción" else "Añadir detalles de tu percepción")
+    }
+    if (showDetails) {
+      Text("Tu percepción es opcional; no sustituye lo que ella registra.", style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text("Ánimo que percibes", style = MaterialTheme.typography.titleMedium)
+      FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LunaOptionChip("Sin indicar", perceivedMood == null, { perceivedMood = null }, enabled = !isSubmitting)
+        PerceivedMood.entries.forEach { mood ->
+          LunaOptionChip(when (mood) {
+            PerceivedMood.CALM -> "Tranquila"
+            PerceivedMood.TIRED -> "Cansada"
+            PerceivedMood.SAD -> "Sensible"
+            PerceivedMood.IRRITABLE -> "Irritable"
+            PerceivedMood.LOVING -> "Cariñosa"
+          }, perceivedMood == mood, { perceivedMood = mood }, Modifier.testTag("mood_chip_${mood.name}"), enabled = !isSubmitting)
+        }
+      }
+      Text("Molestia percibida", style = MaterialTheme.typography.titleMedium)
+      FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LunaOptionChip("Sin indicar", pain == null, { pain = null }, enabled = !isSubmitting)
+        (0..5).forEach { level ->
+          LunaOptionChip("$level/5", pain == level, { pain = level },
+            Modifier.testTag("partner_pain_$level"), enabled = !isSubmitting)
+        }
+      }
+    }
+  }
 }

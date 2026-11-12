@@ -61,7 +61,7 @@ import com.example.ui.components.LunaBottomNavPill
 import com.example.ui.components.LunaButton
 import com.example.ui.components.LunaButtonType
 import com.example.ui.components.LunaContextTopBar
-import com.example.ui.dialogs.AppAppearanceMode
+import com.example.data.preferences.AppAppearanceMode
 import com.example.ui.dialogs.CheckInResponseDialog
 import com.example.ui.dialogs.IntimacyLogDialog
 import com.example.ui.dialogs.PartnerObservationDialog
@@ -92,13 +92,9 @@ fun MainScreen(
   var showJoinCodeFormOnboarding by remember { mutableStateOf(false) }
 
   // Control de tema (Sistema / Claro / Oscuro)
-  var appearanceMode by remember { mutableStateOf(AppAppearanceMode.SYSTEM) }
+  val appearanceMode by viewModel.appearanceMode.collectAsState()
   val systemDark = isSystemInDarkTheme()
-  val effectiveDark = when (appearanceMode) {
-    AppAppearanceMode.SYSTEM -> systemDark
-    AppAppearanceMode.LIGHT -> false
-    AppAppearanceMode.DARK -> true
-  }
+  val effectiveDark = appearanceMode.isDark(systemDark)
 
   // Dialog target dates (inmutables durante el ciclo de vida del diálogo)
   var periodDialogTargetDate by remember { mutableStateOf<LocalDate?>(null) }
@@ -111,7 +107,7 @@ fun MainScreen(
   var checkInToAnswer by remember { mutableStateOf<CheckIn?>(null) }
 
   // Descartar diálogos ante cambios o cierre de sesión
-  LaunchedEffect(uiState.currentUser?.uid, uiState.isGuestMode) {
+  LaunchedEffect(uiState.currentUser?.uid, uiState.isGuestMode, uiState.space?.id) {
     periodDialogTargetDate = null
     symptomDialogTargetDate = null
     intimacyDialogTargetDate = null
@@ -153,7 +149,11 @@ fun MainScreen(
             } else {
               "LunaSync / En pareja"
             }
-            val initials = if (uiState.currentRole == UserRole.PRIMARY_ELLA) "AS" else "DM"
+            val initials = if (uiState.isGuestMode) {
+              if (uiState.currentRole == UserRole.PRIMARY_ELLA) "AS" else "DM"
+            } else uiState.currentUser?.displayName?.trim()?.takeIf { it.isNotEmpty() }
+              ?.split(Regex("\\s+"))?.take(2)?.joinToString("") { it.take(1) }?.uppercase()
+              ?: uiState.currentUser?.email?.take(1)?.uppercase() ?: "LS"
 
             LunaContextTopBar(
               contextText = contextLabel,
@@ -165,7 +165,7 @@ fun MainScreen(
             if (uiState.isGuestMode) {
               DemoModeBanner(
                 currentRole = uiState.currentRole,
-                onSwitchRole = { role -> viewModel.switchRole(role) },
+                onSwitchRole = { role -> snackbarHostState.currentSnackbarData?.dismiss(); viewModel.switchRole(role) },
                 onExitDemo = { viewModel.exitGuestMode() }
               )
             }
@@ -183,7 +183,10 @@ fun MainScreen(
           ) {
             LunaBottomNavPill(
               selectedTab = currentNavTab,
-              onTabSelected = { currentNavTab = it }
+              onTabSelected = { tab ->
+                if (tab != currentNavTab) snackbarHostState.currentSnackbarData?.dismiss()
+                currentNavTab = tab
+              }
             )
           }
         }
@@ -198,7 +201,7 @@ fun MainScreen(
         if (uiState.isResolvingSpace) {
           Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-              CircularProgressIndicator(color = LunaNavyPrimary)
+              CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
               Spacer(modifier = Modifier.height(14.dp))
               Text(
                 "Conectando con tu espacio...",
@@ -234,13 +237,15 @@ fun MainScreen(
                   partnerObservations = uiState.partnerObservations,
                   latestCheckIn = uiState.latestCheckIn,
                   activeSpottingSuggestion = uiState.activeSpottingSuggestion,
-                  selectedDate = uiState.selectedDate,
-                  onSelectDate = { date -> viewModel.selectDate(date) },
+                  selectedDate = viewModel.getToday(),
+                  onSelectDate = { date -> viewModel.selectDate(date); currentNavTab = 1 },
                   onOpenPeriodDialog = { periodDialogTargetDate = viewModel.getToday() },
                   onOpenSymptomDialog = { symptomDialogTargetDate = viewModel.getToday() },
                   onOpenIntimacyDialog = { intimacyDialogTargetDate = viewModel.getToday() },
                   onNavigateToCalendar = { currentNavTab = 1 },
                   onQuickReplySelected = { reply -> viewModel.answerCheckIn(reply) },
+                  onOpenReply = { checkIn -> checkInToAnswer = checkIn },
+                  onOpenPrivacy = { showPrivacyDialog = true },
                   onAcceptSpotting = { viewModel.acceptSpottingSuggestion() },
                   onDismissSpotting = { viewModel.dismissSpottingSuggestion() }
                 )
@@ -255,7 +260,7 @@ fun MainScreen(
                   partnerObservations = uiState.partnerObservations,
                   isLoading = uiState.isLoading,
                   errorMessage = uiState.errorMessage,
-                  selectedDate = uiState.selectedDate,
+                  selectedDate = viewModel.getToday(),
                   onOpenCheckInDialog = { showCheckInDialog = true },
                   onOpenObservationDialog = { showObservationDialog = true }
                 )
@@ -281,6 +286,9 @@ fun MainScreen(
                 selectedDate = uiState.selectedDate,
                 today = viewModel.getToday(),
                 canLogSymptoms = uiState.currentRole == UserRole.PRIMARY_ELLA,
+                canReadSymptoms = uiState.currentRole == UserRole.PRIMARY_ELLA || uiState.space?.sharingPermissions?.shareSymptoms == true,
+                canReadMood = uiState.currentRole == UserRole.PRIMARY_ELLA || uiState.space?.sharingPermissions?.shareMood == true,
+                canReadIntimacy = uiState.currentRole == UserRole.PRIMARY_ELLA || uiState.space?.sharingPermissions?.shareIntimacy == true,
                 onDateSelected = { date -> viewModel.selectDate(date) },
                 onOpenSymptomDialogForDate = { date ->
                   if (uiState.currentRole == UserRole.PRIMARY_ELLA) {
@@ -297,13 +305,19 @@ fun MainScreen(
             2 -> {
               PairingScreen(
                 currentRole = uiState.currentRole,
-                activeCode = uiState.activePairingCode,
+                activeInvite = uiState.activePairingInvite,
+                activeInviteVersion = uiState.space?.activeInviteVersion ?: 1L,
+                inviteError = uiState.pairingCodeError,
+                isGuestMode = uiState.isGuestMode,
+                clock = viewModel.clock,
+                sharingPermissions = uiState.space?.sharingPermissions ?: com.example.data.model.SharingPermissions(shareSymptoms = false, shareMood = false),
+                onOpenSharedRecords = { currentNavTab = 1 },
                 spaceStatus = uiState.space?.status,
                 partnerId = uiState.space?.partnerId,
                 isLoading = uiState.isLoading,
                 onGenerateCode = { viewModel.generatePairingCode() },
                 onJoinCode = { code -> viewModel.joinWithCode(code) },
-                onRevokePairing = { viewModel.revokePairing() },
+                onRevokePairing = { onComplete -> viewModel.revokePairing(onComplete) },
                 onOpenPrivacySettings = { showPrivacyDialog = true }
               )
             }
@@ -360,7 +374,7 @@ fun MainScreen(
         initialSymptom = symptomForTargetDate,
         date = targetDate,
         onDismiss = { symptomDialogTargetDate = null },
-        onSave = { flow, pain, mood, energy, cramps, headache, backPain, bloating, mucus, breasts, cravings, acne, pubNote, privNote, isPriv, onComplete ->
+        onSave = { flow, pain, mood, energy, cramps, headache, backPain, bloating, mucus, breasts, cravings, acne, pubNote, privNote, isPriv, isMoodPriv, onComplete ->
           viewModel.saveSymptom(
             date = targetDate,
             flowLevel = flow,
@@ -378,6 +392,7 @@ fun MainScreen(
             publicNote = pubNote,
             privateNote = privNote,
             isPrivate = isPriv,
+            isMoodPrivate = isMoodPriv,
             onComplete = onComplete
           )
         }
@@ -407,6 +422,7 @@ fun MainScreen(
     // 4. Observación de Pareja (observation · Un gesto de cuidado)
     if (showObservationDialog) {
       PartnerObservationDialog(
+        date = viewModel.getToday(),
         onDismiss = { showObservationDialog = false },
         onSave = { perceivedMood, pain, spotting, action, msg, onComplete ->
           viewModel.logPartnerObservation(
@@ -436,9 +452,15 @@ fun MainScreen(
       val permissions = uiState.space?.sharingPermissions ?: com.example.data.model.SharingPermissions()
       PrivacySettingsDialog(
         currentPermissions = permissions,
-        onSavePermissions = { updatedPermissions ->
+        canEdit = uiState.currentRole == UserRole.PRIMARY_ELLA && uiState.space != null &&
+          (uiState.isGuestMode || uiState.currentUser?.uid == uiState.space?.ownerId),
+        onSavePermissions = { updatedPermissions, onComplete ->
           scope.launch {
-            viewModel.updateSharingPermissions(updatedPermissions)
+            viewModel.updateSharingPermissions(updatedPermissions).fold(
+              onSuccess = { onComplete(true, null) },
+              onFailure = { error -> onComplete(false, viewModel.sanitizeUserErrorMessage(error,
+                "No se pudieron guardar los permisos. Intenta nuevamente.")) }
+            )
           }
         },
         onDismiss = { showPrivacyDialog = false }
@@ -449,7 +471,8 @@ fun MainScreen(
     if (showSettingsDialog) {
       SettingsDialog(
         currentAppearance = appearanceMode,
-        onAppearanceSelected = { appearanceMode = it },
+        isGuestMode = uiState.isGuestMode,
+        onAppearanceSelected = viewModel::selectAppearance,
         currentRole = uiState.currentRole,
         onSwitchRole = {
           val newRole = if (uiState.currentRole == UserRole.PRIMARY_ELLA) {
@@ -476,9 +499,8 @@ fun MainScreen(
     checkInToAnswer?.let { checkIn ->
       CheckInResponseDialog(
         checkIn = checkIn,
-        onSendResponse = { option, note ->
-          viewModel.answerCheckIn(option, note)
-          checkInToAnswer = null
+        onSendResponse = { option, note, onComplete ->
+          viewModel.answerCheckIn(option, note, checkInId = checkIn.id, onComplete = onComplete)
         },
         onDismiss = { checkInToAnswer = null }
       )
@@ -495,65 +517,31 @@ fun OnboardingJoinCodeScreen(
   modifier: Modifier = Modifier
 ) {
   var inputCode by remember { mutableStateOf("") }
-  val isDark = MaterialTheme.colorScheme.background.red < 0.2f
-
-  Column(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(24.dp),
-    verticalArrangement = Arrangement.Center,
-    horizontalAlignment = Alignment.CenterHorizontally
-  ) {
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      IconButton(onClick = onBack, modifier = Modifier.testTag("onboarding_back_button")) {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+  com.example.ui.components.LunaFlowDialog("Una invitación\na acompañar.",
+    "Vincularse no significa compartir todo.", onBack, "onboarding_join_code_screen", busy = isLoading,
+    actions = {
+      errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("onboarding_join_error")) }
+      LunaButton("Vincular mi cuenta", { onSubmitCode(inputCode.trim()) },
+        modifier = Modifier.testTag("onboarding_submit_code_button"), enabled = inputCode.isNotBlank(),
+        loading = isLoading, loadingText = "Vinculando…")
+    }) {
+    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+      Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(com.example.ui.components.LunaIcons.Link, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+        Text("Pídele su código a tu pareja", style = MaterialTheme.typography.titleMedium)
+        Text("Ella genera la invitación y elige qué compartir. Los permisos se pueden cambiar después.",
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
-      Spacer(modifier = Modifier.width(8.dp))
-      Text("Vincular con tu pareja", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
-
-    Spacer(modifier = Modifier.height(24.dp))
-
-    Text(
-      text = "Ingresa el código que te compartió tu pareja (ej. LUNA-8X4K):",
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    OutlinedTextField(
-      value = inputCode,
-      onValueChange = { inputCode = it.uppercase() },
-      label = { Text("Código de invitación") },
-      placeholder = { Text("LUNA-XXXX") },
-      singleLine = true,
-      shape = RoundedCornerShape(14.dp),
-      modifier = Modifier.fillMaxWidth().testTag("onboarding_code_input")
-    )
-
-    if (errorMessage != null) {
-      Spacer(modifier = Modifier.height(12.dp))
-      Text(
-        text = errorMessage,
-        color = MaterialTheme.colorScheme.error,
-        style = MaterialTheme.typography.bodySmall
-      )
-    }
-
-    Spacer(modifier = Modifier.height(24.dp))
-
-    LunaButton(
-      text = "Conectarme al espacio",
-      onClick = { onSubmitCode(inputCode) },
-      enabled = inputCode.isNotBlank() && !isLoading,
-      loading = isLoading,
-      type = LunaButtonType.PRIMARY,
-      modifier = Modifier.testTag("onboarding_submit_code_button")
-    )
+    OutlinedTextField(inputCode, { inputCode = it.uppercase(java.util.Locale.ROOT) },
+      enabled = !isLoading, label = { Text("Código de invitación") }, singleLine = true,
+      shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().testTag("onboarding_code_input"))
+    Text("Una vez vinculados", style = MaterialTheme.typography.titleLarge)
+    Text("Podrás consultar solo lo que tu pareja autorice. Sus notas privadas nunca se comparten.",
+      style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    LunaButton("Prefiero empezar sin vincular", onBack, modifier = Modifier.testTag("onboarding_back_button"),
+      type = LunaButtonType.SECONDARY, enabled = !isLoading)
   }
 }
 
@@ -611,64 +599,19 @@ private fun DemoModeBanner(
   onExitDemo: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val isDark = MaterialTheme.colorScheme.background.red < 0.2f
-  Surface(
-    shape = RoundedCornerShape(12.dp),
-    color = if (isDark) LunaDarkBorder else LunaIceBlueSubtle,
-    modifier = modifier
-      .fillMaxWidth()
-      .padding(vertical = 4.dp)
-  ) {
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween,
-      modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          imageVector = Icons.Default.PlayArrow,
-          contentDescription = null,
-          tint = LunaNavyPrimary,
-          modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-          text = if (currentRole == UserRole.PRIMARY_ELLA) "Modo Demo · Ella" else "Modo Demo · Pareja",
-          style = MaterialTheme.typography.labelSmall,
-          fontWeight = FontWeight.SemiBold,
-          color = LunaNavyPrimary
-        )
+  Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer,
+    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    modifier = modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+      Text(if (currentRole == UserRole.PRIMARY_ELLA) "Demo · Ella" else "Demo · Pareja",
+        style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+      androidx.compose.material3.TextButton({
+        onSwitchRole(if (currentRole == UserRole.PRIMARY_ELLA) UserRole.SUPPORT_PARTNER else UserRole.PRIMARY_ELLA)
+      }, modifier = Modifier.testTag(if (currentRole == UserRole.PRIMARY_ELLA) "switch_to_partner" else "switch_to_ella")) {
+        Text(if (currentRole == UserRole.PRIMARY_ELLA) "Ver Pareja" else "Ver Ella", style = MaterialTheme.typography.labelSmall)
       }
-
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-          text = if (currentRole == UserRole.PRIMARY_ELLA) "Ver Pareja" else "Ver Ella",
-          style = MaterialTheme.typography.labelSmall,
-          fontWeight = FontWeight.Bold,
-          color = LunaNavyPrimary,
-          modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .clickable {
-              val target = if (currentRole == UserRole.PRIMARY_ELLA) UserRole.SUPPORT_PARTNER else UserRole.PRIMARY_ELLA
-              onSwitchRole(target)
-            }
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .testTag(if (currentRole == UserRole.PRIMARY_ELLA) "switch_to_partner" else "switch_to_ella")
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Text(
-          text = "Salir",
-          style = MaterialTheme.typography.labelSmall,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.error,
-          modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .clickable { onExitDemo() }
-            .padding(horizontal = 6.dp, vertical = 4.dp)
-            .testTag("exit_demo_button")
-        )
+      androidx.compose.material3.TextButton(onExitDemo, modifier = Modifier.testTag("exit_demo_button")) {
+        Text("Salir", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
       }
     }
   }

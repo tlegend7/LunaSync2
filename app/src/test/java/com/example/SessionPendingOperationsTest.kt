@@ -142,8 +142,8 @@ class ControllablePartnerSupportRepository(context: Context) : PartnerSupportRep
   override suspend fun logObservation(
     spaceId: String,
     date: String,
-    perceivedMood: PerceivedMood,
-    apparentPainLevel: Int,
+    perceivedMood: PerceivedMood?,
+    apparentPainLevel: Int?,
     unloggedSpottingReported: Boolean,
     careActionTaken: String?,
     sweetMessage: String?,
@@ -152,7 +152,7 @@ class ControllablePartnerSupportRepository(context: Context) : PartnerSupportRep
     val obs = PartnerObservation(
       spaceId = spaceId,
       date = date,
-      perceivedMood = perceivedMood.name,
+      perceivedMood = perceivedMood?.name,
       apparentPainLevel = apparentPainLevel,
       unloggedSpottingReported = unloggedSpottingReported,
       careActionTaken = careActionTaken,
@@ -247,7 +247,7 @@ class SessionPendingOperationsTest {
         space = space,
         isGuestMode = false,
         todaySymptom = null,
-        activePairingCode = null,
+        activePairingInvite = null,
         errorMessage = null,
         successMessage = null
       )

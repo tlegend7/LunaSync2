@@ -141,6 +141,7 @@ class SessionIsolationAndAuthorizationTest {
   @Test
   fun `pairing invite code format matches LUNA prefix and 4 random chars`() {
     viewModel.enterGuestDemoMode()
+    viewModel.revokePairing()
     viewModel.generatePairingCode()
     val code = viewModel.uiState.value.activePairingCode
     assertNotNull(code)

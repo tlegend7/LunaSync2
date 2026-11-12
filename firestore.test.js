@@ -6,6 +6,7 @@ const {
 const { test, before, after, beforeEach } = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
+const { serverTimestamp } = require("firebase/firestore");
 
 let testEnv;
 const PROJECT_ID = process.env.GCP_PROJECT || "demo-no-project";
@@ -35,6 +36,45 @@ before(async () => {
 after(async () => {
   if (testEnv) {
     await testEnv.cleanup();
+  }
+});
+
+test("10.1 Pareja finaliza su vínculo, pierde acceso e invalida invitaciones pendientes", async () => {
+  const partnerDb = testEnv.authenticatedContext(PARTNER_UID).firestore();
+  await assertSucceeds(partnerDb.collection("couple_spaces").doc(SPACE_ID).update({
+    partnerId: null, status: "UNPAIRED", activeInviteVersion: 2, updatedAt: serverTimestamp(),
+  }));
+  await assertFails(partnerDb.collection("couple_spaces").doc(SPACE_ID).get());
+  await assertFails(partnerDb.collection("couple_spaces").doc(SPACE_ID).collection("physical_symptoms").doc("2026-11-05").get());
+  const ownerDb = testEnv.authenticatedContext(ELLA_UID).firestore();
+  const space = await assertSucceeds(ownerDb.collection("couple_spaces").doc(SPACE_ID).get());
+  assert.strictEqual(space.data().activeInviteVersion, 2);
+  assert.strictEqual(space.data().ownerId, ELLA_UID);
+  await assertSucceeds(ownerDb.collection("couple_spaces").doc(SPACE_ID).collection("private_notes").doc("2026-11-05").get());
+});
+
+for (const [name, changes] of [
+  ["permisos de la dueña", {sharingPermissions: {shareSymptoms: false, shareMood: false, shareIntimacy: false, sharePartnerNotes: false}}],
+  ["parámetros del ciclo", {averageCycleLength: 20}],
+  ["dueña", {ownerId: PARTNER_UID}],
+  ["asignar otra pareja", {partnerId: STRANGER_UID, status: "PAIRED"}],
+  ["conservar versión de invitaciones", {activeInviteVersion: 1}],
+  ["alterar estado", {status: "REVOKED"}],
+]) {
+  test(`10.2 Autodesvinculación no permite modificar ${name}`, async () => {
+    const db = testEnv.authenticatedContext(PARTNER_UID).firestore();
+    await assertFails(db.collection("couple_spaces").doc(SPACE_ID).update({
+      partnerId: null, status: "UNPAIRED", activeInviteVersion: 2, updatedAt: serverTimestamp(), ...changes,
+    }));
+  });
+}
+
+test("10.3 Tercero o pareja anterior no puede desvincular la pareja actual", async () => {
+  for (const uid of [STRANGER_UID, FORMER_PARTNER_UID]) {
+    const db = testEnv.authenticatedContext(uid).firestore();
+    await assertFails(db.collection("couple_spaces").doc(SPACE_ID).update({
+      partnerId: null, status: "UNPAIRED", activeInviteVersion: 2, updatedAt: serverTimestamp(),
+    }));
   }
 });
 
@@ -676,6 +716,35 @@ test("7.E Pareja intenta inyectar privateNote dentro de observation o symptom: D
       privateNote: "Nota no permitida en esta subcolección" // Violación de hasOnly / forbidden
     })
   );
+});
+
+test("7.E2 Gesto de cuidado sin ánimo ni dolor inferidos: PERMITIDO solo para pareja", async () => {
+  const observation = {
+    spaceId: SPACE_ID, date: "2026-11-05", perceivedMood: null, apparentPainLevel: null,
+    unloggedSpottingReported: false, spottingSuggestionStatus: "PENDING",
+    careActionTaken: "Preparé la cena", sweetMessage: null, loggedBy: PARTNER_UID, createdAt: serverTimestamp(),
+  };
+  const partnerDb = testEnv.authenticatedContext(PARTNER_UID).firestore();
+  await assertSucceeds(partnerDb.collection("couple_spaces").doc(SPACE_ID).collection("observations").doc("care_only").set(observation));
+  const ellaDb = testEnv.authenticatedContext(ELLA_UID).firestore();
+  await assertSucceeds(ellaDb.collection("couple_spaces").doc(SPACE_ID).collection("observations").doc("care_only").get());
+  for (const uid of [ELLA_UID, STRANGER_UID, FORMER_PARTNER_UID]) {
+    const db = testEnv.authenticatedContext(uid).firestore();
+    await assertFails(db.collection("couple_spaces").doc(SPACE_ID).collection("observations").doc(`forbidden_${uid}`).set({ ...observation, loggedBy: uid }));
+  }
+});
+
+test("7.E3 Percepción opcional conserva validación de enums y nivel: DENEGADO si son inválidos", async () => {
+  const db = testEnv.authenticatedContext(PARTNER_UID).firestore();
+  const observation = {
+    spaceId: SPACE_ID, date: "2026-11-05", perceivedMood: null, apparentPainLevel: null,
+    unloggedSpottingReported: false, spottingSuggestionStatus: "PENDING",
+    careActionTaken: "Preparé la cena", sweetMessage: null, loggedBy: PARTNER_UID, createdAt: serverTimestamp(),
+  };
+  for (const [index, invalid] of [{ perceivedMood: "UNKNOWN" }, { perceivedMood: 1 },
+    { apparentPainLevel: -1 }, { apparentPainLevel: 6 }, { apparentPainLevel: "3" }].entries()) {
+    await assertFails(db.collection("couple_spaces").doc(SPACE_ID).collection("observations").doc(`invalid_optional_${index}`).set({ ...observation, ...invalid }));
+  }
 });
 
 test("7.F Propietaria actualiza legítimamente spottingSuggestionStatus sin alterar otros campos: PERMITIDO", async () => {

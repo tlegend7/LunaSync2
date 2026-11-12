@@ -19,6 +19,7 @@ import com.example.data.model.FlowLevel
 import com.example.data.model.IntimacyLog
 import com.example.data.model.Mood
 import com.example.data.model.PartnerObservation
+import com.example.data.model.PairingInvite
 import com.example.data.model.PerceivedMood
 import com.example.data.model.PostContactEffect
 import com.example.data.model.PredictedCycle
@@ -33,6 +34,8 @@ import com.example.data.repository.CycleRepository
 import com.example.data.repository.IntimacyRepository
 import com.example.data.repository.PartnerSupportRepository
 import com.example.data.repository.SpaceObservationResult
+import com.example.data.preferences.AppearancePreferences
+import com.example.data.preferences.AppAppearanceMode
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseUser
 import com.example.data.model.DayCycleDetail
@@ -54,7 +57,8 @@ data class AppUiState(
   val space: CoupleSpace? = null,
   val isResolvingSpace: Boolean = false,
   val pairingRevoked: Boolean = false,
-  val activePairingCode: String? = null,
+  val activePairingInvite: PairingInvite? = null,
+  val pairingCodeError: String? = null,
   val cycleStatus: CycleStatusData? = null,
   val pastCycles: List<CycleEntry> = emptyList(),
   val predictedCycles: List<PredictedCycle> = emptyList(),
@@ -70,7 +74,9 @@ data class AppUiState(
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   val successMessage: String? = null
-)
+) {
+  val activePairingCode: String? get() = activePairingInvite?.inviteCode
+}
 
 class MainViewModel @JvmOverloads constructor(
   application: Application,
@@ -80,6 +86,10 @@ class MainViewModel @JvmOverloads constructor(
   val intimacyRepo: IntimacyRepository = IntimacyRepository(application),
   val partnerRepo: PartnerSupportRepository = PartnerSupportRepository(application)
 ) : AndroidViewModel(application) {
+
+  private val appearancePreferences = AppearancePreferences(application)
+  val appearanceMode = appearancePreferences.mode
+  fun selectAppearance(mode: AppAppearanceMode) = appearancePreferences.select(mode)
 
   private val _uiState = MutableStateFlow(AppUiState())
   val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -100,8 +110,10 @@ class MainViewModel @JvmOverloads constructor(
         _uiState.value = _uiState.value.copy(currentUser = user)
         if (user != null) {
           if (activeObservedUserId != user.uid) {
+            cancelAllListeners()
             currentSessionId = UUID.randomUUID().toString()
             activeObservedUserId = user.uid
+            _uiState.value = AppUiState(currentUser = user, selectedDate = getToday(), isResolvingSpace = true)
             observeUserData(user.uid, currentSessionId)
           }
         } else {
@@ -124,8 +136,21 @@ class MainViewModel @JvmOverloads constructor(
   }
 
   fun switchRole(role: UserRole) {
+    if (!_uiState.value.isGuestMode) return
     authRepo.setRole(role)
     _uiState.value = _uiState.value.copy(currentRole = role)
+  }
+
+  fun selectOnboardingRole(role: UserRole) {
+    if (_uiState.value.currentUser != null || authRepo.currentUser.value != null || _uiState.value.space != null) return
+    authRepo.setRole(role)
+    _uiState.value = _uiState.value.copy(currentRole = role)
+  }
+
+  private fun canManageSpace(): Boolean {
+    val state = _uiState.value
+    return if (state.isGuestMode) state.space != null && state.currentRole == UserRole.PRIMARY_ELLA
+    else state.currentUser != null && state.currentUser.uid == state.space?.ownerId
   }
 
   fun selectDate(date: LocalDate) {
@@ -236,11 +261,19 @@ class MainViewModel @JvmOverloads constructor(
             _uiState.value = _uiState.value.copy(
               space = null,
               pastCycles = emptyList(),
+              allSymptoms = emptyList(),
+              predictedCycles = emptyList(),
+              cycleStatus = null,
+              selectedDayDetail = null,
+              partnerCareTips = emptyList(),
+              activeSpottingSuggestion = null,
               intimacyLogs = emptyList(),
               partnerObservations = emptyList(),
               todaySymptom = null,
               latestCheckIn = null,
-              activePairingCode = null,
+              activePairingInvite = null,
+              pairingCodeError = null,
+              isLoading = false,
               isResolvingSpace = false,
               pairingRevoked = true,
               errorMessage = "Tu vinculación con el espacio de pareja ha sido revocada o finalizada."
@@ -459,7 +492,7 @@ class MainViewModel @JvmOverloads constructor(
         id = "demo_cycle_1",
         spaceId = "demo_space",
         startDate = periodStart.toString(),
-        cycleLength = 28,
+        cycleLength = null,
         periodDuration = 5
       )
     )
@@ -566,7 +599,8 @@ class MainViewModel @JvmOverloads constructor(
       intimacyLogs = demoIntimacy,
       partnerObservations = demoObservation,
       latestCheckIn = demoCheckIn,
-      activePairingCode = "LUNA-DEMO",
+      activePairingInvite = PairingInvite(inviteCode = "LUNA-DEMO", spaceId = "demo_space", createdBy = "demo_ella_user",
+        expiresAt = Timestamp(java.util.Date.from(clock.instant().plus(2, java.time.temporal.ChronoUnit.DAYS)))),
       successMessage = "¡Modo Demo activado! Puedes alternar entre Ella y Novio arriba."
     )
   }
@@ -587,24 +621,48 @@ class MainViewModel @JvmOverloads constructor(
   }
 
   fun generatePairingCode(): Job {
+    if (!canManageSpace()) {
+      _uiState.value = _uiState.value.copy(pairingCodeError = "Solo la dueña puede generar una invitación.")
+      return Job().apply { complete() }
+    }
+    if (_uiState.value.space?.status == SpaceStatus.PAIRED.name) {
+      _uiState.value = _uiState.value.copy(pairingCodeError = "El vínculo ya está activo. Finalízalo antes de invitar a otra persona.")
+      return Job().apply { complete() }
+    }
     if (_uiState.value.isGuestMode) {
+      val version = (_uiState.value.space?.activeInviteVersion ?: 1L) + 1
       _uiState.value = _uiState.value.copy(
-        activePairingCode = "LUNA-DEMO",
+        activePairingInvite = PairingInvite(inviteCode = "LUNA-DEMO", spaceId = "demo_space", createdBy = "demo_ella_user",
+          version = version, expiresAt = Timestamp(java.util.Date.from(clock.instant().plus(2, java.time.temporal.ChronoUnit.DAYS)))),
+        space = _uiState.value.space?.copy(activeInviteVersion = version),
+        pairingCodeError = null,
         successMessage = "Código demo activo: LUNA-DEMO"
       )
       return Job().apply { complete() }
     }
     val space = _uiState.value.space ?: return Job().apply { complete() }
     val user = _uiState.value.currentUser ?: return Job().apply { complete() }
+    if (space.status == SpaceStatus.PAIRED.name) {
+      _uiState.value = _uiState.value.copy(pairingCodeError = "El vínculo ya está activo. Finalízalo antes de invitar a otra persona.")
+      return Job().apply { complete() }
+    }
     val sessionId = currentSessionId
 
     return viewModelScope.launch {
-      _uiState.value = _uiState.value.copy(isLoading = true)
+      _uiState.value = _uiState.value.copy(isLoading = true, activePairingInvite = null, pairingCodeError = null)
       try {
         val code = spaceRepo.generateInviteCode(space.id, user.uid)
-        if (isSessionValid(sessionId, user.uid)) {
+        if (!isSessionValid(sessionId, user.uid) || _uiState.value.space?.id != space.id) return@launch
+        val invite = spaceRepo.getInviteDetails(code)
+        if (isSessionValid(sessionId, user.uid) && _uiState.value.space?.id == space.id) {
+          check(invite.createdBy == user.uid && invite.spaceId == space.id && invite.status == "ACTIVE") {
+            "El código ya no está disponible. Revisa el vínculo o genera uno nuevo."
+          }
           _uiState.value = _uiState.value.copy(
-            activePairingCode = code,
+            activePairingInvite = invite,
+            space = _uiState.value.space?.let { current ->
+              current.copy(activeInviteVersion = maxOf(current.activeInviteVersion, invite.version))
+            },
             isLoading = false,
             successMessage = "¡Código de vinculación generado con éxito!"
           )
@@ -614,7 +672,7 @@ class MainViewModel @JvmOverloads constructor(
         if (isSessionValid(sessionId, user.uid)) {
           _uiState.value = _uiState.value.copy(
             isLoading = false,
-            errorMessage = e.localizedMessage ?: "Error al generar código"
+            pairingCodeError = sanitizeUserErrorMessage(e, "No se pudo generar el código. Intenta nuevamente.")
           )
         }
       }
@@ -623,9 +681,16 @@ class MainViewModel @JvmOverloads constructor(
 
   fun joinWithCode(code: String): Job {
     if (_uiState.value.isGuestMode) {
-      _uiState.value = _uiState.value.copy(
-        successMessage = "¡Vinculado en Modo Demo con éxito!"
-      )
+      val state = _uiState.value
+      val invite = state.activePairingInvite
+      val valid = state.currentRole == UserRole.SUPPORT_PARTNER && state.space?.status == SpaceStatus.UNPAIRED.name &&
+        invite != null && code.trim().uppercase(java.util.Locale.ROOT) == invite.inviteCode && invite.status == "ACTIVE" &&
+        invite.version == state.space.activeInviteVersion && invite.expiresAt?.toDate()?.toInstant()?.isAfter(clock.instant()) == true
+      _uiState.value = if (valid) state.copy(
+        space = state.space?.copy(partnerId = "demo_partner_user", status = SpaceStatus.PAIRED.name),
+        activePairingInvite = null, errorMessage = null,
+        successMessage = "Vínculo simulado en la demo. No conecta cuentas reales."
+      ) else state.copy(errorMessage = "Código demo inválido, vencido o vínculo ya activo. No se conectaron cuentas reales.")
       return Job().apply { complete() }
     }
     val user = _uiState.value.currentUser ?: return Job().apply { complete() }
@@ -654,41 +719,52 @@ class MainViewModel @JvmOverloads constructor(
     }
   }
 
-  fun revokePairing() {
+  fun revokePairing(onComplete: ((Boolean, String?) -> Unit)? = null): Job {
     if (_uiState.value.isGuestMode) {
       val currentSpace = _uiState.value.space
       if (currentSpace != null) {
         _uiState.value = _uiState.value.copy(
-          space = currentSpace.copy(partnerId = null, status = SpaceStatus.UNPAIRED.name),
-          activePairingCode = null,
+          space = currentSpace.copy(partnerId = null, status = SpaceStatus.UNPAIRED.name,
+            activeInviteVersion = currentSpace.activeInviteVersion + 1),
+          activePairingInvite = null,
+          pairingCodeError = null,
           successMessage = "Pareja desvinculada en modo Demo"
         )
       }
-      return
+      onComplete?.invoke(true, null)
+      return Job().apply { complete() }
     }
 
-    val space = _uiState.value.space ?: return
-    val sessionId = currentSessionId
+    val space = _uiState.value.space
     val user = _uiState.value.currentUser
+    if (space == null || user == null || user.uid !in listOf(space.ownerId, space.partnerId)) {
+      onComplete?.invoke(false, "No hay un vínculo activo para finalizar.")
+      return Job().apply { complete() }
+    }
+    val sessionId = currentSessionId
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isLoading = true)
       try {
-        spaceRepo.revokePairing(space.id)
+        if (user.uid == space.ownerId) spaceRepo.revokePairing(space.id)
+        else spaceRepo.leavePairing(space.id)
         if (isSessionValid(sessionId, user?.uid)) {
           _uiState.value = _uiState.value.copy(
             isLoading = false,
-            activePairingCode = null,
-            successMessage = "Has desvinculado a tu pareja. El acceso ha sido revocado en el servidor."
+            activePairingInvite = null,
+            pairingCodeError = null,
+            successMessage = "El vínculo ha finalizado y el acceso compartido se ha detenido."
           )
+          onComplete?.invoke(true, null)
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
         if (isSessionValid(sessionId, user?.uid)) {
           _uiState.value = _uiState.value.copy(
             isLoading = false,
-            errorMessage = e.localizedMessage ?: "Error al desvincular pareja"
+            errorMessage = sanitizeUserErrorMessage(e, "No se pudo finalizar el vínculo. Intenta nuevamente.")
           )
+          onComplete?.invoke(false, sanitizeUserErrorMessage(e, "No se pudo finalizar el vínculo. Intenta nuevamente."))
         }
       }
     }
@@ -711,6 +787,7 @@ class MainViewModel @JvmOverloads constructor(
     publicNote: String?,
     privateNote: String?,
     isPrivate: Boolean,
+    isMoodPrivate: Boolean = isPrivate,
     onComplete: (Boolean, String?) -> Unit
   ): Job {
     val today = getToday()
@@ -738,6 +815,7 @@ class MainViewModel @JvmOverloads constructor(
       publicNote = publicNote,
       privateNote = privateNote,
       isPrivate = isPrivate,
+      isMoodPrivate = isMoodPrivate,
       loggedBy = _uiState.value.currentUser?.uid ?: "demo_ella_user"
     )
 
@@ -887,6 +965,15 @@ class MainViewModel @JvmOverloads constructor(
     }
   }
 
+  private fun normalizeDemoCycles(cycles: List<CycleEntry>): List<CycleEntry> {
+    val ordered = cycles.sortedBy { it.startDate }
+    return ordered.mapIndexed { index, cycle ->
+      cycle.copy(cycleLength = ordered.getOrNull(index + 1)?.let {
+        ChronoUnit.DAYS.between(LocalDate.parse(cycle.startDate), LocalDate.parse(it.startDate)).toInt()
+      })
+    }.reversed()
+  }
+
   fun recordPeriodStart(
     startDate: LocalDate,
     endDate: LocalDate? = null,
@@ -908,7 +995,15 @@ class MainViewModel @JvmOverloads constructor(
       return Job().apply { complete() }
     }
 
+    if (!canManageSpace()) {
+      onComplete?.invoke(false, "Solo la dueña puede modificar su historial")
+      return Job().apply { complete() }
+    }
     if (_uiState.value.isGuestMode) {
+      if (_uiState.value.pastCycles.any { it.startDate == startDate.toString() }) {
+        onComplete?.invoke(false, "Ya existe un inicio menstrual en esa fecha")
+        return Job().apply { complete() }
+      }
       val periodDuration = if (endDate != null) {
         (ChronoUnit.DAYS.between(startDate, endDate) + 1).toInt().coerceIn(1, 120)
       } else 5
@@ -921,8 +1016,7 @@ class MainViewModel @JvmOverloads constructor(
         periodDuration = periodDuration,
         isCalculated = endDate == null
       )
-      val updatedCycles = (listOf(newCycle) + _uiState.value.pastCycles)
-        .sortedByDescending { it.startDate }
+      val updatedCycles = normalizeDemoCycles(listOf(newCycle) + _uiState.value.pastCycles)
       _uiState.value = _uiState.value.copy(
         pastCycles = updatedCycles,
         successMessage = "Inicio menstrual registrado (Modo Demo)"
@@ -983,6 +1077,14 @@ class MainViewModel @JvmOverloads constructor(
       return Job().apply { complete() }
     }
 
+    if (_uiState.value.isGuestMode) {
+      val cycle = _uiState.value.pastCycles.firstOrNull { it.id == cycleId }
+      if (cycle == null) {
+        onComplete?.invoke(false, "No se encontró el ciclo")
+        return Job().apply { complete() }
+      }
+      return updateCycleDates(cycleId, LocalDate.parse(cycle.startDate), endDate, onComplete)
+    }
     val space = _uiState.value.space
     val user = _uiState.value.currentUser
     if (space == null || user == null) {
@@ -1035,6 +1137,25 @@ class MainViewModel @JvmOverloads constructor(
       return Job().apply { complete() }
     }
 
+    if (!canManageSpace()) {
+      onComplete?.invoke(false, "Solo la dueña puede modificar su historial")
+      return Job().apply { complete() }
+    }
+    if (_uiState.value.isGuestMode) {
+      val cycles = _uiState.value.pastCycles
+      if (cycles.none { it.id == cycleId } || cycles.any { it.id != cycleId && it.startDate == newStartDate.toString() }) {
+        onComplete?.invoke(false, "No existe el ciclo o esa fecha ya tiene un inicio menstrual")
+        return Job().apply { complete() }
+      }
+      _uiState.value = _uiState.value.copy(pastCycles = normalizeDemoCycles(cycles.map {
+        if (it.id != cycleId) it else it.copy(startDate = newStartDate.toString(), endDate = newEndDate?.toString(),
+          periodDuration = newEndDate?.let { end -> (ChronoUnit.DAYS.between(newStartDate, end) + 1).toInt() } ?: it.periodDuration,
+          isCalculated = newEndDate == null)
+      }), successMessage = "Fechas actualizadas (Modo Demo)")
+      refreshCycleCalculations()
+      onComplete?.invoke(true, null)
+      return Job().apply { complete() }
+    }
     val space = _uiState.value.space
     val user = _uiState.value.currentUser
     if (space == null || user == null) {
@@ -1076,6 +1197,21 @@ class MainViewModel @JvmOverloads constructor(
     cycleId: String,
     onComplete: ((Boolean, String?) -> Unit)? = null
   ): Job {
+    if (!canManageSpace()) {
+      onComplete?.invoke(false, "Solo la dueña puede modificar su historial")
+      return Job().apply { complete() }
+    }
+    if (_uiState.value.isGuestMode) {
+      if (_uiState.value.pastCycles.none { it.id == cycleId }) {
+        onComplete?.invoke(false, "No se encontró el ciclo")
+        return Job().apply { complete() }
+      }
+      _uiState.value = _uiState.value.copy(pastCycles = normalizeDemoCycles(_uiState.value.pastCycles.filterNot { it.id == cycleId }),
+        successMessage = "Ciclo eliminado (Modo Demo)")
+      refreshCycleCalculations()
+      onComplete?.invoke(true, null)
+      return Job().apply { complete() }
+    }
     val space = _uiState.value.space
     val user = _uiState.value.currentUser
     if (space == null || user == null) {
@@ -1109,8 +1245,8 @@ class MainViewModel @JvmOverloads constructor(
   }
 
   fun logPartnerObservation(
-    perceivedMood: PerceivedMood,
-    apparentPainLevel: Int,
+    perceivedMood: PerceivedMood?,
+    apparentPainLevel: Int?,
     unloggedSpottingReported: Boolean,
     careActionTaken: String?,
     sweetMessage: String?,
@@ -1121,7 +1257,7 @@ class MainViewModel @JvmOverloads constructor(
       id = "obs_${System.currentTimeMillis()}",
       spaceId = _uiState.value.space?.id ?: "demo_space",
       date = dateStr,
-      perceivedMood = perceivedMood.name,
+      perceivedMood = perceivedMood?.name,
       apparentPainLevel = apparentPainLevel,
       unloggedSpottingReported = unloggedSpottingReported,
       spottingSuggestionStatus = if (unloggedSpottingReported) SpottingSuggestionStatus.PENDING.name else SpottingSuggestionStatus.DISMISSED.name,
@@ -1247,10 +1383,20 @@ class MainViewModel @JvmOverloads constructor(
     }
   }
 
-  fun answerCheckIn(responseOption: QuickResponseOption, responseNote: String? = null) {
+  fun answerCheckIn(
+    responseOption: QuickResponseOption,
+    responseNote: String? = null,
+    checkInId: String? = null,
+    onComplete: ((Boolean, String?) -> Unit)? = null
+  ): Job {
+    val targetId = checkInId ?: _uiState.value.latestCheckIn?.id
+    if (targetId.isNullOrBlank() || !canManageSpace()) {
+      onComplete?.invoke(false, "No hay un mensaje disponible para responder.")
+      return Job().apply { complete() }
+    }
     if (_uiState.value.isGuestMode) {
       val current = _uiState.value.latestCheckIn
-      if (current != null) {
+      if (current != null && current.id == targetId) {
         _uiState.value = _uiState.value.copy(
           latestCheckIn = current.copy(
             status = CheckInStatus.ANSWERED.name,
@@ -1258,32 +1404,48 @@ class MainViewModel @JvmOverloads constructor(
             responseNote = responseNote,
             answeredAt = Timestamp.now()
           ),
-          successMessage = "¡Respuesta enviada! Cambia a 'Novio 🤝' para ver el feedback en su dashboard."
+          successMessage = "Respuesta enviada en la demostración."
         )
+        onComplete?.invoke(true, null)
+      } else {
+        onComplete?.invoke(false, "Este mensaje ya no está disponible en la demostración.")
       }
-      return
+      return Job().apply { complete() }
     }
 
-    val space = _uiState.value.space ?: return
-    val checkIn = _uiState.value.latestCheckIn ?: return
-    val sessionId = currentSessionId
+    val space = _uiState.value.space
     val user = _uiState.value.currentUser
+    if (space == null || user == null) {
+      onComplete?.invoke(false, "La sesión ha cambiado. Abre el mensaje nuevamente.")
+      return Job().apply { complete() }
+    }
+    val sessionId = currentSessionId
+    var callbackDelivered = false
+    val complete: (Boolean, String?) -> Unit = { success, error ->
+      if (!callbackDelivered && isSessionValid(sessionId, user.uid)) {
+        callbackDelivered = true
+        onComplete?.invoke(success, error)
+      }
+    }
 
-    viewModelScope.launch {
+    return viewModelScope.launch {
       try {
         partnerRepo.answerCheckIn(
           spaceId = space.id,
-          checkInId = checkIn.id,
+          checkInId = targetId,
           responseOption = responseOption,
           responseNote = responseNote
         )
-        if (isSessionValid(sessionId, user?.uid)) {
+        if (isSessionValid(sessionId, user.uid)) {
           _uiState.value = _uiState.value.copy(successMessage = "¡Respuesta enviada a tu pareja!")
+          complete(true, null)
         }
       } catch (e: Exception) {
         if (e is CancellationException) throw e
-        if (isSessionValid(sessionId, user?.uid)) {
-          _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al responder check-in")
+        if (isSessionValid(sessionId, user.uid)) {
+          val message = sanitizeUserErrorMessage(e, "No se pudo enviar la respuesta. Intenta nuevamente.")
+          _uiState.value = _uiState.value.copy(errorMessage = message)
+          complete(false, message)
         }
       }
     }
@@ -1353,6 +1515,9 @@ class MainViewModel @JvmOverloads constructor(
   }
 
   suspend fun updateSharingPermissions(permissions: SharingPermissions): Result<Unit> {
+    if (!canManageSpace()) {
+      return Result.failure(IllegalStateException("Solo la dueña puede cambiar lo que comparte."))
+    }
     if (_uiState.value.isGuestMode) {
       val currentSpace = _uiState.value.space
       if (currentSpace != null) {
@@ -1370,17 +1535,18 @@ class MainViewModel @JvmOverloads constructor(
 
     return try {
       spaceRepo.updatePermissions(space.id, permissions)
-      if (isSessionValid(sessionId, user?.uid)) {
-        _uiState.value = _uiState.value.copy(
-          space = space.copy(sharingPermissions = permissions),
-          successMessage = "Permisos de privacidad actualizados en el servidor"
-        )
+      if (!isSessionValid(sessionId, user?.uid) || _uiState.value.space?.id != space.id) {
+        return Result.failure(CancellationException("La sesión ha cambiado."))
       }
+      _uiState.value = _uiState.value.copy(
+        space = _uiState.value.space?.copy(sharingPermissions = permissions),
+        successMessage = "Permisos de privacidad actualizados en el servidor"
+      )
       Result.success(Unit)
     } catch (e: Exception) {
       if (e is CancellationException) throw e
       if (isSessionValid(sessionId, user?.uid)) {
-        _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage ?: "Error al actualizar permisos")
+        _uiState.value = _uiState.value.copy(errorMessage = sanitizeUserErrorMessage(e, "No se pudieron guardar los permisos. Intenta nuevamente."))
       }
       Result.failure(e)
     }

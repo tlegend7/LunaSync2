@@ -3,27 +3,38 @@ package com.example.ui.theme
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.example.R
 
 // LunaSync Typography - Inter scale (Figma: LunaSync / Sistema visual)
-val LunaFontFamily = FontFamily.Default
+val LunaFontFamily = FontFamily(
+  Font(R.font.inter_regular, FontWeight.Normal),
+  Font(R.font.inter_medium, FontWeight.Medium),
+  Font(R.font.inter_semibold, FontWeight.SemiBold),
+  Font(R.font.inter_bold, FontWeight.Bold)
+)
 
 val Typography = Typography(
+  displayMedium = TextStyle(fontFamily = LunaFontFamily, fontWeight = FontWeight.Bold, fontSize = 44.sp, lineHeight = 48.sp),
+  headlineLarge = TextStyle(fontFamily = LunaFontFamily, fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 38.sp),
+  headlineSmall = TextStyle(fontFamily = LunaFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp),
+  labelMedium = TextStyle(fontFamily = LunaFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 19.sp),
   // Hero headline ("Día 18", "LunaSync")
   displayLarge = TextStyle(
     fontFamily = LunaFontFamily,
     fontWeight = FontWeight.Bold,
     fontSize = 44.sp,
     lineHeight = 48.sp,
-    letterSpacing = (-0.5).sp
+    letterSpacing = 0.sp
   ),
   displaySmall = TextStyle(
     fontFamily = LunaFontFamily,
     fontWeight = FontWeight.Bold,
     fontSize = 32.sp,
     lineHeight = 38.sp,
-    letterSpacing = (-0.4).sp
+    letterSpacing = 0.sp
   ),
   // Heading ("Hoy, a tu ritmo", "Tu calendario", "Estar, sin adivinar")
   headlineMedium = TextStyle(
@@ -31,7 +42,7 @@ val Typography = Typography(
     fontWeight = FontWeight.Bold,
     fontSize = 32.sp,
     lineHeight = 38.sp,
-    letterSpacing = (-0.3).sp
+    letterSpacing = 0.sp
   ),
   // Section Titles ("Tus registros", "¿Cómo usarás LunaSync?", "Lo que sabes hoy")
   titleLarge = TextStyle(
@@ -39,7 +50,7 @@ val Typography = Typography(
     fontWeight = FontWeight.SemiBold,
     fontSize = 22.sp,
     lineHeight = 28.sp,
-    letterSpacing = (-0.2).sp
+    letterSpacing = 0.sp
   ),
   // Card Titles & Row Headers ("Menstruación", "Intimidad", "Privacidad y permisos")
   titleMedium = TextStyle(
@@ -47,7 +58,7 @@ val Typography = Typography(
     fontWeight = FontWeight.SemiBold,
     fontSize = 16.sp,
     lineHeight = 23.sp,
-    letterSpacing = (-0.1).sp
+    letterSpacing = 0.sp
   ),
   // Small Headers
   titleSmall = TextStyle(
@@ -95,6 +106,6 @@ val Typography = Typography(
     fontWeight = FontWeight.Medium,
     fontSize = 11.sp,
     lineHeight = 15.sp,
-    letterSpacing = 0.2.sp
+    letterSpacing = 0.sp
   )
 )

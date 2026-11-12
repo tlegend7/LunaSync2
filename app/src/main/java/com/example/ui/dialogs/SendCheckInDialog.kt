@@ -1,44 +1,20 @@
 package com.example.ui.dialogs
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.model.CheckInPromptType
-import com.example.ui.theme.AppleHairlineBorder
-import com.example.ui.theme.BrandTerracottaRose
-import com.example.ui.theme.StatusError
-import com.example.ui.theme.StatusErrorSubtle
+import com.example.ui.components.*
 
 @Composable
 fun SendCheckInDialog(
@@ -49,130 +25,64 @@ fun SendCheckInDialog(
   var customNote by remember { mutableStateOf("") }
   var isSubmitting by remember { mutableStateOf(false) }
   var dialogError by remember { mutableStateOf<String?>(null) }
+  var showMore by remember { mutableStateOf(false) }
+  val primaryQuestions = listOf(CheckInPromptType.HOW_ARE_YOU_FEELING,
+    CheckInPromptType.NEED_SPACE_OR_CUDDLES, CheckInPromptType.CAN_I_BRING_YOU_SOMETHING)
 
-  AlertDialog(
-    onDismissRequest = { if (!isSubmitting) onDismiss() },
-    shape = RoundedCornerShape(24.dp),
-    title = {
-      Text(
-        text = "Enviar Check-in Afectivo",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-      )
-    },
-    text = {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .verticalScroll(rememberScrollState())
-          .padding(vertical = 4.dp)
-      ) {
-        if (dialogError != null) {
-          Surface(
-            color = StatusErrorSubtle,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(bottom = 12.dp)
-              .border(0.5.dp, StatusError.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-          ) {
-            Text(
-              text = dialogError ?: "",
-              color = StatusError,
-              style = MaterialTheme.typography.bodySmall,
-              fontWeight = FontWeight.Medium,
-              modifier = Modifier.padding(12.dp)
-            )
+  LunaFlowDialog("Una pregunta,\nsin presión.", "Un check-in para acompañar a tu pareja.",
+    onDismiss, "send_checkin_dialog", busy = isSubmitting,
+    actions = {
+      dialogError?.let { Text(it, color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("checkin_error")) }
+      LunaButton("Enviar pregunta", {
+        if (!isSubmitting) {
+          isSubmitting = true
+          dialogError = null
+          onSend(selectedPrompt, customNote.trim().takeIf { it.isNotEmpty() }) { success, error ->
+            isSubmitting = false
+            if (success) onDismiss()
+            else dialogError = error ?: "No se pudo enviar la pregunta. Intenta nuevamente."
           }
         }
-
-        Text(
-          text = "Selecciona una pregunta cariñosa:",
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          CheckInPromptType.entries.forEach { prompt ->
-            val title = when (prompt) {
-              CheckInPromptType.HOW_ARE_YOU_FEELING -> "¿Cómo te sientes en este momento?"
-              CheckInPromptType.NEED_SPACE_OR_CUDDLES -> "¿Necesitas espacio a solas o compañía?"
-              CheckInPromptType.ARE_YOU_UPSET_WITH_ME -> "¿Hay algo en lo que te pueda ayudar o prefieres un momento?"
-              CheckInPromptType.CAN_I_BRING_YOU_SOMETHING -> "¿Puedo llevarte algo rico o caliente?"
-            }
-
-            FilterChip(
-              selected = selectedPrompt == prompt,
-              onClick = { selectedPrompt = prompt },
-              label = { Text(title, fontSize = 13.sp) },
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = BrandTerracottaRose.copy(alpha = 0.15f),
-                selectedLabelColor = BrandTerracottaRose
-              ),
-              border = FilterChipDefaults.filterChipBorder(
-                enabled = true,
-                selected = selectedPrompt == prompt,
-                borderColor = AppleHairlineBorder,
-                selectedBorderColor = BrandTerracottaRose
-              ),
-              modifier = Modifier.fillMaxWidth().testTag("prompt_${prompt.name}")
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        OutlinedTextField(
-          value = customNote,
-          onValueChange = { customNote = it },
-          label = { Text("Nota personalizada (opcional)") },
-          placeholder = { Text("Ej. Te pienso mucho hoy, avísame si necesitas algo...") },
-          modifier = Modifier.fillMaxWidth().testTag("checkin_custom_note_input"),
-          shape = RoundedCornerShape(14.dp)
-        )
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          if (!isSubmitting) {
-            isSubmitting = true
-            dialogError = null
-            onSend(selectedPrompt, customNote.ifBlank { null }) { success, err ->
-              isSubmitting = false
-              if (success) {
-                onDismiss()
-              } else {
-                dialogError = err ?: "Error al enviar el check-in. Intenta nuevamente."
-              }
-            }
-          }
-        },
-        enabled = !isSubmitting,
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
-        modifier = Modifier
-          .heightIn(min = 48.dp)
-          .testTag("send_check_in_button")
-      ) {
-        if (isSubmitting) {
-          CircularProgressIndicator(
-            modifier = Modifier.size(16.dp),
-            color = Color.White,
-            strokeWidth = 2.dp
-          )
-        } else {
-          Text("Enviar Pregunta", fontWeight = FontWeight.SemiBold)
+      }, Modifier.testTag("send_check_in_button"), loading = isSubmitting, loadingText = "Enviando…")
+    }) {
+    Text("Elige una pregunta", style = MaterialTheme.typography.titleLarge)
+    Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.fillMaxWidth().selectable(true, enabled = !isSubmitting,
+          role = Role.RadioButton, onClick = {}).testTag("prompt_${selectedPrompt.name}")) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Icon(painterResource(R.drawable.luna_message_circle), null, Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.primary)
+          Text(checkInQuestion(selectedPrompt.name), style = MaterialTheme.typography.titleMedium)
+          Text("Pregunta seleccionada", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss, enabled = !isSubmitting) {
-        Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      val questions = if (showMore) CheckInPromptType.entries else primaryQuestions
+      questions.filter { it != selectedPrompt }.forEach { prompt ->
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(false, enabled = !isSubmitting,
+          role = Role.RadioButton, onClick = { selectedPrompt = prompt }).testTag("prompt_${prompt.name}"),
+          verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          Icon(painterResource(R.drawable.luna_heart), null, Modifier.size(22.dp))
+          Text(when (prompt) {
+            CheckInPromptType.NEED_SPACE_OR_CUDDLES -> "¿Compañía o espacio?"
+            CheckInPromptType.CAN_I_BRING_YOU_SOMETHING -> "¿Puedo ayudarte con algo?"
+            else -> checkInQuestion(prompt.name)
+          }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+          Icon(painterResource(R.drawable.luna_chevron_right), null, Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
       }
     }
-  )
+    LunaFormField("Añade una nota, si quieres", customNote, { customNote = it },
+      Modifier.testTag("checkin_custom_note_input"), enabled = !isSubmitting, placeholder = "Estoy aquí si necesitas algo.")
+    Text("Responder es opcional. Dale espacio para hacerlo a su ritmo.", style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant)
+    TextButton({ showMore = !showMore }, enabled = !isSubmitting, modifier = Modifier.testTag("more_checkin_questions")) {
+      Text(if (showMore) "Ver menos preguntas" else "Más preguntas")
+    }
+  }
 }

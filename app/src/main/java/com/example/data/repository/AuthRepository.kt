@@ -8,7 +8,6 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
-import com.example.R
 import com.example.data.model.UserRole
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -46,6 +45,11 @@ open class AuthRepository(
     _userRole.value = role
   }
 
+  private fun webClientId(): String? {
+    val resourceId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+    return if (resourceId == 0) null else context.getString(resourceId).takeIf { it.isNotBlank() }
+  }
+
   fun attemptAutoSignIn(
     scope: CoroutineScope,
     onAuthSuccess: () -> Unit = {},
@@ -57,9 +61,8 @@ open class AuthRepository(
       return
     }
 
-    val clientId = try {
-      context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
+    val clientId = webClientId()
+    if (clientId == null) {
       onUnauthenticated()
       return
     }
@@ -100,10 +103,9 @@ open class AuthRepository(
     onAuthError: (String) -> Unit,
     onCancelled: () -> Unit = {}
   ) {
-    val clientId = try {
-      context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
-      onAuthError("Google Sign-In configuration missing: default_web_client_id")
+    val clientId = webClientId()
+    if (clientId == null) {
+      onAuthError("El inicio de sesión no está disponible en esta versión de demostración. Puedes explorar el modo demo.")
       return
     }
 

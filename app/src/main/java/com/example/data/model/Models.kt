@@ -2,7 +2,9 @@ package com.example.data.model
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.Exclude
 import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 import java.time.LocalDate
 
@@ -117,6 +119,7 @@ data class CoupleSpace(
   val averageCycleLength: Int = 28,
   val averagePeriodLength: Int = 5,
   val sharingPermissions: SharingPermissions = SharingPermissions(),
+  val activeInviteVersion: Long = 1L,
   @ServerTimestamp val createdAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -127,6 +130,7 @@ data class PairingInvite(
   val spaceId: String = "",
   val createdBy: String = "",
   val status: String = "ACTIVE",
+  val version: Long = 1L,
   val expiresAt: Timestamp? = null,
   @ServerTimestamp val createdAt: Timestamp? = null
 )
@@ -178,9 +182,13 @@ data class DailySymptom(
   val acne: Boolean = false,
   val publicNote: String? = null,
   val privateNote: String? = null,
-  val isPrivate: Boolean = false,
+  @get:PropertyName("isPrivate") val isPrivate: Boolean = false,
   val loggedBy: String = "",
-  @ServerTimestamp val updatedAt: Timestamp? = null
+  @ServerTimestamp val updatedAt: Timestamp? = null,
+  @get:Exclude val hasPhysicalRecord: Boolean = true,
+  @get:Exclude val hasMoodRecord: Boolean = true,
+  // Null preserves the single privacy flag of legacy records until their split documents are read.
+  @get:Exclude val isMoodPrivate: Boolean? = null
 )
 
 @IgnoreExtraProperties
@@ -199,7 +207,7 @@ data class PhysicalSymptomsRecord(
   val cravings: Boolean = false,
   val acne: Boolean = false,
   val publicNote: String? = null,
-  val isPrivate: Boolean = false,
+  @get:PropertyName("isPrivate") val isPrivate: Boolean = false,
   val loggedBy: String = "",
   val migratedAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
@@ -212,7 +220,7 @@ data class MoodRecord(
   val date: String = "",
   val mood: String = Mood.CALM.name,
   val energyLevel: Int = 3,
-  val isPrivate: Boolean = false,
+  @get:PropertyName("isPrivate") val isPrivate: Boolean = false,
   val loggedBy: String = "",
   val migratedAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
@@ -239,7 +247,7 @@ data class IntimacyLog(
   val hadOrgasm: Boolean = false,
   val postContactEffect: String = PostContactEffect.NONE.name,
   val notes: String? = null,
-  val isPrivate: Boolean = false,
+  @get:PropertyName("isPrivate") val isPrivate: Boolean = false,
   val loggedBy: String = "",
   @ServerTimestamp val createdAt: Timestamp? = null
 )
@@ -249,8 +257,8 @@ data class PartnerObservation(
   @DocumentId val id: String = "",
   val spaceId: String = "",
   val date: String = "", // ISO YYYY-MM-DD
-  val perceivedMood: String = PerceivedMood.CALM.name,
-  val apparentPainLevel: Int = 0,
+  val perceivedMood: String? = null,
+  val apparentPainLevel: Int? = null,
   val unloggedSpottingReported: Boolean = false,
   val spottingSuggestionStatus: String = SpottingSuggestionStatus.PENDING.name,
   val careActionTaken: String? = null,

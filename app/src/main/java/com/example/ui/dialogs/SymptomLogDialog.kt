@@ -1,535 +1,189 @@
 package com.example.ui.dialogs
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.data.model.CervicalMucus
-import com.example.data.model.DailySymptom
-import com.example.data.model.FlowLevel
-import com.example.data.model.Mood
-import com.example.ui.theme.BrandTerracottaRose
-import com.example.ui.theme.PhaseFertileSage
-import com.example.ui.theme.PhaseFollicularPeach
-import com.example.ui.theme.PhaseLutealLavender
-import com.example.ui.theme.PhaseMenstrualRose
+import com.example.data.model.*
+import com.example.ui.components.*
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SymptomLogDialog(
   initialSymptom: DailySymptom?,
-  date: java.time.LocalDate = java.time.LocalDate.now(),
+  date: LocalDate = LocalDate.now(),
   onDismiss: () -> Unit,
-  onSave: (
-    flowLevel: FlowLevel,
-    painLevel: Int,
-    mood: Mood,
-    energyLevel: Int,
-    cramps: Boolean,
-    headache: Boolean,
-    backPain: Boolean,
-    bloating: Boolean,
-    cervicalMucus: CervicalMucus,
-    tenderBreasts: Boolean,
-    cravings: Boolean,
-    acne: Boolean,
-    publicNote: String?,
-    privateNote: String?,
-    isPrivate: Boolean,
-    onComplete: (Boolean, String?) -> Unit
-  ) -> Unit
+  onSave: (flowLevel: FlowLevel, painLevel: Int, mood: Mood, energyLevel: Int,
+    cramps: Boolean, headache: Boolean, backPain: Boolean, bloating: Boolean, cervicalMucus: CervicalMucus,
+    tenderBreasts: Boolean, cravings: Boolean, acne: Boolean, publicNote: String?, privateNote: String?,
+    isPrivate: Boolean, isMoodPrivate: Boolean, onComplete: (Boolean, String?) -> Unit) -> Unit
 ) {
-  var flowLevel by remember {
-    mutableStateOf(
-      initialSymptom?.let {
-        try { FlowLevel.valueOf(it.flowLevel) } catch (e: Exception) { FlowLevel.NONE }
-      } ?: FlowLevel.NONE
-    )
-  }
-
-  var painFloat by remember {
-    mutableFloatStateOf(initialSymptom?.painLevel?.toFloat() ?: 0f)
-  }
-
-  var energyFloat by remember {
-    mutableFloatStateOf(if (initialSymptom != null && initialSymptom.energyLevel > 0) initialSymptom.energyLevel.toFloat() else 3f)
-  }
-
-  var mood by remember {
-    mutableStateOf(
-      initialSymptom?.let {
-        try { if (it.mood.isNotBlank()) Mood.valueOf(it.mood) else Mood.CALM } catch (e: Exception) { Mood.CALM }
-      } ?: Mood.CALM
-    )
-  }
-
-  var cervicalMucus by remember {
-    mutableStateOf(
-      initialSymptom?.let {
-        try { CervicalMucus.valueOf(it.cervicalMucus) } catch (e: Exception) { CervicalMucus.NONE }
-      } ?: CervicalMucus.NONE
-    )
-  }
-
+  var flow by remember { mutableStateOf(FlowLevel.entries.firstOrNull { it.name == initialSymptom?.flowLevel } ?: FlowLevel.NONE) }
+  var pain by remember { mutableStateOf(initialSymptom?.painLevel ?: 0) }
+  var mood by remember { mutableStateOf(Mood.entries.firstOrNull { it.name == initialSymptom?.mood } ?: Mood.CALM) }
+  var energy by remember { mutableStateOf(initialSymptom?.energyLevel?.takeIf { it in 1..5 } ?: 3) }
+  var mucus by remember { mutableStateOf(CervicalMucus.entries.firstOrNull { it.name == initialSymptom?.cervicalMucus } ?: CervicalMucus.NONE) }
   var cramps by remember { mutableStateOf(initialSymptom?.cramps ?: false) }
-  var tenderBreasts by remember { mutableStateOf(initialSymptom?.tenderBreasts ?: false) }
-  var cravings by remember { mutableStateOf(initialSymptom?.cravings ?: false) }
   var headache by remember { mutableStateOf(initialSymptom?.headache ?: false) }
   var backPain by remember { mutableStateOf(initialSymptom?.backPain ?: false) }
   var bloating by remember { mutableStateOf(initialSymptom?.bloating ?: false) }
+  var breasts by remember { mutableStateOf(initialSymptom?.tenderBreasts ?: false) }
+  var cravings by remember { mutableStateOf(initialSymptom?.cravings ?: false) }
   var acne by remember { mutableStateOf(initialSymptom?.acne ?: false) }
+  var publicNote by remember { mutableStateOf(initialSymptom?.publicNote.orEmpty()) }
+  var privateNote by remember { mutableStateOf(initialSymptom?.privateNote.orEmpty()) }
+  var physicalPrivate by remember { mutableStateOf(initialSymptom?.isPrivate ?: false) }
+  var moodPrivate by remember { mutableStateOf(initialSymptom?.let { it.isMoodPrivate ?: it.isPrivate } ?: false) }
+  var busy by remember { mutableStateOf(false) }
+  var error by remember { mutableStateOf<String?>(null) }
+  var showDetails by remember { mutableStateOf(false) }
+  var showMoods by remember { mutableStateOf(false) }
+  val locale = Locale.forLanguageTag("es-ES")
+  val dateLabel = date.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM 'de' yyyy", locale))
+    .replaceFirstChar { it.titlecase(locale) }
+  val largeText = LocalDensity.current.fontScale > 1.15f
+  val bloodLevels = listOf(FlowLevel.LIGHT, FlowLevel.MEDIUM, FlowLevel.HEAVY)
 
-  var publicNote by remember { mutableStateOf(initialSymptom?.publicNote ?: "") }
-  var privateNote by remember { mutableStateOf(initialSymptom?.privateNote ?: "") }
-  var isPrivate by remember { mutableStateOf(initialSymptom?.isPrivate ?: false) }
-  var isSubmitting by remember { mutableStateOf(false) }
-  var dialogError by remember { mutableStateOf<String?>(null) }
-
-  val formattedDate = remember(date) {
-    date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", java.util.Locale("es", "ES")))
-      .replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
-  }
-
-  AlertDialog(
-    onDismissRequest = { if (!isSubmitting) onDismiss() },
-    shape = RoundedCornerShape(26.dp),
-    title = {
-      Column {
-        Text(
-          text = "Registro Holístico Diario",
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-          text = formattedDate,
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.testTag("symptom_dialog_date_text")
-        )
-      }
-    },
-    text = {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .verticalScroll(rememberScrollState())
-          .padding(vertical = 4.dp)
-      ) {
-        if (dialogError != null) {
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.errorContainer,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-          ) {
-            Text(
-              text = dialogError!!,
-              color = MaterialTheme.colorScheme.onErrorContainer,
-              style = MaterialTheme.typography.bodySmall,
-              modifier = Modifier.padding(10.dp)
-            )
+  LunaFlowDialog(if (error == null) "¿Cómo te sientes?" else "Tu registro sigue\naquí.", dateLabel, onDismiss, "symptom_log_dialog", busy = busy,
+    subtitleModifier = Modifier.testTag("symptom_dialog_date_text"), actions = {
+      error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.testTag("symptom_error")) }
+      LunaButton(if (error == null) "Guardar registro" else "Reintentar guardado", {
+        if (!busy) {
+          busy = true
+          error = null
+          onSave(flow, pain, mood, energy, cramps, headache, backPain, bloating, mucus, breasts, cravings, acne,
+            publicNote.trim().takeIf { it.isNotEmpty() }, privateNote.trim().takeIf { it.isNotEmpty() }, physicalPrivate, moodPrivate) { success, failure ->
+            busy = false
+            if (success) onDismiss() else error = failure ?: "No se pudo guardar el registro. Intenta nuevamente."
           }
         }
-
-        // 1. Flow Level
-        Text(
-          text = "Flujo / Sangrado:",
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.padding(vertical = 6.dp)
-        ) {
-          FlowLevel.entries.forEach { level ->
-            FilterChip(
-              selected = flowLevel == level,
-              onClick = { flowLevel = level },
-              label = {
-                val label = when (level) {
-                  FlowLevel.NONE -> "Ninguno"
-                  FlowLevel.SPOTTING -> "Manchado"
-                  FlowLevel.LIGHT -> "Ligero"
-                  FlowLevel.MEDIUM -> "Medio"
-                  FlowLevel.HEAVY -> "Abundante"
-                }
-                Text(label, fontSize = 12.sp)
-              },
-              shape = RoundedCornerShape(12.dp),
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = PhaseMenstrualRose,
-                selectedLabelColor = Color.White
-              ),
-              modifier = Modifier.testTag("flow_chip_${level.name}")
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 2. Cervical Mucus
-        Text(
-          text = "Moco Cervical (Fertilidad):",
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.padding(vertical = 6.dp)
-        ) {
-          CervicalMucus.entries.forEach { mucus ->
-            FilterChip(
-              selected = cervicalMucus == mucus,
-              onClick = { cervicalMucus = mucus },
-              label = {
-                val label = when (mucus) {
-                  CervicalMucus.NONE -> "Sin flujo"
-                  CervicalMucus.DRY -> "Seco"
-                  CervicalMucus.STICKY -> "Pegajoso"
-                  CervicalMucus.CREAMY -> "Cremoso"
-                  CervicalMucus.EGG_WHITE -> "Clara de huevo ✨"
-                }
-                Text(label, fontSize = 12.sp)
-              },
-              shape = RoundedCornerShape(12.dp),
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = PhaseFertileSage,
-                selectedLabelColor = Color.White
-              ),
-              modifier = Modifier.testTag("mucus_chip_${mucus.name}")
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 3. Physical Sensations
-        Text(
-          text = "Sensaciones del Cuerpo:",
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.padding(vertical = 6.dp)
-        ) {
-          FilterChip(
-            selected = cramps,
-            onClick = { cramps = !cramps },
-            label = { Text("Cólicos", fontSize = 12.sp) },
-            shape = RoundedCornerShape(12.dp),
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = BrandTerracottaRose,
-              selectedLabelColor = Color.White
-            ),
-            modifier = Modifier.testTag("symptom_cramps_chip")
-          )
-
-          FilterChip(
-            selected = tenderBreasts,
-            onClick = { tenderBreasts = !tenderBreasts },
-            label = { Text("Senos sensibles", fontSize = 12.sp) },
-            shape = RoundedCornerShape(12.dp),
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = PhaseLutealLavender,
-              selectedLabelColor = Color.White
-            ),
-            modifier = Modifier.testTag("symptom_breasts_chip")
-          )
-
-          FilterChip(
-            selected = cravings,
-            onClick = { cravings = !cravings },
-            label = { Text("Antojos", fontSize = 12.sp) },
-            shape = RoundedCornerShape(12.dp),
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = PhaseFollicularPeach,
-              selectedLabelColor = Color.White
-            ),
-            modifier = Modifier.testTag("symptom_cravings_chip")
-          )
-
-          FilterChip(
-            selected = headache,
-            onClick = { headache = !headache },
-            label = { Text("Cefalea", fontSize = 12.sp) },
-            shape = RoundedCornerShape(12.dp),
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = BrandTerracottaRose,
-              selectedLabelColor = Color.White
-            )
-          )
-
-          FilterChip(
-            selected = backPain,
-            onClick = { backPain = !backPain },
-            label = { Text("Espalda baja", fontSize = 12.sp) },
-            shape = RoundedCornerShape(12.dp),
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = BrandTerracottaRose,
-              selectedLabelColor = Color.White
-            )
-          )
-
-          FilterChip(
-            selected = bloating,
-            onClick = { bloating = !bloating },
-            label = { Text("Hinchazón", fontSize = 12.sp) },
-            shape = RoundedCornerShape(12.dp),
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = BrandTerracottaRose,
-              selectedLabelColor = Color.White
-            )
-          )
-
-          FilterChip(
-            selected = acne,
-            onClick = { acne = !acne },
-            label = { Text("Acné / Piel", fontSize = 12.sp) },
-            shape = RoundedCornerShape(12.dp),
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = PhaseFollicularPeach,
-              selectedLabelColor = Color.White
-            )
-          )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 4. Mood & Emotional State
-        Text(
-          text = "Estado Emocional:",
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.padding(vertical = 6.dp)
-        ) {
-          Mood.entries.forEach { item ->
-            FilterChip(
-              selected = mood == item,
-              onClick = { mood = item },
-              label = {
-                val label = when (item) {
-                  Mood.HAPPY -> "Radiante"
-                  Mood.CALM -> "Calma"
-                  Mood.SENSITIVE -> "Sensible"
-                  Mood.ENERGETIC -> "Enérgica"
-                  Mood.CRAVINGS -> "Con antojo"
-                  Mood.IRRITABLE -> "Irritable"
-                  Mood.ANXIOUS -> "Ansiosa"
-                  Mood.SAD -> "Con bajón"
-                }
-                Text(label, fontSize = 12.sp)
-              },
-              shape = RoundedCornerShape(12.dp),
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = BrandTerracottaRose,
-                selectedLabelColor = Color.White
-              ),
-              modifier = Modifier.testTag("mood_chip_${item.name}")
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Pain Slider
-        Row(
-          horizontalArrangement = Arrangement.SpaceBetween,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Text("Nivel de dolor / molestia:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("${painFloat.roundToInt()} / 5", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
-        Slider(
-          value = painFloat,
-          onValueChange = { painFloat = it },
-          valueRange = 0f..5f,
-          steps = 4,
-          colors = SliderDefaults.colors(
-            thumbColor = PhaseMenstrualRose,
-            activeTrackColor = PhaseMenstrualRose
-          )
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Energy Slider
-        Row(
-          horizontalArrangement = Arrangement.SpaceBetween,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Text("Nivel de energía vital:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("${energyFloat.roundToInt()} / 5", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
-        Slider(
-          value = energyFloat,
-          onValueChange = { energyFloat = it },
-          valueRange = 1f..5f,
-          steps = 3,
-          colors = SliderDefaults.colors(
-            thumbColor = PhaseFollicularPeach,
-            activeTrackColor = PhaseFollicularPeach
-          )
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Public note
-        OutlinedTextField(
-          value = publicNote,
-          onValueChange = { publicNote = it },
-          label = { Text("Nota para tu pareja (visible)", fontSize = 12.sp) },
-          placeholder = { Text("Ej: Me vendría genial cenar algo liviano hoy...", fontSize = 12.sp) },
-          shape = RoundedCornerShape(12.dp),
-          modifier = Modifier.fillMaxWidth().testTag("symptom_public_note_input")
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Private note
-        OutlinedTextField(
-          value = privateNote,
-          onValueChange = { privateNote = it },
-          label = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.height(14.dp))
-              Spacer(modifier = Modifier.width(4.dp))
-              Text("Nota privada (solo tú puedes verla)", fontSize = 12.sp)
-            }
-          },
-          shape = RoundedCornerShape(12.dp),
-          modifier = Modifier.fillMaxWidth().testTag("symptom_private_note_input")
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Privacy switch for entire log
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = "Ocultar este registro a mi pareja",
-              fontWeight = FontWeight.SemiBold,
-              style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-              text = if (isPrivate) "Registro protegido en tu cuenta; inaccesible para tu pareja" else "Tu pareja podrá ver los síntomas si el permiso global está activo",
-              fontSize = 11.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-          Switch(
-            checked = isPrivate,
-            onCheckedChange = { isPrivate = it },
-            colors = SwitchDefaults.colors(
-              checkedThumbColor = Color.White,
-              checkedTrackColor = BrandTerracottaRose
-            )
-          )
+      }, Modifier.testTag("save_symptom_button"), loading = busy)
+    }) {
+    error?.let {
+      Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.errorContainer) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Icon(LunaIcons.ConfirmationShield, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+          Text("No pudimos guardar", style = MaterialTheme.typography.titleMedium)
+          Text("Conservamos lo que escribiste en este formulario. Revisa el aviso y vuelve a intentarlo.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          if (!isSubmitting) {
-            isSubmitting = true
-            dialogError = null
-            onSave(
-              flowLevel,
-              painFloat.roundToInt(),
-              mood,
-              energyFloat.roundToInt(),
-              cramps,
-              headache,
-              backPain,
-              bloating,
-              cervicalMucus,
-              tenderBreasts,
-              cravings,
-              acne,
-              publicNote.ifBlank { null },
-              privateNote.ifBlank { null },
-              isPrivate
-            ) { success, err ->
-              isSubmitting = false
-              if (success) {
-                onDismiss()
-              } else {
-                dialogError = err ?: "Error al guardar síntomas. Intenta nuevamente."
-              }
-            }
-          }
-        },
-        enabled = !isSubmitting,
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = BrandTerracottaRose),
-        modifier = Modifier.testTag("save_symptom_button")
-      ) {
-        if (isSubmitting) {
-          CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-        } else {
-          Text("Guardar Registro", fontWeight = FontWeight.SemiBold)
+      LunaBadge("Sin guardar todavía", style = LunaBadgeStyle.ESTIMATE)
+    }
+    LunaBadge("Fecha del registro · " + date.format(DateTimeFormatter.ofPattern("d MMM", locale)), style = LunaBadgeStyle.PRIVATE)
+    Text("Sangrado", style = MaterialTheme.typography.titleLarge)
+    FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      val choiceModifier = if (largeText) Modifier.widthIn(min = 64.dp) else Modifier.weight(1f)
+      LunaOptionChip("Nada", flow == FlowLevel.NONE, { flow = FlowLevel.NONE }, choiceModifier.testTag("flow_chip_NONE"), enabled = !busy)
+      LunaOptionChip("Manchado", flow == FlowLevel.SPOTTING, { flow = FlowLevel.SPOTTING }, choiceModifier.testTag("flow_chip_SPOTTING"), enabled = !busy)
+      LunaOptionChip("Flujo", flow in bloodLevels, { if (flow !in bloodLevels) flow = FlowLevel.LIGHT },
+        choiceModifier.testTag("flow_has_bleeding"), enabled = !busy)
+    }
+    if (flow in bloodLevels) {
+      Text("Intensidad del flujo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      val choiceModifier = if (largeText) Modifier.widthIn(min = 64.dp) else Modifier.weight(1f)
+        bloodLevels.forEach { level ->
+          LunaOptionChip(when (level) { FlowLevel.LIGHT -> "Ligero"; FlowLevel.MEDIUM -> "Medio"; else -> "Abundante" },
+            flow == level, { flow = level }, choiceModifier.testTag("flow_chip_${level.name}"), enabled = !busy)
         }
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss, enabled = !isSubmitting) {
-        Text("Cancelar")
       }
     }
-  )
+    Text("Dolor", style = MaterialTheme.typography.titleLarge)
+    FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      val choiceModifier = if (largeText) Modifier.widthIn(min = 64.dp) else Modifier.weight(1f)
+      listOf(0 to "Nada", 1 to "Leve", 3 to "Medio", 5 to "Fuerte").forEach { (level, label) ->
+        LunaOptionChip(label, pain == level, { pain = level }, choiceModifier.testTag("pain_level_$level"), enabled = !busy)
+      }
+    }
+    if (pain in listOf(2, 4)) Text("Dolor registrado: $pain/5", style = MaterialTheme.typography.bodySmall)
+    Text("Ánimo y energía", style = MaterialTheme.typography.titleLarge)
+    FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      val choiceModifier = if (largeText) Modifier.widthIn(min = 64.dp) else Modifier.weight(1f)
+      listOf(Mood.CALM to "En calma", Mood.SENSITIVE to "Sensible").forEach { (value, label) ->
+        LunaOptionChip(label, mood == value, { mood = value }, choiceModifier, enabled = !busy)
+      }
+      TextButton({ showMoods = !showMoods }, enabled = !busy,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+        modifier = choiceModifier.testTag("other_moods_button")) {
+        Text("Otros estados", style = MaterialTheme.typography.bodySmall)
+      }
+    }
+    if (showMoods) FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Mood.entries.forEach { value ->
+        LunaOptionChip(moodLabel(value), mood == value, { mood = value }, Modifier.testTag("mood_chip_${value.name}"), enabled = !busy)
+      }
+    }
+    Text("Ánimo: ${moodLabel(mood)} · Energía: $energy/5", style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Slider(energy.toFloat(), { energy = it.roundToInt() }, enabled = !busy, valueRange = 1f..5f, steps = 3,
+      modifier = Modifier.fillMaxWidth().testTag("energy_slider"))
+    Text("1 · Muy baja     5 · Muy alta", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    LunaFormField("Nota privada", privateNote, { privateNote = it }, Modifier.testTag("symptom_private_note_input"),
+      enabled = !busy, placeholder = "Algo que quieras recordar para ti.")
+    Text("Esta nota siempre es solo para ti.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    SymptomSwitch("Compartir síntomas", "Según tus permisos actuales.", !physicalPrivate, { physicalPrivate = !it }, "symptom_privacy_switch", !busy)
+    SymptomSwitch("Compartir ánimo y energía", "Puedes decidirlo por separado.", !moodPrivate, { moodPrivate = !it }, "mood_privacy_switch", !busy)
+    Text("También debe estar activo el permiso correspondiente en Privacidad. Tu nota privada no se comparte.",
+      style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    TextButton({ showDetails = !showDetails }, enabled = !busy, modifier = Modifier.testTag("symptom_details_button")) {
+      Text(if (showDetails) "Ocultar detalles" else "Añadir más detalles")
+    }
+    if (showDetails) {
+      Text("Ajustar dolor · $pain/5", style = MaterialTheme.typography.titleMedium)
+      Slider(pain.toFloat(), { pain = it.roundToInt() }, enabled = !busy, valueRange = 0f..5f, steps = 4,
+        modifier = Modifier.testTag("pain_slider"))
+      Text("Otras molestias", style = MaterialTheme.typography.titleLarge)
+      SymptomSwitch("Cólicos", "", cramps, { cramps = it }, "symptom_cramps_switch", !busy)
+      SymptomSwitch("Dolor de cabeza", "", headache, { headache = it }, "symptom_headache_switch", !busy)
+      SymptomSwitch("Dolor lumbar", "", backPain, { backPain = it }, "symptom_back_pain_switch", !busy)
+      SymptomSwitch("Hinchazón", "", bloating, { bloating = it }, "symptom_bloating_switch", !busy)
+      SymptomSwitch("Senos sensibles", "", breasts, { breasts = it }, "symptom_breasts_switch", !busy)
+      SymptomSwitch("Antojos", "", cravings, { cravings = it }, "symptom_cravings_switch", !busy)
+      SymptomSwitch("Acné", "", acne, { acne = it }, "symptom_acne_switch", !busy)
+      Text("Moco cervical", style = MaterialTheme.typography.titleLarge)
+      FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CervicalMucus.entries.forEach { value ->
+          LunaOptionChip(when (value) {
+            CervicalMucus.NONE -> "Sin indicar"; CervicalMucus.DRY -> "Seco"; CervicalMucus.STICKY -> "Pegajoso"
+            CervicalMucus.CREAMY -> "Cremoso"; CervicalMucus.EGG_WHITE -> "Clara de huevo"
+          }, mucus == value, { mucus = value }, Modifier.testTag("mucus_chip_${value.name}"), enabled = !busy)
+        }
+      }
+      LunaFormField("Nota para compartir con los síntomas", publicNote, { publicNote = it },
+        Modifier.testTag("symptom_public_note_input"), enabled = !busy)
+    }
+  }
+}
+
+private fun moodLabel(mood: Mood): String = when (mood) {
+  Mood.HAPPY -> "Radiante"; Mood.CALM -> "En calma"; Mood.SENSITIVE -> "Sensible"
+  Mood.ENERGETIC -> "Con energía"; Mood.CRAVINGS -> "Con antojo"; Mood.IRRITABLE -> "Irritable"
+  Mood.ANXIOUS -> "Ansiosa"; Mood.SAD -> "Con bajón"
+}
+
+@Composable
+private fun SymptomSwitch(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String, enabled: Boolean) {
+  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      Text(title, style = MaterialTheme.typography.titleMedium)
+      if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    LunaToggle(checked, onChange, Modifier.testTag(tag), enabled, title)
+  }
 }

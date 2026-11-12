@@ -19,3 +19,4 @@ debug.keystore
 *-debug.log
 LunaSync.apk
 .build-outputs/
+node_modules/
